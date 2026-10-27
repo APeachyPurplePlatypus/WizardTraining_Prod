@@ -4,6 +4,13 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ## Unreleased
 
+### Fixed
+
+- **Talking to the quest NPC, not a neighbour.**
+  - **What:** a talk that leaves the talk goal open counts as no progress, and the next try walks right up to the quest arrow instead of trusting the interact prompt. The event log says when this happens.
+  - **Why:** on Triton Avenue the wizard stood 189 units from the arrow. The prompt check accepted that, because the friendly NPC nearest the arrow was the quest NPC, but X reached another NPC standing closer to the wizard. Each one-page reply counted as progress, so the run talked to the wrong NPC seven times until it was stopped by hand. Trusting the prompt is still tried first, because it is what lets the wizard talk across a counter (the Librarian in the Commons).
+  - **Not verified:** a quest NPC behind a counter with another NPC closer to the wizard. The second try would fail to get within reach, and the run stops on turns without progress.
+
 ### Added
 
 - **Live event log.**

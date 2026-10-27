@@ -110,13 +110,13 @@ async def prompt_is_for(client, npc_position) -> bool:
     return nearest is not None and flat_distance(nearest, npc_position) <= SAME_NPC_DISTANCE
 
 
-async def walk_up_to(client, position, within: float = TALK_DISTANCE) -> list[dict]:
+async def walk_up_to(client, position, within: float = TALK_DISTANCE, *, trust_prompt: bool = True) -> list[dict]:
     """Face the NPC or object and creep closer until X would reach this one and not another nearby."""
     nudges = []
     for _ in range(MAX_NUDGES):
         distance = flat_distance(await client.body.position(), position)
         prompt_showing = await attempt(client.is_in_npc_range())
-        prompt_for_this_one = await prompt_is_for(client, position)
+        prompt_for_this_one = trust_prompt and await prompt_is_for(client, position)
         nudges.append({"distance": round(distance, 1), "in_range": prompt_showing, "within": within,
                        "prompt_for_this_one": prompt_for_this_one})
         if close_enough(nudges):
@@ -176,9 +176,12 @@ async def read_conversation(client, record: dict, offers: OfferPolicy) -> str:
         record["follow_ups"] += 1
 
 
-async def talk(client, npc_position, record: dict, offers: OfferPolicy) -> str:
+async def talk(client, npc_position, record: dict, offers: OfferPolicy, *, trust_prompt: bool = True) -> str:
+    """Walk up to the NPC, open its dialog with X and read it. With `trust_prompt`, an interact prompt for the
+    friendly NPC nearest the arrow is enough (it lets the wizard talk across a counter); without it, the
+    wizard walks right up to the arrow first, for when a trusted prompt turned out to be someone else's."""
     if not await dialog_open(client):
-        record["nudges"] = nudges = await walk_up_to(client, npc_position)
+        record["nudges"] = nudges = await walk_up_to(client, npc_position, trust_prompt=trust_prompt)
         if not close_enough(nudges):
             return "could not get close enough to the quest NPC to talk"
         await tap(client, Keycode.X, TALK_KEY_SECONDS)

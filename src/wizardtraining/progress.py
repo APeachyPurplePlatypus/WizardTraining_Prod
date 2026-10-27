@@ -70,6 +70,7 @@ class RunRecord:
     traceback: str | None = None
     hooks_removed: bool | str | None = None
     events_file: str | None = None
+    talks_leaving_goal_open: dict[str, int] = field(default_factory=dict)
 
     def record_turn(self, turn: dict) -> None:
         self.turns.append(turn)

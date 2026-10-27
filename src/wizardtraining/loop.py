@@ -306,14 +306,24 @@ class QuestLoop:
                                       seen=summary(enemies))
 
     async def persona_turn(self, arrow, goal: dict) -> dict:
-        """Walk to the arrow's NPC and talk."""
+        """Walk to the arrow's NPC and talk. A talk that leaves the goal open reached the wrong NPC: it is not
+        progress, and the next try walks right up to the arrow instead of trusting the interact prompt."""
         if await near_npc(self.client, arrow):
+            earlier_failures = self.record.talks_leaving_goal_open.get(str(goal.get("id")), 0)
             record = {}
-            result = await talk(self.client, arrow, record, self.offer_policy)
+            result = await talk(self.client, arrow, record, self.offer_policy, trust_prompt=earlier_failures == 0)
             self.record.dialog_log.append(record)
+            self.note_dialog(record, result)
             if result == OFFER_LEFT_FOR_OPERATOR:
                 raise StopRun(result)
-            return (progressed if result == DIALOG_FINISHED else stalled)("talk", result=result)
+            if result != DIALOG_FINISHED:
+                return stalled("talk", result=result)
+            if await self.goal_still_open(goal):
+                self.record.talks_leaving_goal_open[str(goal.get("id"))] = earlier_failures + 1
+                self.events.emit("talk", "the talk left the goal open, so it reached another NPC; "
+                                         "next try walks right up to the quest arrow")
+                return stalled("talk", result="the goal is still open")
+            return progressed("talk", result=result)
         return await self.travel_turn("travel to quest NPC", arrow, arrive_radius=NPC_ARRIVE_DISTANCE / 2,
                                       also=self.arrival_check(arrow), avoid=await nearby_enemies(self.client))
 
@@ -357,6 +367,10 @@ class QuestLoop:
         async def arrived():
             return "arrived" if await near_npc(self.client, arrow) else None
         return arrived
+
+    async def goal_still_open(self, goal: dict) -> bool:
+        quest = await self.active_main_quest()
+        return quest is not None and any(open_goal["id"] == goal.get("id") for open_goal in open_goals(quest))
 
     async def open_goal_count(self) -> int | None:
         quest = await self.active_main_quest()
