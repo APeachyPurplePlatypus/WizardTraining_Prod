@@ -53,6 +53,10 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **A run that starts facing its target walks.**
+  - **What:** before its first turn a run does not know how A and D turn the wizard, so the walking loop turned in place first. Now it does that only when the facing is off. A wizard already facing its target walks straight away, and steers only once turning has been learned.
+  - **Why:** a run started in the Storm school facing the exit. The turn needed no tap, so it taught nothing, and the loop asked for it again and again: the wizard stood still for a minute, with no log line, until the run was stopped. The operator noticed it as "no movement".
+
 - **Chains of teleporters.**
   - **What:** to reach another walkable piece of a zone, the loop now follows the shortest chain of teleport volumes known to lead piece to piece, not just one volume. When no known chain reaches the goal's piece and nothing is left to try where the wizard stands, it follows a known chain to a piece that still has an untried volume.
   - **Why:** after a talk in Triton's TempestNexus area, the next goal was the street's exit, two hops away: High_Ledge to the upper level, then Tele Down. The only volume in the TempestNexus area, High_Ledge, had already been tried and was known to lead to the upper level, not the exit's piece. So no crossing was chosen, every route failed, and the run stopped on turns without progress.

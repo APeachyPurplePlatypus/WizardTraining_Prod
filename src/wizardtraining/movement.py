@@ -159,6 +159,13 @@ class Reroute:
     legs: list
 
 
+def must_turn_in_place(off_course: float, turning_learned: bool) -> bool:
+    """Stop and turn when the leg bends too sharply to steer into, or, before the first turn has taught how A and
+    D turn, when the facing is off at all. A wizard already facing its target walks: a turn of nothing taught
+    nothing, and once the loop asked for it again and again while the wizard stood still for a minute."""
+    return abs(off_course) > STOP_TO_TURN_RADIANS or (not turning_learned and abs(off_course) > YAW_TOLERANCE_RADIANS)
+
+
 async def follow_route(client, legs, *, final_radius: float, watch=None) -> dict:
     """Walk the legs holding W, steering on the move. `watch(path_ahead)` runs every WATCH_SECONDS with the
     wizard's position followed by the remaining legs. It may return a reason to stop, or a `Reroute` to walk
@@ -194,7 +201,7 @@ async def follow_route(client, legs, *, final_radius: float, watch=None) -> dict
                     break
                 bearing = calculate_perfect_yaw(me, target)
                 off_course = angle_between(bearing, await client.body.yaw())
-                if abs(off_course) > STOP_TO_TURN_RADIANS or not calibration.learned:
+                if must_turn_in_place(off_course, calibration.learned):
                     await forward.release()
                     turn = await turn_toward(client, bearing)
                     log["turns_in_place"] += 1
@@ -203,7 +210,7 @@ async def follow_route(client, legs, *, final_radius: float, watch=None) -> dict
                     blocked_check = (time.monotonic(), await client.body.position())
                     continue
                 forward.press()
-                if abs(off_course) > STEER_TOLERANCE_RADIANS:
+                if calibration.learned and abs(off_course) > STEER_TOLERANCE_RADIANS:
                     await steer(client, off_course)
                     log["steer_taps"] += 1
                 await asyncio.sleep(WATCH_SECONDS)
