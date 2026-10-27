@@ -65,6 +65,8 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Changed
 
+- **Walk events say why a route method failed**, as in "nav: failed (turn failed: facing did not converge)". Several fights with enemies the quest did not ask for began right after a "nav: failed", and the event did not say why.
+
 - **Stronger attacks first.** The default policy now ranks attacks by pip cost times what lands (the target's wards, traps and resistances) times accuracy. At these levels damage grows with pips: Frost Beetle (1 pip) does about 85, Snow Serpent (2 pips) about 175. With 2 pips and two Snow Serpents in hand, the wizard cast 1-pip wand spells instead, the first card in hand on a tie; one of them missed. The round log's new hand list showed it.
 
 - **No resting.** The wizard no longer stands still to regain health, and no longer stops the run when health is low in a zone where it does not regenerate. Health comes from potions (if allowed), health wisps (sought below 65%), heals in battle and level-ups. `runtime/knowledge.json` no longer keeps zones without regeneration. The operator: "never use "resting" as a way to gain hp, it is not time efficient". A rest gains about 1.6 HP a second where health regenerates at all, and nothing on Triton Avenue, on Cyclops Lane or in most interiors; the last one cost 30 seconds for nothing before a battle interrupted it.

@@ -759,7 +759,7 @@ class QuestLoop:
                         "methods": [(tried["method"], tried.get("result"), tried.get("reason"),
                                      tried.get("sidesteps"), tried.get("seconds")) for tried in trip["attempts"]]}
         new_obstacles = remember_obstacles(self.record, zone, trip["blocked_at"])
-        methods = ", ".join(f"{tried['method']}: {tried.get('result')}{reroute_text(tried)}"
+        methods = ", ".join(f"{tried['method']}: {tried.get('result')}{failure_text(tried)}{reroute_text(tried)}"
                             for tried in trip["attempts"])
         self.events.emit("walk", f"{did}: moved {moved:.0f}, {trip['result']}"
                                  f"{' (' + trip['reason'] + ')' if trip['reason'] else ''}; {methods}"
@@ -936,6 +936,12 @@ def plain_xy(state: dict) -> tuple | None:
     """A reading's position as rounded (x, y), or None."""
     position = state.get("position")
     return (round(position["x"]), round(position["y"])) if isinstance(position, dict) else None
+
+
+def failure_text(attempt: dict) -> str:
+    """" (turn failed: facing did not converge)" after a route method that failed for a reason, else "". Several
+    fights with bystanders began right after a "nav: failed", and the event did not say why."""
+    return f" ({attempt['reason']})" if attempt.get("result") == "failed" and attempt.get("reason") else ""
 
 
 def reroute_text(attempt: dict) -> str:
