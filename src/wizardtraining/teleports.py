@@ -16,6 +16,7 @@ upper level. Values outside plausible ranges are dropped rather than trusted.
 from __future__ import annotations
 
 import math
+from collections import deque
 import struct
 from dataclasses import dataclass
 
@@ -79,10 +80,40 @@ def choose_crossing(volumes: list[tuple[TeleportVolume, int | None]], *, start_p
                     outcomes: dict[str, object], goal) -> TeleportVolume | None:
     """The teleport volume to walk into from `start_piece` toward `goal_piece`. `volumes` pairs each volume
     with the walkable piece it stands in; `outcomes` maps volumes already tried to the piece they landed
-    in, LEFT_ZONE or NO_EFFECT. One known to land in the goal's piece comes first; otherwise the untried one
-    nearest the goal. Volumes that left the zone or did nothing are not tried again."""
-    here = [volume for volume, piece in volumes if piece == start_piece]
-    known_good = [volume for volume in here if outcomes.get(volume.name) == goal_piece]
-    untried = [volume for volume in here if volume.name not in outcomes]
-    candidates = known_good or untried
-    return min(candidates, key=lambda volume: math.dist(volume.point, xy(goal)), default=None)
+    in, LEFT_ZONE or NO_EFFECT. In order of preference:
+    1. the first volume of the shortest chain known to lead to the goal's piece, such as Triton's High_Ledge
+       and then Tele Down out of the TempestNexus area;
+    2. the untried volume in the wizard's piece nearest the goal;
+    3. the first volume of the shortest known chain to a piece that still has an untried volume.
+    Volumes that left the zone or did nothing are not tried again."""
+    chain = known_chain(volumes, outcomes, start_piece, lambda piece: piece == goal_piece)
+    if chain:
+        return chain[0]
+    untried_here = [volume for volume, piece in volumes if piece == start_piece and volume.name not in outcomes]
+    if untried_here:
+        return min(untried_here, key=lambda volume: math.dist(volume.point, xy(goal)))
+    has_untried = {piece for volume, piece in volumes if volume.name not in outcomes}
+    chain = known_chain(volumes, outcomes, start_piece, lambda piece: piece in has_untried)
+    return chain[0] if chain else None
+
+
+def known_chain(volumes: list[tuple[TeleportVolume, int | None]], outcomes: dict[str, object], start_piece: int,
+                arrived) -> list[TeleportVolume]:
+    """The shortest chain of volumes known to lead piece to piece from `start_piece` to a piece for which
+    `arrived(piece)` holds, or an empty list."""
+    came_from = {start_piece: None}
+    frontier = deque([start_piece])
+    while frontier:
+        piece = frontier.popleft()
+        if piece != start_piece and arrived(piece):
+            chain = []
+            while came_from[piece] is not None:
+                volume, piece = came_from[piece]
+                chain.append(volume)
+            return chain[::-1]
+        for volume, standing_in in volumes:
+            landed = outcomes.get(volume.name)
+            if standing_in == piece and isinstance(landed, int) and landed not in came_from:
+                came_from[landed] = (volume, piece)
+                frontier.append(landed)
+    return []

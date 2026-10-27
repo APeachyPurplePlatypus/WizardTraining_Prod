@@ -51,6 +51,23 @@ class CrossingTest(unittest.TestCase):
         self.assertEqual(self.choose({"Tele Up": 0, "Street2 Exit": 7}), self.up)
         self.assertEqual(self.choose({"Tele Up": 3}), self.exit_)
 
+    def test_follows_a_known_chain_out_of_a_piece_with_nothing_left_to_try(self):
+        high_ledge = TeleportVolume("High_Ledge", -10541, -6779, 0, 150)
+        volumes = [(high_ledge, 32), (self.down, 0), (self.up, 20), (self.exit_, 20)]
+        outcomes = {"High_Ledge": 0, "Tele Down": 20}
+        self.assertEqual(choose_crossing(volumes, start_piece=32, goal_piece=20, outcomes=outcomes,
+                                         goal=(6, 2477)), high_ledge)
+        self.assertEqual(choose_crossing(volumes, start_piece=0, goal_piece=20, outcomes=outcomes,
+                                         goal=(6, 2477)), self.down)
+
+    def test_goes_where_something_is_left_to_try(self):
+        high_ledge = TeleportVolume("High_Ledge", -10541, -6779, 0, 150)
+        volumes = [(high_ledge, 32), (self.down, 0)]
+        self.assertEqual(choose_crossing(volumes, start_piece=32, goal_piece=20, outcomes={"High_Ledge": 0},
+                                         goal=(6, 2477)), high_ledge)
+        self.assertIsNone(choose_crossing(volumes, start_piece=32, goal_piece=20,
+                                          outcomes={"High_Ledge": 0, "Tele Down": NO_EFFECT}, goal=(6, 2477)))
+
     def test_describe_outcome(self):
         self.assertEqual(describe_outcome(0), "landed in walkable piece 0")
         self.assertEqual(describe_outcome(None), "landed outside the known walkable area")
