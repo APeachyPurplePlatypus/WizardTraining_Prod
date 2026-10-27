@@ -598,7 +598,9 @@ class QuestLoop:
 
     async def refill_turn(self, stat: str, state: dict) -> dict | None:
         """Too little health or mana for a fight the quest asks for (`progress.short_for_a_fight`), or mana being
-        topped up. In a zone where no enemy has been met, mana comes first when both are short: health comes back
+        topped up. Among enemies a wisp is fetched only within WISP_REACH: with 1 mana in Firecat Alley, a trip to
+        a mana wisp 3,885 units away walked into a Fire Elf. In a zone where no enemy has been met, mana comes first
+        when both are short: health comes back
         there while the wizard waits for mana, and fetching health first, of which the Commons has no wisps, then
         searching for mana and stopping at the first mana wisp seen, went round in circles until the run stopped.
         Fetch the nearest safe wisp of that kind in sight, however far. Otherwise, in a zone where no enemy has been
@@ -613,7 +615,7 @@ class QuestLoop:
             stat = "mana"
         if stat == "mana" and safe_zone:
             self.top_up_in(state["zone"])
-        turn = await self.wisp_turn(stat, state, reach=math.inf)
+        turn = await self.wisp_turn(stat, state, reach=math.inf if safe_zone else WISP_REACH)
         if turn is not None:
             return turn
         planner = await self.planner()
