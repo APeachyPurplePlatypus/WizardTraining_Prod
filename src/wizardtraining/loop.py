@@ -42,7 +42,7 @@ from .reports import plain, save_report
 from .routes import DUEL_CIRCLE_NO_GO, Hazards, RoutePlanner
 from .session import NoClient, attached, hooks_ready
 from .state import attempt, battle_showing, free_to_move, health_fraction, mana_fraction, snapshot
-from .placed import objects_for_goal
+from .placed import gate_toward, objects_for_goal
 from .targets import bystanders, others, quest_targets, safe_wisps, summary, too_close
 from .teleports import LEFT_ZONE, NO_EFFECT, TeleportVolume, describe_outcome
 from .ui import POTION_BUTTON, click, visible_children
@@ -141,6 +141,9 @@ class QuestLoop:
     def note_changes(self, state: dict) -> None:
         for kind, text in describe_changes(self._last_state, state, self._last_quest, self.record.quest):
             self.events.emit(kind, text)
+        if self._last_state is not None and state["zone"] != self._last_state["zone"] and isinstance(state["position"], dict):
+            self.record.arrivals[state["zone"]] = {"from": self._last_state["zone"],
+                                                   "position": (state["position"]["x"], state["position"]["y"])}
         self._last_state, self._last_quest = state, dict(self.record.quest or {})
 
     async def checked_turn(self, state: dict) -> dict:
@@ -358,6 +361,16 @@ class QuestLoop:
         tags that has not been used yet, else the nearest loaded enemy whose display code the goal names."""
         me = await self.client.body.position()
         planner = await self.planner()
+        zone = await self.client.zone_name()
+        if goal.get("destination_zone") not in ("", None, zone):
+            arrival = self.record.arrivals.get(zone, {})
+            gate = gate_toward(planner.placed_objects, goal["destination_zone"],
+                               arrival=arrival.get("position") if arrival.get("from") == goal["destination_zone"] else None)
+            if gate is not None:
+                self.events.emit("target", f"no quest arrow; the goal is in {goal['destination_zone']}, so going through "
+                                           f"{gate.template} at ({gate.x:.0f}, {gate.y:.0f})")
+                return XYZ(gate.x, gate.y, gate.z)
+            return None
         objects = objects_for_goal(planner.placed_objects, goal.get("tags") or [], me=(me.x, me.y),
                                    visited=self.record.visited_objects)
         if objects:
@@ -515,9 +528,14 @@ class QuestLoop:
         before = await self.client.body.position()
         trip = await travel(self.client, planner, volume.point, arrive_radius=volume.radius / 3,
                             watch=self.watcher(also=self.jump_check()))
-        if trip["result"] == "interrupted" and trip["reason"] not in (TELEPORTED, "loading"):
+        reached = trip["result"] == "arrived" or trip["reason"] in (TELEPORTED, "loading")
+        if not reached:
             moved = flat_distance(before, await self.client.body.position())
-            return travel_outcome("walk to a teleporter", trip["reason"], moved, self.record)
+            self.events.emit("teleporter", f"did not reach {volume.name}: {trip['result']} ({trip['reason']}); "
+                                           "not judged, will be tried again")
+            return travel_outcome("walk to a teleporter", trip["reason"], moved, self.record,
+                                  trip={"result": trip["result"], "reason": trip["reason"], "moved": round(moved),
+                                        "trails": [tried.get("trail") for tried in trip["attempts"]]})
         outcome = await self.teleport_outcome(zone, planner, already_jumped=trip["reason"] == TELEPORTED)
         self.record.teleport_outcomes.setdefault(zone, {})[volume.name] = outcome
         where = await self.client.body.position()

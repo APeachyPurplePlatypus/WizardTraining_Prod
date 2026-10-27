@@ -1,7 +1,7 @@
 import struct
 import unittest
 
-from wizardtraining.placed import PlacedObject, objects_for_goal, parse_placed_objects
+from wizardtraining.placed import PlacedObject, gate_toward, objects_for_goal, parse_placed_objects, words
 
 
 def placed_bytes(name: str, x: float, y: float, z: float) -> bytes:
@@ -39,6 +39,23 @@ class GoalObjectsTest(unittest.TestCase):
         found = objects_for_goal(self.cogs, ["WC_TA_Cog"], me=(0, 0), visited=[self.cogs[0].key])
         self.assertEqual(found, [self.cogs[1]])
         self.assertEqual(objects_for_goal(self.cogs, ["Nothing"], me=(0, 0)), [])
+
+
+class GateTest(unittest.TestCase):
+    gates = [PlacedObject("WC-GateStreet_FireCatAlley", -12284, -1806, -2199),
+             PlacedObject("WC-GateStreet_TritonLane", -7550, -388, -1398),
+             PlacedObject("WC-GateStreet_CyclopsLane", -5495, 3230, -598), PlacedObject("WC_TA_Cog", 0, 0, 0)]
+
+    def test_words(self):
+        self.assertEqual(words("WC-GateStreet_TritonLane"), {"wc", "gate", "street", "triton", "lane"})
+
+    def test_finds_the_gate_named_like_the_zone(self):
+        self.assertEqual(gate_toward(self.gates, "WizardCity/WC_Streets/WC_Triton").template, "WC-GateStreet_TritonLane")
+
+    def test_falls_back_to_the_gate_nearest_the_arrival(self):
+        self.assertEqual(gate_toward(self.gates, "WizardCity/WC_Streets/WC_Elsewhere", arrival=(-6000, 3000)).template,
+                         "WC-GateStreet_CyclopsLane")
+        self.assertIsNone(gate_toward(self.gates, "WizardCity/WC_Streets/WC_Elsewhere"))
 
 
 if __name__ == "__main__":

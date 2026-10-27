@@ -76,6 +76,7 @@ class RunRecord:
     teleport_outcomes: dict[str, dict[str, object]] = field(default_factory=dict)
     tried_wisps: list = field(default_factory=list)
     visited_objects: list[str] = field(default_factory=list)
+    arrivals: dict[str, dict] = field(default_factory=dict)
 
     def record_turn(self, turn: dict) -> None:
         self.turns.append(turn)

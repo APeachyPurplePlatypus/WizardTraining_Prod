@@ -59,6 +59,30 @@ def parse_placed_objects(data: bytes) -> list[PlacedObject]:
     return placed
 
 
+GATE_WORD = "gate"
+MIN_SHARED_WORD = 4
+
+
+def words(text: str) -> set[str]:
+    """Lower-case words of a template or zone name, split at separators and capitals: "WC-GateStreet_TritonLane"
+    gives {"wc", "gate", "street", "triton", "lane"}."""
+    return {word.lower() for word in re.findall(r"[A-Z]?[a-z]+|[A-Z]+(?![a-z])|\d+", text)}
+
+
+def gate_toward(placed: list[PlacedObject], destination_zone: str, *, arrival=None) -> PlacedObject | None:
+    """The street gate leading to `destination_zone`: one whose name shares a word of at least MIN_SHARED_WORD
+    letters with the zone's name ("TritonLane" and "WC_Triton"), else the gate nearest `arrival`, the point
+    where the wizard came in from that zone, if given."""
+    gates = [thing for thing in placed if GATE_WORD in thing.template.lower()]
+    zone_words = {word for word in words(destination_zone.rsplit("/", 1)[-1]) if len(word) >= MIN_SHARED_WORD}
+    named = [gate for gate in gates if zone_words & words(gate.template)]
+    if named:
+        return named[0]
+    if arrival is not None and gates:
+        return min(gates, key=lambda gate: math.dist(gate.point, (arrival[0], arrival[1])))
+    return None
+
+
 def objects_for_goal(placed: list[PlacedObject], tags: list[str], *, me, visited=()) -> list[PlacedObject]:
     """Placed objects whose template is one of the goal's tags, nearest first, leaving out visited ones."""
     wanted = set(tags)
