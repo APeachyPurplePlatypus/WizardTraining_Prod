@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import datetime
 import time
+import traceback
 from dataclasses import asdict, replace
 from pathlib import Path
 
@@ -58,7 +59,7 @@ BOX_LAYOUT = "messageBoxLayout"
 BOX_CAPTION = ["messageBoxBG", BOX_LAYOUT, "TextArea", "CaptionText"]
 LAYOUT_CENTER_BUTTON = ["AdjustmentWindow", "Layout", "centerButton"]
 BOX_YES = ["messageBoxBG", BOX_LAYOUT, *LAYOUT_CENTER_BUTTON]
-IDLE_BOX_WORDS = ("return to combat", "you are idle")
+IDLE_BOX_WORDS = ("return to combat", "you are idle", "combatafk")
 IDLE_BOX_SEARCH_DEPTH = 9
 LEVELS_ABOVE_THE_CAPTION_SHOWN = 4
 FLEE_WORD = "flee"
@@ -348,11 +349,13 @@ async def caption_of(box) -> str:
 async def return_to_combat(client) -> str | None:
     """Answer the game's idle box with its button, and say so; None when it is not showing. Until answered the game
     passes for the wizard every round and keeps the planning window hidden: after joining another player's fight,
-    the client's log showed "MSG_CombatAFK" at the start of all nine rounds, no move from the wizard, and its hand
-    read empty from round 5. The box is found by its text, "You Are Idle" (GUI_CombatAFKTitle) or "Would you like
-    to return to combat?" (GUI_CombatAFKMessage), anywhere on screen: looked for by window name, under the planning
-    phase, on top and four levels down, it was never found. Its one button, "Return" (GUI_ReturnToCombat), is looked
-    for where the flee box has Yes; when it is not there, the window names around the text are reported."""
+    the client's log showed "KeepWindowHidden(True)" every round, no move from the wizard, and its hand read empty
+    from round 5. ("MSG_CombatAFK" starts every round of every battle, so it says nothing.) The box is found by its
+    text anywhere on screen: "You Are Idle" (GUI_CombatAFKTitle), "Would you like to return to combat?"
+    (GUI_CombatAFKMessage), or those keys, as the game's own idleMessage.gui holds them. Looked for by window name,
+    under the planning phase, on top and four levels down, it was never found. Its one button, "Return"
+    (GUI_ReturnToCombat), is looked for where the flee box has Yes; when it is not there, the window names around the
+    text are reported."""
     chain = await window_saying(client.root_window, IDLE_BOX_WORDS, IDLE_BOX_SEARCH_DEPTH)
     if chain is None:
         return None
@@ -450,7 +453,8 @@ async def fight(client, policy: CombatPolicy, on_round=None) -> dict:
             try:
                 entry = await play_round(combat, policy, can_flee)
             except Exception as exc:
-                result["stopped"] = f"round failed: {type(exc).__name__}; left for the operator"
+                result["stopped"] = f"round failed: {type(exc).__name__}: {exc}; left for the operator"
+                result["traceback"] = traceback.format_exc()
                 break
             result["rounds"].append(entry)
             if on_round is not None:
