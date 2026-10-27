@@ -47,6 +47,11 @@ class DescriptionTest(unittest.TestCase):
         self.assertEqual(text, "round 2: me 450/624 with 3 pips; cast Frost Beetle on enemy; "
                                "enemies left: Haunted Minion 35")
 
+    def test_describe_round_shows_mana_when_known(self):
+        entry = round_entry(2, 450, "pass: the hand read empty", [("Warhorn", 285)])
+        entry["view"]["mana"] = 3
+        self.assertTrue(describe_round(entry).startswith("round 2: me 450/624 with 3 pips, 3 mana; pass: the hand read empty"))
+
     def test_describe_round_shows_wards_and_traps(self):
         entry = round_entry(3, 400, "cast Frost Beetle (Ice) on enemy", [("The Harvest Lord", 335)])
         entry["view"]["enemies"][0]["incoming"] = [{"school": "Myth", "percent": -50}, {"school": "Ice", "percent": 25}]

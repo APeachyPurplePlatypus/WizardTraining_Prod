@@ -86,7 +86,8 @@ def describe_round(entry: dict) -> str:
     enemies = ", ".join(f"{enemy['name']} {enemy['health']}"
                         f"{modifier_text(enemy.get('incoming'), enemy.get('resistances'))}"
                         for enemy in view["enemies"]) or "none"
-    return (f"round {view['round_number']}: me {view['health']}/{view['max_health']} with {view['pips']} pips; "
+    mana = f", {view['mana']} mana" if view.get("mana") is not None else ""
+    return (f"round {view['round_number']}: me {view['health']}/{view['max_health']} with {view['pips']} pips{mana}; "
             f"{entry['action']}; enemies left: {enemies}")
 
 

@@ -68,6 +68,8 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **An empty hand is read again before passing.** When the hand reads empty in a planning phase and the wizard is alive, the battle code reads it again every half second, up to six times. If it is still empty it passes, logged as "pass: the hand read empty". Round lines now show mana too. In a fight with two Warhorns, the hand read empty in round 3 although the wizard had cast from a full hand in rounds 1 and 2: it passed with 107 health and three pips, and was defeated. The operator noticed it as "you stopped selecting cards". The hand was most likely read before the round's cards were drawn.
+
 - **Walls at the wizard's height.**
   - **What:** the walkable area now subtracts every box, cylinder and sphere collider that stands in the wizard's way: its bottom less than 180 units above the floor beneath it, and its top above that floor. Deimos's own wall builder, used until now, counts only colliders that start within 50 units of the floor. That suits its teleporting but not walking.
   - **Why:** the operator saw the wizard keep walking into Cyclops Lane's fairground tents, even after placed objects were added: the tents are not placed objects. At every point where the wizard got stuck there, the floor is at height 1 and two cylinders cover the spot, from 59 to 436 and from 109 to 340. Those are the tents, left out as "overhead".

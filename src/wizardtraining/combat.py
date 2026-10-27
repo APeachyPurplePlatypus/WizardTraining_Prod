@@ -33,6 +33,7 @@ PHASE_TIMEOUT_SECONDS = 90.0
 BATTLE_TIMEOUT_SECONDS = 900.0
 PHASE_POLL_SECONDS = 0.5
 CARDS_DRAW_SECONDS = 0.5
+EMPTY_HAND_READS = 6
 PAUSE_BETWEEN_CAST_CLICKS_SECONDS = 0.5
 BATTLE_END_CONFIRM_SECONDS = 1.0
 DUEL_CIRCLE_EXIT_SECONDS = 2.0
@@ -171,6 +172,7 @@ async def read_round(combat):
         health=await number(me.health()),
         max_health=await number(me.max_health()),
         pips=await number(me.normal_pips()),
+        mana=await number(me.mana()),
         power_pips=await number(me.power_pips()),
         cards=tuple([Card(name=await attempt(card.name()), spell_type=await attempt(card.type_name()),
                           castable=await attempt(card.is_castable()) is True, school=school, pips=pips,
@@ -183,9 +185,25 @@ async def read_round(combat):
     return view, me, cards, enemies
 
 
+async def read_hand(combat):
+    """`read_round`, read again every CARDS_DRAW_SECONDS while the hand reads empty and the wizard is alive, up to
+    EMPTY_HAND_READS times. A hand read too early once came back empty, and the wizard passed with 107 health
+    and three pips until it was defeated."""
+    for _ in range(EMPTY_HAND_READS):
+        view, me, cards, enemies = await read_round(combat)
+        if view.cards or not view.health:
+            break
+        await asyncio.sleep(CARDS_DRAW_SECONDS)
+    return view, me, cards, enemies
+
+
 async def play_round(combat, policy: CombatPolicy) -> dict:
-    view, me, cards, enemies = await read_round(combat)
+    view, me, cards, enemies = await read_hand(combat)
     entry = {"round": view.round_number, "view": asdict(view)}
+    if not view.cards:
+        await combat.pass_button()
+        entry["action"] = "pass: the hand read empty"
+        return entry
     choice = policy.choose(view)
     if choice is None or isinstance(choice, Pass):
         await combat.pass_button()

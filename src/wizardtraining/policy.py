@@ -73,6 +73,7 @@ class RoundView:
     power_pips: int | None
     cards: tuple[Card, ...]
     enemies: tuple[Combatant, ...]
+    mana: int | None = None
 
     def health_fraction(self) -> float | None:
         if isinstance(self.health, int) and isinstance(self.max_health, int) and self.max_health > 0:
