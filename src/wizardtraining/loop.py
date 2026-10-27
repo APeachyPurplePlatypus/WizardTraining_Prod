@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import math
 import time
 import traceback
 from dataclasses import replace
@@ -53,7 +52,8 @@ from .session import NoClient, attached, hooks_ready
 from .state import attempt, battle_showing, free_to_move, health_fraction, mana_fraction, snapshot
 from .placed import gate_toward, objects_for_goal
 from .targets import (bystanders, enemies_to_route_around, in_grace_after_battle, keeps_blocking,
-                      next_area_to_explore, others, quest_targets, safe_wisps, summary, too_close, WISP_REACH)
+                      next_area_to_explore, others, quest_targets, refill_reach, safe_wisps, summary, too_close,
+                      WISP_REACH)
 from .teleports import LEFT_ZONE, NO_EFFECT, TeleportVolume, describe_outcome, volume_at
 from .ui import POTION_BUTTON, answer_known_popup, click, visible_children
 
@@ -637,7 +637,7 @@ class QuestLoop:
             stat = "mana"
         if stat == "mana" and safe_zone:
             self.top_up_in(state["zone"])
-        turn = await self.wisp_turn(stat, state, reach=math.inf if safe_zone else WISP_REACH)
+        turn = await self.wisp_turn(stat, state, reach=refill_reach(safe_zone))
         if turn is not None:
             return turn
         planner = await self.planner()
@@ -651,7 +651,7 @@ class QuestLoop:
                 return turn
         if indoors:
             return stalled(f"too little {stat} for the fight, and no {stat} wisp here to fetch")
-        return await self.explore_for_wisps_turn(stat, state, planner)
+        return await self.explore_for_wisps_turn(stat, state, planner, reach=refill_reach(safe_zone))
 
     def saw_enemies(self, zone) -> None:
         """Remember that `zone` has enemies, for this run and, through the knowledge file, later ones."""
@@ -666,7 +666,7 @@ class QuestLoop:
         if stat == "health" and mana_for_a_fight(mana_fraction(state)):
             return None
         self.top_up_in(state["zone"])
-        turn = await self.explore_for_wisps_turn("mana", state, planner, again=False)
+        turn = await self.explore_for_wisps_turn("mana", state, planner, reach=refill_reach(True), again=False)
         return turn if turn is not None else await self.wait_for_mana_turn(state)
 
     def top_up_in(self, zone: str) -> None:
@@ -710,11 +710,11 @@ class QuestLoop:
         return await self.travel_turn(f"walk to the exit for {stat}", XYZ(door.x, door.y, door.z),
                                       arrive_radius=WAYPOINT_ARRIVE_RADIUS, avoid=await nearby_enemies(self.client))
 
-    async def explore_for_wisps_turn(self, stat: str, state: dict, planner: RoutePlanner,
+    async def explore_for_wisps_turn(self, stat: str, state: dict, planner: RoutePlanner, *, reach: float,
                                      again: bool = True) -> dict | None:
         """Walk to the nearest part of the zone not explored for this kind of wisp yet, stopping as soon as an
-        untried one loads. Once every part has been seen, start over, since used-up wisps come back; or, with
-        `again` false, None."""
+        untried one loads within `reach`, the distance the refill fetches from (`targets.refill_reach`). Once every
+        part has been seen, start over, since used-up wisps come back; or, with `again` false, None."""
         kind = HEALTH_WISP if stat == "health" else MANA_WISP
         explored = self.record.explored.setdefault(f"{state['zone']}|{kind}s", [])
         me = await self.client.body.position()
@@ -734,7 +734,7 @@ class QuestLoop:
             enemies, circles = await surroundings(self.client)
             found = safe_wisps(await wisps(self.client, kind), me=await self.client.body.position(),
                                enemies=enemies, duel_circles=circles, tried=self.recently_tried_wisps(),
-                               reach=math.inf)
+                               reach=reach)
             return f"{kind} in sight" if found else None
 
         turn = await self.travel_turn(f"explore for {kind}s", XYZ(x, y, 0.0), arrive_radius=WAYPOINT_ARRIVE_RADIUS * 3,

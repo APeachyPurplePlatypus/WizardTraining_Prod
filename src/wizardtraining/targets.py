@@ -77,6 +77,13 @@ def safe_wisps(wisps: list[dict], *, me, enemies: list[dict], duel_circles, trie
     return sorted((wisp for wisp in wisps if safe(wisp)), key=lambda wisp: flat_distance(me, wisp["position"]))
 
 
+def refill_reach(safe_zone: bool) -> float:
+    """How far a refill goes for a wisp, both to fetch one and to end a search on seeing one: any distance in a zone
+    without enemies, WISP_REACH among them. A search that ended on any wisp loaded, while the fetch took only those
+    within WISP_REACH, stopped every walk in Firecat Alley before it began, until the run stopped."""
+    return math.inf if safe_zone else WISP_REACH
+
+
 def next_area_to_explore(points: list, *, me, explored=(), prefer=()) -> tuple | None:
     """The nearest exploration point not explored yet, as ((x, y), piece), or None when all are done. Points
     in the `prefer` pieces come first: a quest's targets tend to be near each other, so the pieces holding

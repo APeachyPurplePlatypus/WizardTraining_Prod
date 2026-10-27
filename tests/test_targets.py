@@ -5,7 +5,7 @@ from wizardtraining.routes import ENEMY_KEEP_OUT
 from wizardtraining.targets import (AFTER_BATTLE_GRACE_SECONDS, ENEMY_CLEARANCE, WISP_DETOUR, WISP_REACH,
                                     back_away, bystanders, detour, enemies_to_route_around, in_grace_after_battle,
                                     keeps_blocking, measured, next_area_to_explore, others, quest_targets,
-                                    safe_wisps, threat_centre, too_close)
+                                    refill_reach, safe_wisps, threat_centre, too_close)
 
 
 def enemy(id_, name, x, y):
@@ -58,6 +58,11 @@ class TargetsTest(unittest.TestCase):
         far = [{"id": "far", "position": (WISP_REACH * 3, 0)}]
         self.assertEqual(safe_wisps(far, me=(0, 0), enemies=[], duel_circles=[]), [])
         self.assertEqual(len(safe_wisps(far, me=(0, 0), enemies=[], duel_circles=[], reach=math.inf)), 1)
+
+    def test_a_refill_reaches_any_wisp_only_in_a_zone_without_enemies(self):
+        far = [{"id": "far", "position": (WISP_REACH * 3, 0)}]
+        self.assertEqual(safe_wisps(far, me=(0, 0), enemies=[], duel_circles=[], reach=refill_reach(False)), [])
+        self.assertEqual(len(safe_wisps(far, me=(0, 0), enemies=[], duel_circles=[], reach=refill_reach(True))), 1)
 
     def test_next_area_to_explore_is_the_nearest_not_yet_explored(self):
         points = [((0, 5000), 0), ((0, 1000), 0), ((0, 3000), 1)]
