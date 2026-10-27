@@ -135,6 +135,7 @@ class NavGraph:
     """zone.nav waypoints as (x, y), and for each waypoint index the indices it links to."""
     vertices: list[Point]
     adjacent: dict[int, list[int]] = field(default_factory=dict)
+    _buckets: dict[tuple[int, int], list[Point]] | None = field(default=None, init=False, repr=False, compare=False)
 
     @classmethod
     def from_edges(cls, vertices, edges) -> "NavGraph":
@@ -152,10 +153,26 @@ class NavGraph:
         """Every sample along the line lies within one nav cell of a waypoint, so it stays on walkable ground."""
         samples = max(1, int(math.dist(a, b) // LINE_SAMPLE_SPACING))
         for k in range(samples + 1):
-            point = (a[0] + (b[0] - a[0]) * k / samples, a[1] + (b[1] - a[1]) * k / samples)
-            if min(math.dist(point, vertex) for vertex in self.vertices) > NAV_CELL_REACH:
+            if not self.near_a_waypoint((a[0] + (b[0] - a[0]) * k / samples, a[1] + (b[1] - a[1]) * k / samples)):
                 return False
         return True
+
+    def near_a_waypoint(self, point: Point) -> bool:
+        """Some waypoint lies within NAV_CELL_REACH of `point`. Only the waypoints in the 3x3 buckets of that size
+        around it can: straightening a route asks this for every sample of every shortcut, and comparing each
+        with all of Cyclops Lane's 1,141 waypoints took 5 to 7 seconds per route while the wizard stood among
+        patrolling enemies."""
+        if self._buckets is None:
+            self._buckets = {}
+            for vertex in self.vertices:
+                self._buckets.setdefault(self._bucket(vertex), []).append(vertex)
+        bx, by = self._bucket(point)
+        return any(math.dist(point, vertex) <= NAV_CELL_REACH
+                   for dx in (-1, 0, 1) for dy in (-1, 0, 1) for vertex in self._buckets.get((bx + dx, by + dy), ()))
+
+    @staticmethod
+    def _bucket(point: Point) -> tuple[int, int]:
+        return int(point[0] // NAV_CELL_REACH), int(point[1] // NAV_CELL_REACH)
 
     def path(self, start: Point, goal: Point, hazards: Hazards) -> list[int] | None:
         source, target = self.nearest(start, hazards), self.nearest(goal, hazards)

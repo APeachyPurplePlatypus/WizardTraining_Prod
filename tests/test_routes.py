@@ -3,6 +3,7 @@ import unittest
 
 from wizardtraining.patrols import PatrolMap
 from wizardtraining.routes import (COLLISION, DUEL_CIRCLE_NO_GO, GOAL_PIECE_REACH, LEG_ENEMY_CLEARANCE, NAV,
+                                   NAV_CELL_REACH,
                                    OBSTACLE_RADIUS, STRAIGHT, Hazards, NavGraph, RoutePlanner, grid_path,
                                    no_more_dangerous, string_pull)
 from wizardtraining.motion import Track
@@ -74,6 +75,22 @@ class HazardsTest(unittest.TestCase):
         hazards = Hazards.of(enemies=[(0, LEG_ENEMY_CLEARANCE - 10)])
         self.assertFalse(hazards.line_is_safe((-1000, 0), (1000, 0)))
         self.assertTrue(hazards.line_is_safe((-1000, -100), (-900, -100)))
+
+
+class NavGraphTest(unittest.TestCase):
+    def test_a_line_is_covered_only_where_waypoints_are_near(self):
+        graph = square_nav_graph(3)
+        self.assertTrue(graph.covers_line((0, 0), (960, 0)))
+        self.assertTrue(graph.near_a_waypoint((480 + NAV_CELL_REACH - 1, 0)))
+        self.assertFalse(graph.near_a_waypoint((-NAV_CELL_REACH - 1, 0)))
+        self.assertFalse(graph.covers_line((0, 0), (0, -2000)))
+
+    def test_matches_comparing_with_every_waypoint(self):
+        graph = square_nav_graph(4)
+        for x in range(-400, 2000, 37):
+            for y in range(-400, 2000, 53):
+                expected = min(math.dist((x, y), vertex) for vertex in graph.vertices) <= NAV_CELL_REACH
+                self.assertEqual(graph.near_a_waypoint((x, y)), expected, (x, y))
 
 
 class StringPullTest(unittest.TestCase):

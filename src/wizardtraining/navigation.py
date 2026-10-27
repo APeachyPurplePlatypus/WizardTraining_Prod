@@ -145,6 +145,7 @@ class WallAwareGrid:
     def __init__(self, grid, free: FreeArea):
         self._grid, self._free = grid, free
         self.spacing = grid.spacing
+        self._heights: dict[tuple[int, int], float | None] = {}
 
     def to_hex(self, x, y):
         return self._grid.to_hex(x, y)
@@ -156,8 +157,12 @@ class WallAwareGrid:
         return self._grid.neighbours(q, r)
 
     def walk_z(self, q, r):
-        z = self._grid.walk_z(q, r)
-        return z if z is not None and self._free.contains_point(*self.to_world(q, r)) else None
+        """The cell's floor height, or None where it cannot be walked. Remembered per cell: the mesh and the free
+        area never change within a zone, and these lookups were most of a collision route's planning time."""
+        if (q, r) not in self._heights:
+            z = self._grid.walk_z(q, r)
+            self._heights[(q, r)] = z if z is not None and self._free.contains_point(*self.to_world(q, r)) else None
+        return self._heights[(q, r)]
 
     def _nearest_walk_node(self, q, r):
         """The closest free cell, searching outward through neighbouring cells."""

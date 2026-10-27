@@ -84,6 +84,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **Routes are planned in a fraction of a second, so the wizard no longer stands still among patrolling enemies.**
+  - **What:** straightening a nav route checks each sample of each shortcut against only the waypoints in nearby buckets (`NavGraph.near_a_waypoint`), not against all of them. The walk grid remembers each cell's floor height, and the patrol map each point's distance to a patrol path; both are fixed within a zone. On Cyclops Lane, with patrol paths as hazards, a nav route from the lane's start took 5.8 to 7.1 s and now takes 0.14 to 0.25 s, with the same legs. A collision route took 1.2 to 1.5 s and now takes 0.2 to 0.8 s.
+  - **Why:** the operator saw the wizard "still attacking wrong mobs" on its way to the Warhorns the quest asked for. The run log showed why. Each turn stood still for 4 to 6 seconds before "route by nav", and before two of the fights a failed nav route was followed by a collision route planned for about 16 more seconds. In one of those, the wizard moved 40 units in 19 seconds before a Cyclops walked into it. Profiling put 99% of a nav route's time in the waypoint check: 65 million distance calls.
+  - **Not verified yet:** fewer fights with bystanders in the game.
+
 - **Wisps are fetched only on the way, and a failed wisp trip is not repeated.**
   - **What:** a wisp now counts only when the detour through it toward the quest arrow is at most 1,200 units (`targets.WISP_DETOUR`). Below 35% health (`progress.WISP_ANY_DIRECTION_BELOW_FRACTION`) any wisp in reach still counts. With no wisp on the way, the quest goes on. A wisp trip that gains nothing is marked tried even when it was cut short. Before, only a trip that arrived was marked.
   - **Why:** the operator saw the wizard "keeps going back and forth" in Cyclops Lane and "isn't going to the right mobs". The bounty's targets were at the far end of the lane. Below 65% health, every turn walked back up to 2,500 units to the nearest wisp. Two of those were used up ("health 263 -> 263"), and interrupted trips were tried again. On the way back, the Cyclopes and Trolls the quest did not ask for pulled the wizard into fights.

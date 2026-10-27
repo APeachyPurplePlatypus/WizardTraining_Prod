@@ -82,6 +82,7 @@ class PatrolMap:
     paths: dict[str, list[Point]] = field(default_factory=dict)
     _buckets: dict[tuple[int, int], list[Point]] = field(default_factory=dict)
     _around: dict[tuple, list[Point]] = field(default_factory=dict)
+    _distances: dict[tuple, float] = field(default_factory=dict)
 
     @classmethod
     def from_paths(cls, nodes: dict[int, tuple], paths: dict[str, list[int]]) -> "PatrolMap":
@@ -101,6 +102,7 @@ class PatrolMap:
     def add_segment(self, a: Point, b: Point) -> None:
         self.segments.append((a, b))
         self._around.clear()
+        self._distances.clear()
         steps = max(1, int(math.dist(a, b) // SAMPLE_SPACING))
         for k in range(steps + 1):
             point = (a[0] + (b[0] - a[0]) * k / steps, a[1] + (b[1] - a[1]) * k / steps)
@@ -113,14 +115,18 @@ class PatrolMap:
     def distance(self, point: Point, within: float) -> float:
         """Distance from `point` to the nearest patrol path, or `within` when none is closer than that. Route
         searches ask this for every cell they visit, tens of thousands of times, so it compares squared distances
-        over the samples of the surrounding buckets, gathered once per bucket."""
-        x, y = point
-        limit = nearest = within * within
-        for sample_x, sample_y in self._samples_around(self._bucket(point), int(within // BUCKET_SIZE) + 1):
-            squared = (sample_x - x) ** 2 + (sample_y - y) ** 2
-            if squared < nearest:
-                nearest = squared
-        return math.sqrt(nearest) if nearest < limit else within
+        over the samples of the surrounding buckets, gathered once per bucket, and remembers each answer: the
+        cells and waypoints asked about are the same from one route to the next."""
+        key = (point[0], point[1], within)
+        if key not in self._distances:
+            x, y = point
+            limit = nearest = within * within
+            for sample_x, sample_y in self._samples_around(self._bucket(point), int(within // BUCKET_SIZE) + 1):
+                squared = (sample_x - x) ** 2 + (sample_y - y) ** 2
+                if squared < nearest:
+                    nearest = squared
+            self._distances[key] = math.sqrt(nearest) if nearest < limit else within
+        return self._distances[key]
 
     def _samples_around(self, bucket: tuple[int, int], reach: int) -> list[Point]:
         key = (bucket, reach)
