@@ -24,6 +24,7 @@ from wizwalker.utils import pharse_nav_data
 
 from .config import DEIMOS_VARIABLE
 from .routes import NavGraph, RoutePlanner
+from .patrols import PatrolMap, parse_nodes, parse_paths
 from .placed import parse_placed_objects
 from .teleports import parse_teleport_volumes
 
@@ -43,11 +44,13 @@ async def load_planner(zone: str, deimos_root: Path | None) -> RoutePlanner:
     nav_graph, nav_status = await _nav_graph(wad)
     volumes, teleport_status = await _teleport_volumes(wad)
     placed, placed_status = await _placed_objects(wad)
+    patrols, patrol_status = await _patrols(wad)
     planner = RoutePlanner(zone, walk_grid=walk_grid, grid_line_walkable=free.contains_line if free else None,
                            nav_graph=nav_graph,
                            status={"collision": collision_status, "nav": nav_status, "teleports": teleport_status,
-                                   "placed objects": placed_status})
+                                   "placed objects": placed_status, "patrols": patrol_status})
     planner.placed_objects = placed
+    planner.patrols = patrols
     if free is not None:
         planner.piece_of = free.piece_of
         planner.teleports = [(volume, free.piece_of(volume.point, volume.radius + PIECE_REACH)) for volume in volumes]
@@ -167,6 +170,15 @@ def _deimos_collision(deimos_root: Path) -> _DeimosCollision:
     if str(deimos_root) not in sys.path:
         sys.path.insert(0, str(deimos_root))
     return _DeimosCollision()
+
+
+async def _patrols(wad):
+    try:
+        patrols = PatrolMap.from_paths(parse_nodes(await wad.get_file("pathNodeData.bin")),
+                                       parse_paths(await wad.get_file("pathData.xml")))
+    except Exception as exc:
+        return None, f"unavailable: {type(exc).__name__}"
+    return (patrols, f"{len(patrols.segments)} enemy patrol segments") if patrols else (None, "no enemy patrols")
 
 
 async def _placed_objects(wad):

@@ -24,6 +24,12 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Added
 
+- **Routes keep away from enemy patrol paths.**
+  - **What:** each zone's patrol paths are read from its `pathNodeData.bin` (node positions) and `pathData.xml` (path names and their node ids), in `patrols.py`. Paths for wisps, reagents and chests are left out. Route steps within 700 units of an enemy path cost up to 4 more, so routes prefer the parts of a street enemies don't walk. A merged straight leg may not be more dangerous than the steps it replaces.
+  - **Why:** the operator saw that the wizard still didn't keep to safe ground, such as sidewalks, and kept ending up in fights. Until now, routes only avoided enemies that were loaded and in sight, and merging routes into straight legs could cut back across a street. Triton's paths are named after what walks them ("Path 01_Eels", "Path 04_Minions", "Path 10_Screamer"). Their nodes lay 1 unit from where Rotting Fodder were met, 41 from the Haunted Minions, and 685 from the Electric Eels, which wander. The Tele Up landing is 2,683 units from any of them.
+  - **How the files were read:** the layout was inferred. A node is a 92-byte record with x, y and z 36, 40 and 44 bytes in, and its id 68 bytes in. A path's name is followed by its node ids, 8 bytes apart. Triton gives 549 nodes and 40 paths, and 523 nodes belong to a path.
+  - **Not verified:** other zones' files; whether paths with only a number (Triton's 15 to 24) are enemies (they are avoided to be safe); how far a given enemy strays from its path.
+
 - **Exploring for a defeat goal's enemies.**
   - **What:** when a defeat goal has no quest arrow and none of the enemies it names are in sight, the loop walks to the nearest unexplored part of the zone and stops as soon as one shows up. The zone's walkable area is split into points about 2,500 units apart on every level (`FreeArea.exploration_points`), and the loop uses teleporters where needed. Once every point has been seen, it stops for the operator. The event log says where it is looking and how many areas are left.
   - **Why:** "Clear as Crystal" asks for Scarlet Screamers on Triton Avenue, and the goal has no quest helper. Enemies only load when the wizard is fairly close, and the zone's spawn data names "Spawn point 10_Screamer" and "11_Screamer" without positions that could be read. Looking around is what a player would do.

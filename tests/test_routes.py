@@ -1,8 +1,9 @@
 import math
 import unittest
 
+from wizardtraining.patrols import PatrolMap
 from wizardtraining.routes import (COLLISION, DUEL_CIRCLE_NO_GO, LEG_ENEMY_CLEARANCE, NAV, OBSTACLE_RADIUS, STRAIGHT,
-                                   Hazards, NavGraph, RoutePlanner, grid_path, string_pull)
+                                   Hazards, NavGraph, RoutePlanner, grid_path, no_more_dangerous, string_pull)
 
 SPACING = 100.0
 
@@ -75,12 +76,20 @@ class HazardsTest(unittest.TestCase):
 class StringPullTest(unittest.TestCase):
     def test_merges_points_a_straight_line_can_join(self):
         points = [(0, 0), (1, 0), (2, 0), (3, 0)]
-        self.assertEqual(string_pull(points, lambda a, b: True), [(3, 0)])
+        self.assertEqual(string_pull(points, lambda i, j: True), [(3, 0)])
 
     def test_keeps_corners_a_straight_line_cannot_cut(self):
         points = [(0, 0), (1, 0), (1, 1)]
-        cuts_corner = lambda a, b: a[0] == b[0] or a[1] == b[1]
+        cuts_corner = lambda i, j: points[i][0] == points[j][0] or points[i][1] == points[j][1]
         self.assertEqual(string_pull(points, cuts_corner), [(1, 0), (1, 1)])
+
+    def test_merging_never_cuts_across_a_patrol(self):
+        patrols = PatrolMap()
+        patrols.add_segment((500, -300), (500, 300))
+        hazards = Hazards.of(patrols=patrols)
+        detour = [(0, 0), (0, 1200), (1000, 1200), (1000, 0)]
+        legs = string_pull(detour, no_more_dangerous(detour, hazards))
+        self.assertEqual(legs, [(0, 1200), (1000, 1200), (1000, 0)])
 
 
 class GridPathTest(unittest.TestCase):
@@ -97,6 +106,13 @@ class GridPathTest(unittest.TestCase):
         cells = grid_path(grid, (0, 0), (2900, 0), Hazards.of(duel_circles=[circle]))
         self.assertEqual(cells[-1], (2900, 0))
         self.assertTrue(all(math.dist(cell, circle) >= DUEL_CIRCLE_NO_GO for cell in cells))
+
+    def test_bends_away_from_patrol_paths(self):
+        grid = SquareWalkGrid(30)
+        patrols = PatrolMap()
+        patrols.add_segment((1500, -500), (1500, 500))
+        cells = grid_path(grid, (0, 0), (2900, 0), Hazards.of(patrols=patrols))
+        self.assertGreater(min(patrols.distance(cell, 3000) for cell in cells), 400)
 
     def test_bends_away_from_enemies(self):
         grid = SquareWalkGrid(30)

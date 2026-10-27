@@ -7,7 +7,9 @@ Three methods, tried in this order by `movement.travel`:
 
 Grid and graph routes are searched with A*, then merged into as few straight legs as the walk data
 allows ("string pulling"). Steps near enemies cost more, so routes keep to the parts of a street that
-enemies are not on, and merged legs keep LEG_ENEMY_CLEARANCE from them. Duel circles, other players'
+enemies are not on, and merged legs keep LEG_ENEMY_CLEARANCE from them. Steps near the zone's enemy patrol
+paths cost more too (`patrols.PatrolMap`), so routes prefer the sidewalks enemies do not walk, and merging
+never makes a leg more dangerous than the steps it replaces. Duel circles, other players'
 fights in progress, are no-go areas: walking into one joins that fight. So are obstacles: places where the
 wizard was blocked although the walk data said the way was clear.
 """
@@ -29,6 +31,9 @@ ENEMY_AVOID_WEIGHT = 6.0
 LEG_ENEMY_CLEARANCE = 450.0
 DUEL_CIRCLE_NO_GO = 900.0
 OBSTACLE_RADIUS = 150.0
+PATROL_AVOID_RADIUS = 700.0
+PATROL_AVOID_WEIGHT = 4.0
+MERGE_DANGER_TOLERANCE = 0.25
 NAV_GRID_SPACING = 480.0
 NAV_CELL_REACH = NAV_GRID_SPACING * math.sqrt(2) / 2
 LINE_SAMPLE_SPACING = 60.0
@@ -43,21 +48,33 @@ class Hazards:
     enemies: tuple[Point, ...] = ()
     duel_circles: tuple[Point, ...] = ()
     obstacles: tuple[Point, ...] = ()
+    patrols: object = field(default=None, compare=False)
 
     @classmethod
-    def of(cls, enemies=(), duel_circles=(), obstacles=()) -> "Hazards":
+    def of(cls, enemies=(), duel_circles=(), obstacles=(), patrols=None) -> "Hazards":
         return cls(tuple(xy(enemy) for enemy in enemies), tuple(xy(circle) for circle in duel_circles),
-                   tuple(xy(obstacle) for obstacle in obstacles))
+                   tuple(xy(obstacle) for obstacle in obstacles), patrols)
 
     def with_obstacles(self, obstacles) -> "Hazards":
         return replace(self, obstacles=self.obstacles + tuple(xy(obstacle) for obstacle in obstacles))
 
     def step_cost(self, point: Point) -> float:
-        """1 away from enemies, rising to 1 + ENEMY_AVOID_WEIGHT on top of one."""
-        if not self.enemies:
-            return 1.0
-        nearest = min(math.dist(point, enemy) for enemy in self.enemies)
-        return 1.0 + ENEMY_AVOID_WEIGHT * max(0.0, 1.0 - nearest / ENEMY_AVOID_RADIUS)
+        """1 away from enemies and patrol paths, rising by up to ENEMY_AVOID_WEIGHT on top of an enemy and by up to
+        PATROL_AVOID_WEIGHT on a patrol path."""
+        cost = 1.0
+        if self.enemies:
+            nearest = min(math.dist(point, enemy) for enemy in self.enemies)
+            cost += ENEMY_AVOID_WEIGHT * max(0.0, 1.0 - nearest / ENEMY_AVOID_RADIUS)
+        if self.patrols:
+            cost += PATROL_AVOID_WEIGHT * max(0.0, 1.0 - self.patrols.distance(point, PATROL_AVOID_RADIUS)
+                                              / PATROL_AVOID_RADIUS)
+        return cost
+
+    def line_cost(self, a: Point, b: Point) -> float:
+        """The highest step cost along a straight line, sampled every LINE_SAMPLE_SPACING units."""
+        samples = max(1, int(math.dist(a, b) // LINE_SAMPLE_SPACING))
+        return max(self.step_cost((a[0] + (b[0] - a[0]) * k / samples, a[1] + (b[1] - a[1]) * k / samples))
+                   for k in range(samples + 1))
 
     def clear_around(self, point, radius: float) -> "Hazards":
         """Without the obstacles within `radius` of `point`: bumping into the NPC a trip is going to must not
@@ -166,17 +183,28 @@ def walk_back(came_from: dict, last) -> list:
     return path[::-1]
 
 
-def string_pull(points: list[Point], straight_line_ok: Callable[[Point, Point], bool]) -> list[Point]:
-    """From each point, jump to the farthest later point a straight line can reach. Neighbouring points
-    are always joined, so every point is reachable. The start is not repeated in the result."""
+def string_pull(points: list[Point], straight_line_ok: Callable[[int, int], bool]) -> list[Point]:
+    """From each point, jump to the farthest later point a straight line can reach; `straight_line_ok` gets the
+    two points' indices. Neighbouring points are always joined, so every point is reachable. The start is not
+    repeated in the result."""
     legs, i = [], 0
     while i < len(points) - 1:
         j = min(len(points) - 1, i + MAX_MERGE_LOOKAHEAD)
-        while j > i + 1 and not straight_line_ok(points[i], points[j]):
+        while j > i + 1 and not straight_line_ok(i, j):
             j -= 1
         legs.append(points[j])
         i = j
     return legs
+
+
+def no_more_dangerous(points: list[Point], hazards: "Hazards") -> Callable[[int, int], bool]:
+    """A check for string pulling: the straight line from point i to point j is no more dangerous than the most
+    dangerous of the points it replaces, so merging never cuts back across a patrol path."""
+    costs = [hazards.step_cost(point) for point in points]
+
+    def ok(i: int, j: int) -> bool:
+        return hazards.line_cost(points[i], points[j]) <= max(costs[i:j + 1]) + MERGE_DANGER_TOLERANCE
+    return ok
 
 
 class RoutePlanner:
@@ -193,6 +221,7 @@ class RoutePlanner:
         self.teleports: list[tuple[TeleportVolume, int | None]] = []
         self.placed_objects: list = []
         self.exploration_points: list[tuple[Point, int]] = []
+        self.patrols = None
 
     def crossing(self, start, goal, outcomes: dict[str, object]) -> TeleportVolume | None:
         """A teleport volume to walk into when `goal` lies in another walkable piece than `start`, or None
@@ -223,15 +252,19 @@ class RoutePlanner:
             cells = grid_path(self.walk_grid, start, goal, hazards)
             if cells is None:
                 return None
-            return string_pull([start, *cells, goal],
-                               lambda a, b: self.grid_line_walkable(a, b) and hazards.line_is_safe(a, b))
+            points = [start, *cells, goal]
+            danger_ok = no_more_dangerous(points, hazards)
+            return string_pull(points, lambda i, j: self.grid_line_walkable(points[i], points[j])
+                               and hazards.line_is_safe(points[i], points[j]) and danger_ok(i, j))
         if method == NAV:
             waypoints = self.nav_graph.path(start, goal, hazards)
             if waypoints is None:
                 return None
             points = [start, *(self.nav_graph.vertices[index] for index in waypoints), goal]
-            return string_pull(points, lambda a, b: self.nav_graph.covers_line(a, b) and self.walls_allow(a, b)
-                               and hazards.line_is_safe(a, b))
+            danger_ok = no_more_dangerous(points, hazards)
+            return string_pull(points, lambda i, j: self.nav_graph.covers_line(points[i], points[j])
+                               and self.walls_allow(points[i], points[j]) and hazards.line_is_safe(points[i], points[j])
+                               and danger_ok(i, j))
         if method == STRAIGHT:
             return [goal] if hazards.line_is_open(start, goal) else None
         raise ValueError(f"unknown route method {method!r}")

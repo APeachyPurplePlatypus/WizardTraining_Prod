@@ -272,9 +272,10 @@ class QuestLoop:
             return None
         wisp = candidates[0]
         start = await self.client.body.position()
+        planner = await self.planner()
         hazards = Hazards.of(enemies=[enemy["position"] for enemy in enemies], duel_circles=circles,
-                             obstacles=self.record.obstacles.get(state["zone"], []))
-        trip = await travel(self.client, await self.planner(), wisp["position"], arrive_radius=WISP_ARRIVE_RADIUS,
+                             obstacles=self.record.obstacles.get(state["zone"], []), patrols=planner.patrols)
+        trip = await travel(self.client, planner, wisp["position"], arrive_radius=WISP_ARRIVE_RADIUS,
                             watch=self.watcher(), hazards=hazards)
         await asyncio.sleep(WISP_SETTLE_SECONDS)
         after = await snapshot(self.client)
@@ -550,7 +551,7 @@ class QuestLoop:
             return await self.teleport_turn(crossing, zone, planner)
         _, duel_circles = await surroundings(self.client)
         hazards = Hazards.of(enemies=[enemy["position"] for enemy in avoid], duel_circles=duel_circles,
-                             obstacles=self.record.obstacles.get(zone, []))
+                             obstacles=self.record.obstacles.get(zone, []), patrols=planner.patrols)
         trip = await travel(self.client, planner, destination, arrive_radius=arrive_radius,
                             watch=self.watcher(also=also, ignore=ignore), hazards=hazards)
         moved = flat_distance(start, await self.client.body.position())
@@ -577,7 +578,7 @@ class QuestLoop:
                                        f"{volume.name} at ({volume.x:.0f}, {volume.y:.0f})")
         before = await self.client.body.position()
         trip = await travel(self.client, planner, volume.point, arrive_radius=volume.radius / 3,
-                            watch=self.watcher(also=self.jump_check()))
+                            watch=self.watcher(also=self.jump_check()), hazards=Hazards.of(patrols=planner.patrols))
         reached = trip["result"] == "arrived" or trip["reason"] in (TELEPORTED, "loading")
         if not reached:
             moved = flat_distance(before, await self.client.body.position())
