@@ -56,6 +56,7 @@ SCHOOL_NAMES = {2343174: "Fire", 72777: "Ice", 83375795: "Storm", 2448141: "Myth
                 78318724: "Death", 1027491821: "Balance", 2625203: "Star", 78483: "Sun", 2504141: "Moon",
                 1429009101: "Shadow", 80289: UNIVERSAL}
 INCOMING_DAMAGE = "modify_incoming_damage"
+STUN_PROTECTION = {"stun", "stun_block"}
 SCHOOLS_IN_STAT_ORDER = ("Fire", "Ice", "Storm", "Myth", "Life", "Death", "Balance", "Star", "Sun", "Moon",
                          "Gardening", "Shadow")
 
@@ -130,17 +131,23 @@ async def number(coro) -> int | None:
     return value if isinstance(value, int) and not isinstance(value, bool) else None
 
 
-async def card_school_and_pips(card) -> tuple[str | None, int | None]:
+async def card_details(card) -> tuple[str | None, int | None, tuple[str, ...]]:
+    """A card's school, pip cost and spell effect names ("damage", "stun", ...), each None or empty when it cannot
+    be read."""
     try:
         spell = await card.wait_for_graphical_spell()
     except Exception:
-        return None, None
+        return None, None, ()
     school = SCHOOL_NAMES.get(await number(spell.magic_school_id()))
     try:
         pips = await number((await spell.pip_cost()).spell_rank())
     except Exception:
         pips = None
-    return school, pips
+    try:
+        effects = tuple([str(await attempt(effect.effect_type())) for effect in await spell.spell_effects()])
+    except Exception:
+        effects = ()
+    return school, pips, effects
 
 
 async def resistances(member) -> dict[str, float]:
@@ -159,12 +166,21 @@ async def resistances(member) -> dict[str, float]:
     return found
 
 
-async def incoming_modifiers(member) -> tuple[DamageModifier, ...]:
-    """The shields, wards and traps on a combatant. Effects that cannot be read are left out."""
+async def hanging_effects(member) -> list:
+    """The effects hanging on a combatant: shields, wards, traps, stuns and stun blocks. Empty when unreadable."""
     try:
-        effects = await (await member.get_participant()).hanging_effects()
+        return await (await member.get_participant()).hanging_effects()
     except Exception:
-        return ()
+        return []
+
+
+async def stunnable(effects) -> bool:
+    """No stun and no stun block among a combatant's hanging effects: a stun on it would not be wasted."""
+    return not any([await attempt(effect.effect_type()) in STUN_PROTECTION for effect in effects])
+
+
+async def incoming_modifiers(effects) -> tuple[DamageModifier, ...]:
+    """The shields, wards and traps among a combatant's hanging effects. Effects that cannot be read are left out."""
     modifiers = []
     for effect in effects:
         if await attempt(effect.effect_type()) != INCOMING_DAMAGE:
@@ -181,7 +197,8 @@ async def read_round(combat):
     me = await combat.get_client_member()
     enemies = [member for member in await combat.get_all_monster_members() if not await member.is_dead()]
     cards = await combat.get_cards()
-    schools_and_pips = [await card_school_and_pips(card) for card in cards]
+    details = [await card_details(card) for card in cards]
+    effects = [await hanging_effects(enemy) for enemy in enemies]
     view = RoundView(
         round_number=await number(combat.round_number()),
         health=await number(me.health()),
@@ -191,11 +208,12 @@ async def read_round(combat):
         power_pips=await number(me.power_pips()),
         cards=tuple([Card(name=await attempt(card.name()), spell_type=await attempt(card.type_name()),
                           castable=await attempt(card.is_castable()) is True, school=school, pips=pips,
-                          accuracy=await number(card.accuracy()))
-                     for card, (school, pips) in zip(cards, schools_and_pips)]),
+                          accuracy=await number(card.accuracy()), effects=card_effects)
+                     for card, (school, pips, card_effects) in zip(cards, details)]),
         enemies=tuple([Combatant(name=await attempt(enemy.name()), health=await number(enemy.health()),
-                                 incoming=await incoming_modifiers(enemy), resistances=await resistances(enemy))
-                       for enemy in enemies]),
+                                 incoming=await incoming_modifiers(hanging), resistances=await resistances(enemy),
+                                 stunnable=await stunnable(hanging))
+                       for enemy, hanging in zip(enemies, effects)]),
     )
     return view, me, cards, enemies
 
@@ -235,7 +253,8 @@ async def play_round(combat, policy: CombatPolicy, can_flee: bool = True) -> dic
         return entry
     await cards[choice.card].cast(cast_target(choice, me, enemies), sleep_time=PAUSE_BETWEEN_CAST_CLICKS_SECONDS)
     card = view.cards[choice.card]
-    entry["action"] = f"cast {card.name}{f' ({card.school})' if card.school else ''} on {choice.target}"
+    target = f"{choice.target} {view.enemies[choice.enemy].name}" if choice.target == "enemy" else choice.target
+    entry["action"] = f"cast {card.name}{f' ({card.school})' if card.school else ''} on {target}"
     return entry
 
 

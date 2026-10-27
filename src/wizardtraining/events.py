@@ -85,6 +85,7 @@ def describe_round(entry: dict) -> str:
     view = entry["view"]
     enemies = ", ".join(f"{enemy['name']} {enemy['health']}"
                         f"{modifier_text(enemy.get('incoming'), enemy.get('resistances'))}"
+                        f"{' (cannot be stunned now)' if enemy.get('stunnable') is False else ''}"
                         for enemy in view["enemies"]) or "none"
     mana = f", {view['mana']} mana" if view.get("mana") is not None else ""
     reopened = "reopened the card choice; " if entry.get("reopened card choice") else ""

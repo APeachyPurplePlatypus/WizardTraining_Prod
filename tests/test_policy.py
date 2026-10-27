@@ -122,6 +122,63 @@ class SpellTypePolicyTest(unittest.TestCase):
         self.assertEqual(self.policy.choose(view([HEAL, BOLT], health=None)), Cast(1, "enemy"))
 
 
+AKILLES_AND_CYCLOPS = (Combatant("General Akilles", 470), Combatant("Cyclops Legionnaire", 235))
+WAND = Card("Fire Cat - Starter Wand", "Damage", True, "Fire", pips=1, accuracy=75)
+SERPENT_NEXT_ROUND = Card("Snow Serpent", "Damage", False, "Ice", pips=2, accuracy=80)
+FREEZE = Card("Freeze", "Manipulation", True, "Ice", pips=0, accuracy=70, effects=("stun",))
+
+
+class SeveralEnemiesTest(unittest.TestCase):
+    policy = SpellTypePolicy()
+
+    def test_attacks_the_enemy_with_the_least_health(self):
+        self.assertEqual(self.policy.choose(view([BOLT], enemies=AKILLES_AND_CYCLOPS)), Cast(0, "enemy", 1))
+
+    def test_finishes_any_enemy_it_surely_can(self):
+        enemies = (Combatant("General Akilles", 470), Combatant("Warhorn", 15), Combatant("Cyclops", 235))
+        self.assertEqual(self.policy.choose(view([WAND], enemies=enemies)), Cast(0, "enemy", 1))
+
+    def test_stuns_the_healthiest_enemy_while_saving_a_pip_for_a_stronger_attack(self):
+        hand = [WAND, SERPENT_NEXT_ROUND, FREEZE]
+        self.assertEqual(self.policy.choose(view(hand, enemies=AKILLES_AND_CYCLOPS, pips=1, mana=15)),
+                         Cast(2, "enemy", 0))
+
+    def test_stuns_another_enemy_when_one_cannot_be_stunned(self):
+        blocked = (Combatant("General Akilles", 470, stunnable=False), Combatant("Cyclops Legionnaire", 235))
+        self.assertEqual(self.policy.choose(view([WAND, SERPENT_NEXT_ROUND, FREEZE], enemies=blocked, pips=1)),
+                         Cast(2, "enemy", 1))
+
+    def test_attacks_when_no_enemy_can_be_stunned(self):
+        blocked = tuple(Combatant(enemy.name, enemy.health, stunnable=False) for enemy in AKILLES_AND_CYCLOPS)
+        self.assertEqual(self.policy.choose(view([WAND, SERPENT_NEXT_ROUND, FREEZE], enemies=blocked, pips=1)),
+                         Cast(0, "enemy", 1))
+
+    def test_attacks_when_no_stronger_attack_is_a_pip_away(self):
+        far_off = Card("Evil Snowman", "Damage", False, "Ice", pips=4)
+        self.assertEqual(self.policy.choose(view([WAND, far_off, FREEZE], enemies=AKILLES_AND_CYCLOPS, pips=1)),
+                         Cast(0, "enemy", 1))
+        self.assertEqual(self.policy.choose(view([WAND, FREEZE], enemies=AKILLES_AND_CYCLOPS, pips=1)),
+                         Cast(0, "enemy", 1))
+
+    def test_attacks_when_the_stronger_attack_needs_more_mana_than_is_left(self):
+        stuck = RoundView(round_number=3, health=500, max_health=500, pips=1, power_pips=0,
+                          cards=(WAND, SERPENT_NEXT_ROUND, FREEZE), enemies=AKILLES_AND_CYCLOPS, mana=1, can_flee=False)
+        self.assertEqual(self.policy.choose(stuck), Cast(0, "enemy", 1))
+
+    def test_a_stun_also_saves_a_pip_against_one_enemy(self):
+        self.assertEqual(self.policy.choose(view([WAND, SERPENT_NEXT_ROUND, FREEZE], pips=1)), Cast(2, "enemy", 0))
+
+    def test_stuns_rather_than_passes_while_saving_pips_for_a_heal(self):
+        pixie = Card("Pixie", "Heal", False, "Life", pips=2)
+        self.assertEqual(self.policy.choose(view([WAND, pixie, FREEZE], health=100, enemies=AKILLES_AND_CYCLOPS,
+                                                 pips=1)), Cast(2, "enemy", 0))
+
+    def test_heals_before_stunning_when_low(self):
+        hand = [WAND, SERPENT_NEXT_ROUND, FREEZE, HEAL]
+        self.assertEqual(self.policy.choose(view(hand, health=100, enemies=AKILLES_AND_CYCLOPS, pips=1)),
+                         Cast(3, "self"))
+
+
 class ProblemWithTest(unittest.TestCase):
     def test_a_valid_choice_has_no_problem(self):
         self.assertIsNone(problem_with(Cast(0, "enemy"), view([BOLT])))

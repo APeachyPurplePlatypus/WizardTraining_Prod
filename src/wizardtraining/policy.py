@@ -16,6 +16,7 @@ LOW_HEALTH_FRACTION = 0.4
 MOST_PIPS_TO_SAVE_FOR = 7
 FLEE_BELOW_MANA = 2
 SURE_DAMAGE_PER_PIP = 60
+STUN = "stun"
 SIDE_QUEST_OFFER_PHRASE = "offering you a side quest"
 ACCEPT, DECLINE, GO_BACK, STOP = "accept", "decline", "go back", "stop"
 LEAVE_MENU = "leave menu"
@@ -24,14 +25,16 @@ UNIVERSAL = "Universal"
 
 @dataclass(frozen=True)
 class Card:
-    """A card in hand. `spell_type` is the game's own type name ("Damage", "Steal", "AOE", "Heal", ...) and
-    `school` its magic school ("Fire", "Myth", ...) when it could be read."""
+    """A card in hand. `spell_type` is the game's own type name ("Damage", "Steal", "AOE", "Heal", ...),
+    `school` its magic school ("Fire", "Myth", ...) when it could be read, and `effects` the names of its spell
+    effects ("damage", "stun", ...): Freeze is a "Manipulation" whose one effect is "stun"."""
     name: str | None
     spell_type: str | None
     castable: bool
     school: str | None = None
     pips: int | None = None
     accuracy: int | None = None
+    effects: tuple[str, ...] = ()
 
     def hit_chance(self) -> float:
         """The card's accuracy as a fraction; 1 when it could not be read."""
@@ -49,11 +52,13 @@ class DamageModifier:
 @dataclass(frozen=True)
 class Combatant:
     """A living combatant. `resistances` are its own stats by school, as fractions: 0.25 resists a quarter of
-    that school's damage, -0.15 takes 15% more. A school not listed takes the UNIVERSAL value, if any."""
+    that school's damage, -0.15 takes 15% more. A school not listed takes the UNIVERSAL value, if any.
+    `stunnable` is false while a stun or a stun block is on it, so a stun would be wasted."""
     name: str | None
     health: int | None
     incoming: tuple[DamageModifier, ...] = ()
     resistances: dict[str, float] = field(default_factory=dict)
+    stunnable: bool = True
 
     def damage_factor(self, school: str | None) -> float:
         """The share of a hit of `school` that lands after this combatant's shields, wards, traps and
@@ -126,12 +131,14 @@ class CombatPolicy(Protocol):
 
 
 class SpellTypePolicy:
-    """With less than FLEE_BELOW_MANA mana, flee, unless this battle cannot be fled. Below LOW_HEALTH_FRACTION, heal; with a heal in hand that needs
-    more pips than the wizard has, pass to save pips for it. Otherwise attack the first living enemy with the
-    affordable attack expected to do the most: its pip cost (damage grows with pips: Frost Beetle, 1 pip, about 85;
-    Snow Serpent, 2 pips, about 175), times the share the target's shields, wards, traps and resistances let
-    through, times the card's accuracy; the first in hand on a tie. When an attack surely finishes the target, the
-    cheapest one, to save mana. It knows nothing of blades or of saving pips for attacks."""
+    """With less than FLEE_BELOW_MANA mana, flee, unless this battle cannot be fled. Below LOW_HEALTH_FRACTION,
+    heal; with a heal in hand that needs more pips than the wizard has, stun an enemy or pass to save pips for it.
+    Then, when an attack surely finishes an enemy, the cheapest such attack on it, to save mana. When a stronger
+    attack in hand needs one pip more than the wizard has, stun an enemy instead (`stun_while_saving_a_pip`).
+    Otherwise attack the enemy with the least health with the affordable attack expected to do the most to it: its
+    pip cost (damage grows with pips: Frost Beetle, 1 pip, about 85; Snow Serpent, 2 pips, about 175), times the
+    share the target's shields, wards, traps and resistances let through, times the card's accuracy; the first in
+    hand on a tie. It knows nothing of blades or of saving pips for attacks beyond one round."""
 
     def choose(self, view: RoundView) -> Cast | Pass | Flee | None:
         if out_of_mana(view) and view.can_flee:
@@ -142,19 +149,64 @@ class SpellTypePolicy:
             if heal is not None:
                 return Cast(heal, "self")
             if (worth_saving_for := heal_worth_saving_for(view)) is not None:
-                return Pass(f"saving pips for {worth_saving_for.name} ({worth_saving_for.pips} pips)")
+                return stun_on_the_healthiest(view) or Pass(f"saving pips for {worth_saving_for.name} "
+                                                            f"({worth_saving_for.pips} pips)")
         if not view.enemies:
             return None
         attacks = [index for index, card in enumerate(view.cards) if card.castable and card.spell_type in ATTACK_TARGETS]
+        finisher = cheapest_finisher(view, attacks)
+        if finisher is not None:
+            return finisher
+        stun = stun_while_saving_a_pip(view, attacks)
+        if stun is not None:
+            return stun
         if not attacks:
             return None
-        target = view.enemies[0]
-        finishers = [index for index in attacks if surely_finishes(view.cards[index], target)]
-        if finishers:
-            attack = min(finishers, key=lambda index: view.cards[index].pips or 1)
-        else:
-            attack = max(attacks, key=lambda index: expected_damage(view.cards[index], target))
-        return Cast(attack, ATTACK_TARGETS[view.cards[attack].spell_type])
+        enemy = weakest(view.enemies)
+        attack = max(attacks, key=lambda index: expected_damage(view.cards[index], view.enemies[enemy]))
+        return Cast(attack, ATTACK_TARGETS[view.cards[attack].spell_type], enemy)
+
+
+def weakest(enemies: tuple[Combatant, ...]) -> int:
+    """The enemy with the least health, the first on a tie. Every enemy down is one hitting the wizard no more:
+    General Akilles (470) and his Cyclops Legionnaire (235) took 100 to 200 health a round between them, and every
+    attack went to Akilles while the Cyclops kept hitting."""
+    return min(range(len(enemies)), key=lambda index: (enemies[index].health is None, enemies[index].health or 0))
+
+
+def cheapest_finisher(view: RoundView, attacks: list[int]) -> Cast | None:
+    """The cheapest attack that surely finishes an enemy, on the first such enemy."""
+    sure = [(view.cards[card].pips or 1, enemy, card) for enemy, target in enumerate(view.enemies) for card in attacks
+            if surely_finishes(view.cards[card], target)]
+    if not sure:
+        return None
+    _, enemy, card = min(sure)
+    return Cast(card, ATTACK_TARGETS[view.cards[card].spell_type], enemy)
+
+
+def stun_while_saving_a_pip(view: RoundView, attacks: list[int]) -> Cast | None:
+    """A stun on the enemy with the most health that can be stunned, when an attack in hand needs exactly one pip
+    more than the wizard has (and no more mana than it has) and is expected to do more than the best attack it can
+    cast now. Freeze costs no pips, so the next round has the pip for the stronger attack, and the stunned enemy
+    loses its turn: over two rounds a stun and a Snow Serpent do about 175 to a wand's two hits of about 140, and
+    one enemy hit fewer lands."""
+    have = (view.pips or 0) + (view.power_pips or 0)
+    target = view.enemies[weakest(view.enemies)]
+    best_now = max((expected_damage(view.cards[index], target) for index in attacks), default=0.0)
+    one_pip_away = [card for card in view.cards if card.spell_type in ATTACK_TARGETS and not card.castable
+                    and card.pips == have + 1 and (view.mana is None or view.mana >= card.pips)]
+    if not any(expected_damage(card, target) > best_now for card in one_pip_away):
+        return None
+    return stun_on_the_healthiest(view)
+
+
+def stun_on_the_healthiest(view: RoundView) -> Cast | None:
+    """A castable stun on the enemy with the most health that can be stunned, or None."""
+    stun = first_castable(view.cards, lambda card: STUN in card.effects)
+    stunnable = [index for index, enemy in enumerate(view.enemies) if enemy.stunnable]
+    if stun is None or not stunnable:
+        return None
+    return Cast(stun, "enemy", max(stunnable, key=lambda index: view.enemies[index].health or 0))
 
 
 def out_of_mana(view: RoundView) -> bool:
