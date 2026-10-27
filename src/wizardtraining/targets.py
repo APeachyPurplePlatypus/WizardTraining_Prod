@@ -10,12 +10,29 @@ from __future__ import annotations
 
 import math
 
-from .geometry import Point, flat_distance, xy
+from .geometry import Point, angle_between, flat_distance, xy
+from .routes import ENEMY_KEEP_OUT
 
-DUEL_CIRCLE_RADIUS = 500.0
+DUEL_CIRCLE_NAMES = frozenset({"Duel Circle", "CombatSigil_Object"})
+DUEL_CIRCLE_RADIUS = 700.0
 QUEST_TARGET_ARROW_RADIUS = 700.0
 ENEMY_CLEARANCE = 450.0
-STEP_AWAY_DISTANCE = 400.0
+WISP_REACH = 2500.0
+WISP_ENEMY_CLEARANCE = 600.0
+WISP_DETOUR = 1200.0
+AFTER_BATTLE_GRACE_SECONDS = 6.0
+DODGES_BEFORE_WAITING = 3
+DODGE_MEMORY_SECONDS = 60.0
+
+
+def is_duel_circle(name: str) -> bool:
+    """A fight in progress shows as a "Duel Circle" entity at its centre, the name Deimos looks for
+    (`nearest_duel_circle_distance_and_xyz` in Deimos.py), with its fighters seated about 600 units round it:
+    590 to 610 in Deimos, and 599 in the client's log when the wizard joined one. Looking only for
+    `CombatSigil_Object`, seen once 3,500 units off in Unicorn Way, found no duel in 35 runs, and the wizard
+    walked straight into another player's fight in Firecat Alley. An enemy within DUEL_CIRCLE_RADIUS of one
+    is seated in it."""
+    return name in DUEL_CIRCLE_NAMES
 
 
 def measured(enemies: list[dict], me, duel_circles) -> list[dict]:
@@ -51,10 +68,71 @@ def summary(enemies: list[dict], limit: int = 6) -> list:
     return [(enemy["name"], round(enemy["distance"]), enemy["in_a_duel"]) for enemy in enemies[:limit]]
 
 
-def escape_point(me, close: list[dict], distance: float = STEP_AWAY_DISTANCE) -> Point:
-    """The point `distance` from `me`, directly away from the close enemies taken together."""
-    mx, my = xy(me)
-    away_x = sum(mx - xy(enemy["position"])[0] for enemy in close)
-    away_y = sum(my - xy(enemy["position"])[1] for enemy in close)
-    length = math.hypot(away_x, away_y) or 1.0
-    return mx + distance * away_x / length, my + distance * away_y / length
+def detour(me, via, heading) -> float:
+    """How much farther the walk to `heading` gets by passing through `via`."""
+    return flat_distance(me, via) + flat_distance(via, heading) - flat_distance(me, heading)
+
+
+def safe_wisps(wisps: list[dict], *, me, enemies: list[dict], duel_circles, tried=(), heading=None,
+               reach: float = WISP_REACH) -> list[dict]:
+    """Wisps within `reach`, nearest first, leaving out ones already tried, ones with an enemy within
+    WISP_ENEMY_CLEARANCE, and ones inside someone else's duel circle. With a `heading` (where the quest goes
+    next), only wisps on the way, at most WISP_DETOUR out of it: turning back for any wisp in reach walked the
+    wizard back and forth along Cyclops Lane, into fights with enemies the quest did not ask for."""
+    def safe(wisp):
+        return (wisp["id"] not in tried and str(wisp["id"]) not in tried
+                and flat_distance(me, wisp["position"]) <= reach
+                and (heading is None or detour(me, wisp["position"], heading) <= WISP_DETOUR)
+                and all(flat_distance(enemy["position"], wisp["position"]) >= WISP_ENEMY_CLEARANCE for enemy in enemies)
+                and all(flat_distance(circle, wisp["position"]) >= DUEL_CIRCLE_RADIUS for circle in duel_circles))
+    return sorted((wisp for wisp in wisps if safe(wisp)), key=lambda wisp: flat_distance(me, wisp["position"]))
+
+
+def refill_reach(safe_zone: bool) -> float:
+    """How far a refill goes for a wisp, both to fetch one and to end a search on seeing one: any distance in a zone
+    without enemies, WISP_REACH among them. A search that ended on any wisp loaded, while the fetch took only those
+    within WISP_REACH, stopped every walk in Firecat Alley before it began, until the run stopped."""
+    return math.inf if safe_zone else WISP_REACH
+
+
+def next_area_to_explore(points: list, *, me, explored=(), prefer=()) -> tuple | None:
+    """The nearest exploration point not explored yet, as ((x, y), piece), or None when all are done. Points
+    in the `prefer` pieces come first: a quest's targets tend to be near each other, so the pieces holding
+    its other goals' objects are the likeliest places for the enemies it asks for."""
+    left = [point for point in points if (round(point[0][0]), round(point[0][1])) not in explored]
+    preferred = [point for point in left if point[1] in set(prefer)]
+    return min(preferred or left, key=lambda point: flat_distance(me, point[0]), default=None)
+
+
+def keeps_blocking(dodge_times: list[float], *, now: float) -> bool:
+    """True once the wizard has stepped away DODGES_BEFORE_WAITING times in DODGE_MEMORY_SECONDS: enemies patrol
+    the way ahead, and walking on as soon as they are out of reach only leads back into them."""
+    return sum(1 for moment in dodge_times if now - moment <= DODGE_MEMORY_SECONDS) >= DODGES_BEFORE_WAITING
+
+
+def enemies_to_route_around(enemies: list[dict], *, me, destination) -> list[dict]:
+    """The enemies routes keep ENEMY_KEEP_OUT from. That is wider than ENEMY_CLEARANCE, at which the wizard steps
+    away, so a route never leads into a step-away. Left out: enemies already that close to the wizard, or no
+    route could leave them (stepping away handles those), and enemies that close to the destination, or an NPC
+    standing near an enemy could never be reached."""
+    return [enemy for enemy in enemies if flat_distance(me, enemy["position"]) > ENEMY_KEEP_OUT
+            and flat_distance(destination, enemy["position"]) > ENEMY_KEEP_OUT]
+
+
+def in_grace_after_battle(battle_ended_at: float | None, *, now: float) -> bool:
+    """Right after a battle the game does not pull the wizard into another for about ten seconds. The first
+    AFTER_BATTLE_GRACE_SECONDS of that are used to walk past enemies without avoiding them; the margin keeps
+    the wizard from being next to an enemy when the protection ends."""
+    return battle_ended_at is not None and now - battle_ended_at < AFTER_BATTLE_GRACE_SECONDS
+
+
+def threat_centre(close: list[dict]) -> Point:
+    """The average position of the close enemies: the point to move away from."""
+    points = [xy(enemy["position"]) for enemy in close]
+    return sum(x for x, _ in points) / len(points), sum(y for _, y in points) / len(points)
+
+
+def back_away(bearing_to_threat: float, facing: float) -> bool:
+    """True when the threat is within 90 degrees of where the wizard faces, so walking backward (S) moves
+    away from it; False when it is behind, so walking forward (W) does. Neither needs a turn."""
+    return abs(angle_between(bearing_to_threat, facing)) < math.pi / 2

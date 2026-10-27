@@ -13,6 +13,7 @@ Never written: position, facing or speed. WizWalker's `goto` is not used, becaus
 from __future__ import annotations
 
 import asyncio
+import logging
 import math
 import time
 from dataclasses import dataclass
@@ -25,9 +26,9 @@ from .keys import HeldKey, tap
 from .reports import plain
 from .routes import OBSTACLE_RADIUS, Hazards, RoutePlanner
 
-WALK_UNITS_PER_SECOND = 600.0
 SETTLE_SECONDS = 0.2
 MAX_TURN_TAPS = 25
+BATTLE = "battle"
 FIRST_TAP_SECONDS = 0.15
 TURN_SETTLE_SECONDS = 0.12
 YAW_TOLERANCE_RADIANS = math.radians(4.6)
@@ -44,7 +45,12 @@ WAYPOINT_RADIUS = 120.0
 MAX_SIDESTEPS_PER_LEG = 4
 SIDESTEP_TURN_RADIANS = math.pi / 3
 SIDESTEP_SECONDS = 0.4
+TRAIL_SECONDS = 2.0
+MAX_TRAIL_POINTS = 90
 OBSTACLE_AHEAD_DISTANCE = 200.0
+
+
+logger = logging.getLogger(__name__)
 
 
 class KeysIgnored(RuntimeError):
@@ -78,6 +84,13 @@ def calibration_for(client) -> TurnCalibration:
     return client.turn_calibration
 
 
+async def in_battle(client) -> bool:
+    try:
+        return await client.in_battle() is True
+    except Exception:
+        return False
+
+
 def as_xyz(point) -> XYZ:
     return point if isinstance(point, XYZ) else XYZ(*xy(point), 0.0)
 
@@ -87,10 +100,14 @@ async def bearing_to(client, target) -> float:
 
 
 async def turn_toward(client, target_yaw: float) -> dict:
-    """Tap A or D until the facing is within YAW_TOLERANCE_RADIANS of `target_yaw`."""
+    """Tap A or D until the facing is within YAW_TOLERANCE_RADIANS of `target_yaw`. Stops as soon as a battle has
+    begun: the taps then turn nothing, and going on through MAX_TURN_TAPS kept the wizard tapping for up to 14
+    seconds of the first round's planning time before the battle was noticed."""
     calibration = calibration_for(client)
     taps = []
     for _ in range(MAX_TURN_TAPS):
+        if await in_battle(client):
+            return {"ok": False, "reason": BATTLE, "taps": taps}
         yaw = await client.body.yaw()
         remaining = angle_between(target_yaw, yaw)
         if abs(remaining) <= YAW_TOLERANCE_RADIANS:
@@ -148,40 +165,66 @@ def failed(log: dict, reason: str) -> dict:
     return dict(log, result="failed", reason=reason)
 
 
+@dataclass(frozen=True)
+class Reroute:
+    """A watcher's answer: walk these legs instead, from where the wizard is, without stopping."""
+    legs: list
+
+
+def must_turn_in_place(off_course: float, turning_learned: bool) -> bool:
+    """Stop and turn when the leg bends too sharply to steer into, or, before the first turn has taught how A and
+    D turn, when the facing is off at all. A wizard already facing its target walks: a turn of nothing taught
+    nothing, and once the loop asked for it again and again while the wizard stood still for a minute."""
+    return abs(off_course) > STOP_TO_TURN_RADIANS or (not turning_learned and abs(off_course) > YAW_TOLERANCE_RADIANS)
+
+
 async def follow_route(client, legs, *, final_radius: float, watch=None) -> dict:
     """Walk the legs holding W, steering on the move. `watch(path_ahead)` runs every WATCH_SECONDS with the
-    wizard's position followed by the remaining legs, and may return a reason to stop."""
-    log = {"legs": len(legs), "turns_in_place": 0, "steer_taps": 0, "sidesteps": 0, "blocked_at": []}
-    started = time.monotonic()
+    wizard's position followed by the remaining legs. It may return a reason to stop, or a `Reroute` to walk
+    on along new legs without stopping."""
+    log = {"legs": len(legs), "turns_in_place": 0, "steer_taps": 0, "sidesteps": 0, "reroutes": 0,
+           "blocked_at": [], "trail": []}
+    started = trail_at = time.monotonic()
     calibration = calibration_for(client)
+    remaining = list(legs)
     async with HeldKey(client, Keycode.W) as forward:
-        for index, leg in enumerate(legs):
-            radius = final_radius if index == len(legs) - 1 else WAYPOINT_RADIUS
-            target = as_xyz(leg)
+        while remaining:
+            radius = final_radius if len(remaining) == 1 else WAYPOINT_RADIUS
+            target = as_xyz(remaining[0])
             sidesteps = 0
             blocked_check = (time.monotonic(), await client.body.position())
             while True:
                 if time.monotonic() - started > MAX_ROUTE_SECONDS:
                     return failed(log, "route took too long")
                 me = await client.body.position()
-                path_ahead = [xy(me), *(xy(remaining) for remaining in legs[index:])]
-                if watch is not None and (reason := await watch(path_ahead)):
+                if time.monotonic() >= trail_at and len(log["trail"]) < MAX_TRAIL_POINTS:
+                    log["trail"].append((round(me.x), round(me.y)))
+                    trail_at = time.monotonic() + TRAIL_SECONDS
+                path_ahead = [xy(me), *(xy(leg) for leg in remaining)]
+                if watch is not None and (verdict := await watch(path_ahead)):
+                    if isinstance(verdict, Reroute):
+                        remaining = list(verdict.legs)
+                        log["reroutes"] += 1
+                        break
                     await forward.release()
-                    return interrupted(log, reason)
+                    return interrupted(log, verdict)
                 if flat_distance(me, target) <= radius:
+                    remaining.pop(0)
                     break
                 bearing = calculate_perfect_yaw(me, target)
                 off_course = angle_between(bearing, await client.body.yaw())
-                if abs(off_course) > STOP_TO_TURN_RADIANS or not calibration.learned:
+                if must_turn_in_place(off_course, calibration.learned):
                     await forward.release()
                     turn = await turn_toward(client, bearing)
                     log["turns_in_place"] += 1
+                    if not turn["ok"] and turn["reason"] == BATTLE:
+                        return interrupted(log, BATTLE)
                     if not turn["ok"]:
                         return failed(log, f"turn failed: {turn['reason']}")
                     blocked_check = (time.monotonic(), await client.body.position())
                     continue
                 forward.press()
-                if abs(off_course) > STEER_TOLERANCE_RADIANS:
+                if calibration.learned and abs(off_course) > STEER_TOLERANCE_RADIANS:
                     await steer(client, off_course)
                     log["steer_taps"] += 1
                 await asyncio.sleep(WATCH_SECONDS)
@@ -219,6 +262,7 @@ async def travel(client, planner: RoutePlanner, destination, *, arrive_radius: f
         if legs is None:
             attempt["result"] = "no route"
             continue
+        logger.info("route by %s: %d legs to (%d, %d)", method, len(legs), *map(round, xy(destination)))
         attempt.update(await follow_route(client, legs, final_radius=arrive_radius, watch=watch))
         blocked_at += attempt["blocked_at"]
         if attempt["result"] != "failed":

@@ -43,6 +43,19 @@ def distance_to_path(point, path) -> float:
     return min(distance_to_segment(point, a, b) for a, b in zip(path, path[1:]))
 
 
+def path_beyond(path, length: float) -> list[Point]:
+    """The rest of a path after its first `length` units, starting at the point that far along; the last point
+    alone when the path is shorter."""
+    points, remaining = [xy(point) for point in path], length
+    for index, (a, b) in enumerate(zip(points, points[1:])):
+        step = math.dist(a, b)
+        if step > remaining:
+            fraction = remaining / step
+            return [(a[0] + (b[0] - a[0]) * fraction, a[1] + (b[1] - a[1]) * fraction), *points[index + 1:]]
+        remaining -= step
+    return [points[-1]]
+
+
 def path_within(path, length: float) -> list[Point]:
     """The first `length` units of a path."""
     kept, remaining = [xy(path[0])], length

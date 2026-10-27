@@ -7,8 +7,8 @@ from types import SimpleNamespace
 
 from wizardtraining.config import DEIMOS_VARIABLE, RUNTIME_VARIABLE, Settings
 from wizardtraining.keys import RefusedKey, check_allowed
-from wizardtraining.reports import plain, save_report
-from wizardtraining.state import battle_showing, free_to_move, health_fraction
+from wizardtraining.reports import plain, save_report, with_text_keys
+from wizardtraining.state import battle_showing, free_to_move, health_fraction, mana_fraction
 
 
 class Key(enum.Enum):
@@ -48,6 +48,8 @@ class StateTest(unittest.TestCase):
 
     def test_health_fraction(self):
         self.assertEqual(health_fraction(self.calm), 0.8)
+        self.assertEqual(mana_fraction({"mana": 4, "max_mana": 24}), 4 / 24)
+        self.assertIsNone(mana_fraction({"mana": 4}))
         self.assertIsNone(health_fraction(dict(self.calm, health="<unavailable: ReadingError>")))
 
 
@@ -78,6 +80,12 @@ class ReportsTest(unittest.TestCase):
         self.assertEqual(plain(Key.W), "W")
         self.assertEqual(plain(0.12345), 0.123)
         self.assertEqual(plain([1, 2]), "[1, 2]")
+
+    def test_report_keys_become_text(self):
+        report = {"arrivals": {None: {"from": "A"}, "WizardCity/WC_Hub": {"from": None}}}
+        self.assertEqual(with_text_keys(report), {"arrivals": {"None": {"from": "A"}, "WizardCity/WC_Hub": {"from": None}}})
+        with tempfile.TemporaryDirectory() as folder:
+            self.assertTrue(save_report("quest-loop", report, Path(folder)).exists())
 
     def test_save_report_writes_json(self):
         with tempfile.TemporaryDirectory() as folder:

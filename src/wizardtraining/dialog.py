@@ -18,15 +18,20 @@ from wizwalker import Keycode
 from .entities import nearest_npc
 from .geometry import flat_distance
 from .keys import tap
-from .movement import WALK_UNITS_PER_SECOND, face_and_step
+from .motion import WALK_UNITS_PER_SECOND
+from .movement import face_and_step
 from .policy import ACCEPT, DECLINE, GO_BACK, OfferPolicy
 from .state import attempt
-from .ui import click, showing, text_of
+from .ui import click, click_window, showing, text_of, window_at
 
 ADVANCE_BUTTON = ["WorldView", "wndDialogMain", "btnRight"]
 DECLINE_BUTTON = ["WorldView", "wndDialogMain", "btnLeft"]
 BACK_BUTTON = ["WorldView", "wndDialogMain", "btnBack"]
 PAGE_TEXT = ["WorldView", "wndDialogMain", "txtArea", "txtMessage"]
+SERVICES_MENU = ["WorldView", "NPCServicesWin"]
+SERVICES_OPTIONS = ["WorldView", "NPCServicesWin", "ControlSprite", "optionsLayout"]
+SERVICES_OPTION_BUTTON = "OptionButton"
+SERVICES_EXIT = ["WorldView", "NPCServicesWin", "wndDialogMain", "Exit"]
 DIALOG_FINISHED = "dialog finished"
 OFFER_LEFT_FOR_OPERATOR = "a quest offer the offer policy would not handle; left for the operator"
 TALK_KEY_SECONDS = 0.1
@@ -46,10 +51,42 @@ NUDGE_LONGEST_SECONDS = 0.15
 NUDGE_SETTLE_SECONDS = 0.5
 PROMPT_TRUST_DISTANCE = 600.0
 SAME_NPC_DISTANCE = 150.0
+BLOCKED_TALK_DISTANCE = 200.0
+STALLED_NUDGE_DISTANCE = 5.0
 
 
 async def dialog_open(client) -> bool:
     return await showing(client, ADVANCE_BUTTON)
+
+
+async def services_open(client) -> bool:
+    """An NPC with several quests or services opens a menu of options (NPCServicesWin) instead of a dialog."""
+    return await showing(client, SERVICES_MENU)
+
+
+async def service_options(client) -> list[tuple[str, object]]:
+    """The menu's options as (label, button). Quest options are labelled with the quest's title. A label that cannot
+    be read is empty: a school professor's spell-training option is one, and reading it crashed the loop."""
+    options = []
+    layout = await window_at(client.root_window, SERVICES_OPTIONS)
+    if layout is None:
+        return options
+    for option in await layout.children():
+        if not await option.is_visible():
+            continue
+        for part in await option.children():
+            if await part.name() == SERVICES_OPTION_BUTTON and await part.is_visible():
+                label = await attempt(part.maybe_text())
+                options.append(((label if isinstance(label, str) and not label.startswith("<unavailable") else "").strip(), part))
+    return options
+
+
+async def choose_service(client, button) -> None:
+    await click_window(client, button)
+
+
+async def leave_services(client) -> None:
+    await click(client, SERVICES_EXIT)
 
 
 async def wait_for_dialog(client, timeout: float, poll: float = DIALOG_POLL_SECONDS) -> bool:
@@ -78,13 +115,13 @@ async def prompt_is_for(client, npc_position) -> bool:
     return nearest is not None and flat_distance(nearest, npc_position) <= SAME_NPC_DISTANCE
 
 
-async def walk_up_to(client, position, within: float = TALK_DISTANCE) -> list[dict]:
+async def walk_up_to(client, position, within: float = TALK_DISTANCE, *, trust_prompt: bool = True) -> list[dict]:
     """Face the NPC or object and creep closer until X would reach this one and not another nearby."""
     nudges = []
     for _ in range(MAX_NUDGES):
         distance = flat_distance(await client.body.position(), position)
         prompt_showing = await attempt(client.is_in_npc_range())
-        prompt_for_this_one = await prompt_is_for(client, position)
+        prompt_for_this_one = trust_prompt and await prompt_is_for(client, position)
         nudges.append({"distance": round(distance, 1), "in_range": prompt_showing, "within": within,
                        "prompt_for_this_one": prompt_for_this_one})
         if close_enough(nudges):
@@ -96,10 +133,17 @@ async def walk_up_to(client, position, within: float = TALK_DISTANCE) -> list[di
 
 
 def close_enough(nudges: list[dict]) -> bool:
+    """The prompt is for this one; or the wizard is within `within` with a prompt showing; or it can get no closer
+    (the last two nudges within STALLED_NUDGE_DISTANCE of each other) and a prompt shows within
+    BLOCKED_TALK_DISTANCE. A Cyclops Lane quest NPC stands 164 units up, with no walkable ground there: every
+    nudge stopped 102 units away, with the prompt showing, and the run stopped for turns without progress."""
     if not nudges:
         return False
     last = nudges[-1]
-    return last["prompt_for_this_one"] or (last["distance"] <= last["within"] and last["in_range"] is True)
+    if last["prompt_for_this_one"] or (last["distance"] <= last["within"] and last["in_range"] is True):
+        return True
+    return (len(nudges) >= 2 and abs(nudges[-2]["distance"] - last["distance"]) <= STALLED_NUDGE_DISTANCE
+            and last["distance"] <= BLOCKED_TALK_DISTANCE and last["in_range"] is True)
 
 
 async def read_pages(client, record: dict, texts: list[str], offers: OfferPolicy) -> str:
@@ -134,7 +178,7 @@ async def read_conversation(client, record: dict, offers: OfferPolicy) -> str:
     """Read the open dialog, then any follow-up dialogs that open within FOLLOW_UP_WAIT_SECONDS."""
     record.setdefault("pages", [])
     record["follow_ups"] = 0
-    texts = []
+    texts = record.setdefault("texts", [])
     while True:
         result = await read_pages(client, record, texts, offers)
         if result != DIALOG_FINISHED or record["follow_ups"] >= MAX_FOLLOW_UPS:
@@ -144,9 +188,12 @@ async def read_conversation(client, record: dict, offers: OfferPolicy) -> str:
         record["follow_ups"] += 1
 
 
-async def talk(client, npc_position, record: dict, offers: OfferPolicy) -> str:
+async def talk(client, npc_position, record: dict, offers: OfferPolicy, *, trust_prompt: bool = True) -> str:
+    """Walk up to the NPC, open its dialog with X and read it. With `trust_prompt`, an interact prompt for the
+    friendly NPC nearest the arrow is enough (it lets the wizard talk across a counter); without it, the
+    wizard walks right up to the arrow first, for when a trusted prompt turned out to be someone else's."""
     if not await dialog_open(client):
-        record["nudges"] = nudges = await walk_up_to(client, npc_position)
+        record["nudges"] = nudges = await walk_up_to(client, npc_position, trust_prompt=trust_prompt)
         if not close_enough(nudges):
             return "could not get close enough to the quest NPC to talk"
         await tap(client, Keycode.X, TALK_KEY_SECONDS)
