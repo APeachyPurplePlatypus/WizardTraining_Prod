@@ -24,7 +24,7 @@ from .movement import KeysIgnored, face_and_step
 from .policy import UNIVERSAL, Card, Cast, CombatPolicy, Combatant, DamageModifier, Flee, Pass, RoundView, problem_with
 from .reports import plain
 from .state import attempt
-from .ui import click, enable_clicks, showing, text_of, visible_children
+from .ui import click, click_window, enable_clicks, showing, text_of, windows_named_like
 
 APPROACH_STEP_SECONDS = 0.4
 MAX_APPROACH_STEPS = 15
@@ -228,14 +228,20 @@ async def play_round(combat, policy: CombatPolicy, can_flee: bool = True) -> dic
 
 
 async def flee(combat) -> str:
-    """Click Flee, then answer Yes when the game asks to confirm with a message box whose caption mentions fleeing,
-    like its "Are you sure you want to add this spell to your spellbook?" box (centerButton is Yes). Says what
-    followed. Fleeing a Warhorn with 1 mana did not end the battle when only Flee was clicked."""
-    await combat.flee_button()
-    await asyncio.sleep(FLEE_CONFIRM_WAIT_SECONDS)
+    """Click the visible window named like "flee", then answer Yes when the game asks to confirm with a message box
+    whose caption mentions fleeing, like its "Are you sure you want to add this spell to your spellbook?" box
+    (centerButton is Yes). Says what was found and what followed. WizWalker's flee_button clicks the one window
+    named exactly "Flee"; in the game that click never ended a battle and showed no box."""
     client = combat.client
+    buttons = await windows_named_like(client, "flee")
+    visible = [(path, window) for path, shown, window in buttons if shown]
+    found = ", ".join(f"{'/'.join(path[-3:])}{'' if shown else ' (hidden)'}" for path, shown, _ in buttons) or "none"
+    if not visible:
+        return f"no visible flee button; windows named like flee: {found}"
+    await click_window(client, visible[0][1])
+    await asyncio.sleep(FLEE_CONFIRM_WAIT_SECONDS)
     if not await showing(client, MESSAGE_BOX):
-        return f"no confirmation box; showing {await visible_children(client, [])}"
+        return f"clicked {'/'.join(visible[0][0][-3:])}, no confirmation box; windows named like flee: {found}"
     caption = (await text_of(client, MESSAGE_BOX_CAPTION)).replace("<center>", "").replace("</center>", "").strip()
     if "flee" not in caption.lower():
         return f"a message box that does not mention fleeing was left alone: {caption!r}"
