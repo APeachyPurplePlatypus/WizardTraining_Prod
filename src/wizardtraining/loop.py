@@ -655,7 +655,10 @@ class QuestLoop:
         return (progressed if gained else stalled)("waited for mana", before=state["mana"], after=now["mana"])
 
     async def leave_for_wisps_turn(self, stat: str, state: dict, planner: RoutePlanner) -> dict | None:
-        """Walk to the zone's nearest exit volume, and through it once there. None when the zone has none."""
+        """Walk to the middle of the zone's nearest exit volume, and through it once inside its radius. None when the
+        zone has none. Cyclops Lane's exit is 336 units across: a walk that stopped at its edge counted as arrived,
+        and with the door step kept for within WAYPOINT_ARRIVE_RADIUS of the middle, the wizard stood at the edge
+        until the run stopped for turns without progress."""
         exits = [volume for volume, _ in planner.teleports if EXIT_WORD in volume.name.lower()]
         if not exits:
             return None
@@ -663,10 +666,10 @@ class QuestLoop:
         door = min(exits, key=lambda volume: flat_distance(me, volume.point))
         self.events.emit(stat, f"{state[stat]} of {state['max_' + stat]} {stat} and no {stat} wisp in sight; "
                                f"leaving through {door.name}")
-        if flat_distance(me, door.point) <= WAYPOINT_ARRIVE_RADIUS:
+        if flat_distance(me, door.point) <= max(WAYPOINT_ARRIVE_RADIUS, door.radius):
             return await self.zone_door_turn(XYZ(door.x, door.y, door.z))
         return await self.travel_turn(f"walk to the exit for {stat}", XYZ(door.x, door.y, door.z),
-                                      arrive_radius=door.radius, avoid=await nearby_enemies(self.client))
+                                      arrive_radius=WAYPOINT_ARRIVE_RADIUS, avoid=await nearby_enemies(self.client))
 
     async def explore_for_wisps_turn(self, stat: str, state: dict, planner: RoutePlanner,
                                      again: bool = True) -> dict | None:
