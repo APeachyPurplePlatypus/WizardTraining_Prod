@@ -23,7 +23,7 @@ from wizwalker.memory import DuelPhase
 from wizwalker.memory.memory_objects.enums import WindowFlags
 from wizwalker.utils import get_wiz_install
 
-from .connection import client_log_tail, lost_connection, moves_by_round
+from .connection import BATTLE_LOG_TAIL_BYTES, client_log_tail, lost_connection, moves_by_round
 from .geometry import flat_distance
 from .movement import KeysIgnored, face_and_step
 from .policy import UNIVERSAL, Card, Cast, CombatPolicy, Combatant, DamageModifier, Flee, Pass, RoundView, problem_with
@@ -268,7 +268,8 @@ def note_moves_sent(rounds: list[dict]) -> None:
     """Set each round's "sent" to the moves the client logged for it (`connection.moves_by_round`)."""
     acted = [entry for entry in rounds if "acting_since" in entry]
     starts = [datetime.datetime.fromisoformat(entry["acting_since"]) for entry in acted]
-    for entry, sent in zip(acted, moves_by_round(starts, client_log_tail(Path(get_wiz_install())))):
+    log_tail = client_log_tail(Path(get_wiz_install()), size=BATTLE_LOG_TAIL_BYTES)
+    for entry, sent in zip(acted, moves_by_round(starts, log_tail)):
         entry["sent"] = sent
 
 

@@ -13,6 +13,7 @@ from pathlib import Path
 
 LOG = Path("Bin") / "WizardClient.log"
 LOG_TAIL_BYTES = 200_000
+BATTLE_LOG_TAIL_BYTES = 4_000_000
 CLOSED = "AppCloseConnection() called"
 CONNECTED = "ConnectComplete"
 TIMESTAMP_LENGTH = 17
@@ -59,13 +60,22 @@ def log_reaches(log_tail: str, moment: datetime.datetime) -> bool:
                for line in reversed(log_tail.splitlines()[-200:]))
 
 
+def log_starts_by(log_tail: str, moment: datetime.datetime) -> bool:
+    """The log text's first stamped line is at `moment` or earlier, so nothing logged from then on is cut off."""
+    first = next((stamped for line in log_tail.splitlines() if (stamped := stamp_of(line)) is not None), None)
+    return first is not None and first <= moment
+
+
 def moves_by_round(starts: list[datetime.datetime], log_tail: str) -> list[list[str] | None]:
     """For rounds in which the wizard acted at `starts`, the moves the client logged from each until the next,
-    other than the "Unready" it sends as a round's planning opens: empty when the click did not take, None while
-    the buffered log does not yet reach MOVE_LOGGED_WITHIN_SECONDS past the moment the wizard acted."""
+    other than the "Unready" it sends as a round's planning opens: empty when the click did not take, None when
+    the log text does not cover the round, from the moment the wizard acted to MOVE_LOGGED_WITHIN_SECONDS after.
+    The log is written in buffered blocks, and a tail of it may begin after a long battle's first rounds: read
+    with the 200 KB used for connection checks, all eight rounds of a won battle seemed to have no move."""
     found = []
     for start, end in zip(starts, [*starts[1:], None]):
-        if not log_reaches(log_tail, start + datetime.timedelta(seconds=MOVE_LOGGED_WITHIN_SECONDS)):
+        if not (log_starts_by(log_tail, start)
+                and log_reaches(log_tail, start + datetime.timedelta(seconds=MOVE_LOGGED_WITHIN_SECONDS))):
             found.append(None)
             continue
         found.append([move for move in moves_sent_between(log_tail, start, end) if move != ROUND_OPENING_MOVE])

@@ -3,8 +3,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from wizardtraining.connection import (LOG, client_log_tail, log_reaches, lost_connection, moves_by_round,
-                                       moves_sent_between)
+from wizardtraining.connection import (LOG, client_log_tail, log_reaches, log_starts_by, lost_connection,
+                                       moves_by_round, moves_sent_between)
 
 DROPPED = """10/27/26 02:06:29 [ERRO] ClientCinematic  HandleAnimationEvent: 'end'
 10/27/26 02:06:35 [DBGM] GameClient      AppCloseConnection() called, connection state is 6
@@ -40,6 +40,11 @@ class MovesTest(unittest.TestCase):
     def test_each_rounds_moves_or_none_where_the_log_does_not_reach(self):
         self.assertEqual(moves_by_round([at(3), at(24)], ROUNDS), [["Cast Spell"], []])
         self.assertEqual(moves_by_round([at(3), at(24), at(50)], ROUNDS), [["Cast Spell"], [], None])
+
+    def test_rounds_before_the_log_text_begins_are_unknown(self):
+        self.assertFalse(log_starts_by(ROUNDS, at(1)))
+        self.assertTrue(log_starts_by(ROUNDS, at(2)))
+        self.assertEqual(moves_by_round([at(1), at(24)], ROUNDS), [None, []])
 
 
 class ConnectionTest(unittest.TestCase):
