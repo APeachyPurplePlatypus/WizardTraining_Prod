@@ -8,9 +8,12 @@ which needs the render-context hook too; both are turned on only when something 
 
 from __future__ import annotations
 
+import asyncio
+from dataclasses import dataclass
+
 from wizwalker import HookAlreadyActivated
 
-from .screen import or_default
+from .screen import is_friend_request, or_default, plain_text, visible_named
 from .session import HOOK_TIMEOUT_SECONDS
 
 POTION_BUTTON = ["WorldView", "windowHUD", "btnPotions"]
@@ -21,6 +24,24 @@ KNOWN_POPUPS = {
                          [*ENDORSEMENT_WINDOW, "CloseEndorsementWindowButton"],
                          "endorsed the other wizard as Friendly"),
 }
+
+
+MESSAGE_BOX = "MessageBoxModalWindow"
+MESSAGE_BOX_SEARCH_DEPTH = 4
+BOX_LAYOUT = ["messageBoxBG", "messageBoxLayout"]
+BOX_TITLE = [*BOX_LAYOUT, "", "TitleText"]
+BOX_CAPTION = [*BOX_LAYOUT, "TextArea", "CaptionText"]
+BOX_BUTTONS = [*BOX_LAYOUT, "AdjustmentWindow", "Layout"]
+BOX_YES = [*BOX_BUTTONS, "centerButton"]
+BOX_NO = [*BOX_BUTTONS, "rightButton"]
+BOX_SETTLE_SECONDS = 1.5
+
+
+@dataclass(frozen=True)
+class MessageBox:
+    window: object
+    title: str
+    caption: str
 
 
 async def window_at(root, path: list[str]):
@@ -76,11 +97,36 @@ async def click_window(client, window) -> None:
         await client.mouse_handler.click_window(window)
 
 
+async def message_box(client) -> MessageBox | None:
+    """The message box on screen, else None: the first visible one within MESSAGE_BOX_SEARCH_DEPTH levels, searched
+    through visible windows only. The flee box shows under WorldView/PlanningPhase, a friend request under WorldView.
+    A box's own visible flag is not enough: while the planning window was hidden, one under it still read visible."""
+    for window in await visible_named(client.root_window, MESSAGE_BOX, MESSAGE_BOX_SEARCH_DEPTH):
+        return MessageBox(window, plain_text(await text_under(window, BOX_TITLE)),
+                          plain_text(await text_under(window, BOX_CAPTION)))
+    return None
+
+
+async def decline_friend_request(client) -> str | None:
+    """Answer another player's friend request No (the box's right button), and say so; None when none is showing.
+    The player's name is never kept. The operator turned "Allow Friend Requests" to none in the game's privacy
+    settings and asked that any that still come be declined: one left open took every click, and from then on no
+    card the wizard played reached a battle, solo or shared, for over half an hour."""
+    box = await message_box(client)
+    if box is None or not is_friend_request(box.title, box.caption):
+        return None
+    await click_window(client, await window_at(box.window, BOX_NO))
+    await asyncio.sleep(BOX_SETTLE_SECONDS)
+    return "declined a friend request"
+
+
 async def answer_known_popup(client) -> str | None:
-    """Answer the first showing popup in KNOWN_POPUPS and say what was done. These hold the keyboard until
-    answered. The Endorse a Wizard window, shown after another player shared a battle, is answered Friendly,
-    as the operator asked; the other player's name is never read. When the answer button is missing, the
-    popup is closed with its own close button instead. Unknown popups are left alone."""
+    """Decline a friend request, or answer the first showing popup in KNOWN_POPUPS, and say what was done. These
+    hold the keyboard or the mouse until answered. The Endorse a Wizard window, shown after another player shared a
+    battle, is answered Friendly, as the operator asked; the other player's name is never read. When the answer
+    button is missing, the popup is closed with its own close button instead. Unknown popups are left alone."""
+    if declined := await decline_friend_request(client):
+        return declined
     for name, (window, answer, close_button, answered) in KNOWN_POPUPS.items():
         if await showing(client, window):
             try:

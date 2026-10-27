@@ -1,7 +1,7 @@
 import asyncio
 import unittest
 
-from wizardtraining.screen import visible_named, visible_names_under, window_saying
+from wizardtraining.screen import is_friend_request, plain_text, visible_named, visible_names_under, window_saying
 
 
 class StandIn:
@@ -58,6 +58,14 @@ class ScreenTest(unittest.TestCase):
         self.assertEqual(names, ["WorldView", "AFKWindow", "messageBoxBG", "messageBoxLayout", "TextArea",
                                  "CaptionText"])
         self.assertIsNone(asyncio.run(window_saying(root, ("return to combat",), depth=5)))
+
+    def test_reads_a_friend_request_from_its_title_and_caption(self):
+        title = plain_text("<center>Friend</center>")
+        caption = plain_text("<center>Accept<br>Some Player Level 10 <image;Icons/Icon_Frame.dds;22;22;FFFFFFFF;b>"
+                             "<image;Icons/Icon_Death.dds;22;22;FFFFFFFF><br>as your friend?</center>")
+        self.assertEqual(caption, "Accept Some Player Level 10 as your friend?")
+        self.assertTrue(is_friend_request(title, caption))
+        self.assertFalse(is_friend_request("Combat", "Are you sure you want to flee? You will lose all your Mana"))
 
     def test_reports_window_names_without_their_text(self):
         names = asyncio.run(visible_names_under(idle_box(), depth=3))

@@ -55,7 +55,7 @@ from .targets import (bystanders, enemies_to_route_around, in_grace_after_battle
                       next_area_to_explore, others, quest_targets, refill_reach, safe_wisps, summary, too_close,
                       WISP_REACH)
 from .teleports import LEFT_ZONE, NO_EFFECT, TeleportVolume, describe_outcome, volume_at
-from .ui import POTION_BUTTON, answer_known_popup, click, visible_children
+from .ui import POTION_BUTTON, answer_known_popup, click, message_box, visible_children
 
 TARGET_REACH = 1200.0
 ARROW_ARRIVE_RADIUS = 250.0
@@ -182,9 +182,14 @@ class QuestLoop:
         self._last_state, self._last_quest = state, dict(self.record.quest or {})
 
     async def checked_turn(self, state: dict) -> dict:
+        """A turn, after answering known popups. An open message box the framework does not answer takes every
+        click, so the run stops for the operator with the box's title (never its text, which can name a player):
+        an unanswered friend request kept every card the wizard played out of its battles for over half an hour."""
         if answered := await answer_known_popup(self.client):
             self.events.emit("popup", answered)
             return progressed(answered)
+        if (box := await message_box(self.client)) is not None:
+            raise StopRun(f"a message box titled {box.title!r} is open and takes every click; left for the operator")
         try:
             return await self.play_turn(state)
         except KeysIgnored:

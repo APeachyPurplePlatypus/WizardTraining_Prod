@@ -5,6 +5,12 @@ tested offline with stand-ins.
 
 from __future__ import annotations
 
+import re
+
+MARKUP = re.compile(r"<[^>]*>")
+FRIEND_BOX_TITLE = "friend"
+FRIEND_REQUEST_QUESTION = "as your friend?"
+
 
 async def or_default(coro, default):
     """`coro`'s result, or `default` when it raises: one window that cannot be read, such as one without text, once
@@ -47,6 +53,16 @@ async def window_saying(root, words, depth: int) -> list | None:
         return None
 
     return await walk(root, [], depth)
+
+
+def plain_text(markup: str) -> str:
+    """A window's text without the game's markup tags (<center>, <br>, <image;...>), spaces collapsed."""
+    return " ".join(MARKUP.sub(" ", markup).split())
+
+
+def is_friend_request(title: str, caption: str) -> bool:
+    """Another player's friend request: a box titled "Friend" asking "Accept <player> ... as your friend?"."""
+    return title.lower() == FRIEND_BOX_TITLE and caption.lower().endswith(FRIEND_REQUEST_QUESTION)
 
 
 async def visible_names_under(window, depth: int, limit: int = 60) -> list[str]:
