@@ -17,7 +17,7 @@ MOST_PIPS_TO_SAVE_FOR = 7
 FLEE_BELOW_MANA = 2
 SURE_DAMAGE_PER_PIP = 60
 STUN = "stun"
-ENEMY_DAMAGE_PER_PIP = 100
+ENEMY_DAMAGE_PER_PIP = 125
 SIDE_QUEST_OFFER_PHRASE = "offering you a side quest"
 ACCEPT, DECLINE, GO_BACK, STOP = "accept", "decline", "go back", "stop"
 LEAVE_MENU = "leave menu"
@@ -222,7 +222,9 @@ def within_reach_of_a_big_hit(view: RoundView) -> bool:
     """The wizard's health is no more than what the enemies could deal next round if each spent all its pips, at
     ENEMY_DAMAGE_PER_PIP. General Akilles, stunned in the first round, saved his pips and took 357 health or more in
     one round, where his hits had been 100 to 140; the wizard had a 245 heal in hand at 45% health and attacked,
-    since it healed only below LOW_HEALTH_FRACTION."""
+    since it healed only below LOW_HEALTH_FRACTION. Alicane Swiftarrow then hit for 396 with 4 pips, 99 a pip: at
+    100 a pip the wizard, with 487, counted itself out of reach and fell to 91, so the estimate keeps a quarter's
+    margin."""
     if not isinstance(view.health, int):
         return False
     reach = sum((enemy.pips or 0) * ENEMY_DAMAGE_PER_PIP for enemy in view.enemies)
