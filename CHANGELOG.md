@@ -2,6 +2,17 @@
 
 Every change, enhancement or addition is listed with its rationale, so later contributors know why the framework is the way it is. Say what was verified in the game and what was not.
 
+## Unreleased
+
+### Added
+
+- **CI for the offline tests.**
+  - **What:** a GitHub Actions workflow runs `python -m unittest discover -s tests` on every pull request and every push to `main`, on Ubuntu and Windows with Python 3.11 and 3.13.
+  - **Why:** changes reach `main` only through reviewed pull requests now. A red check shows a broken decision module before anyone merges or plays with it. Ubuntu proves the decide modules really need neither Windows nor WizWalker.
+- **Pull request template.**
+  - **What:** sections for what changed, why, how it was tested (offline and in the game) and what is not verified, plus a checklist for the changelog entry, personal data and the README's rules.
+  - **Why:** the changelog's rationale and the "verified, and not" notes are what make this project useful to the next contributor. The template asks for them at the point a change is proposed.
+
 ## 0.2.0 (2026-10-27)
 
 What one character's unattended play from level 5 to 10 taught the framework: 71 runs and 139 battles (122 won, 13 lost, 1 fled, 3 left for the operator) over the evening of 2026-10-26 and the day after. Main quests first, side quests as offered, natural walking only, nothing bought. The biggest changes: combat decisions from the game's own spell and enemy data (stuns, pips, healing before a big hit), mana and health refills that do not walk into fights, fleeing that works, other players' fights and message boxes noticed and handled, and routes that keep to the sidewalks.
