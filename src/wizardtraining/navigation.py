@@ -58,6 +58,7 @@ async def load_planner(zone: str, deimos_root: Path | None) -> RoutePlanner:
     if free is not None:
         planner.piece_of = free.piece_of
         planner.piece_reaches = free.reaches
+        planner.piece_gap = free.gap
         planner.teleports = [(volume, free.piece_of(volume.point, volume.radius + PIECE_REACH)) for volume in volumes]
         planner.exploration_points = free.exploration_points(EXPLORE_SPACING)
     return planner
@@ -129,6 +130,12 @@ class FreeArea:
     def reaches(self, index: int, point, reach: float) -> bool:
         """Whether piece `index` comes within `reach` of `point`."""
         return self._pieces[index].distance(self._point(*point)) <= reach
+
+    def gap(self, first: int, second: int) -> tuple[tuple[float, float], tuple[float, float], float]:
+        """The nearest points of two pieces, on the edge of each, and the distance between them."""
+        from shapely.ops import nearest_points
+        near_first, near_second = nearest_points(self._pieces[first], self._pieces[second])
+        return (near_first.x, near_first.y), (near_second.x, near_second.y), near_first.distance(near_second)
 
     def contains_point(self, x: float, y: float) -> bool:
         return bool(self._contains_xy(self._area, x, y))

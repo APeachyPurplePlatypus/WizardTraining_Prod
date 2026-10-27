@@ -36,7 +36,7 @@ from .gear import describe_stats, upgrades
 from .geometry import distance_to_path, flat_distance, path_within, xy
 from .keys import tap
 from .knowledge import Knowledge
-from .motion import ApproachLog, MotionTracker, closest_approach
+from .motion import WALK_UNITS_PER_SECOND, ApproachLog, MotionTracker, closest_approach
 from .movement import KeysIgnored, Reroute, face, travel
 from .navigation import load_planner
 from .policy import LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, SpellTypePolicy
@@ -49,7 +49,7 @@ from .progress import (DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY, ENEMY_NEAR_PATH, Limi
 from .quests import arrow_shows_no_target, game_language, open_goals, read_quest_arrow, read_quests
 from .reports import plain, save_report
 from .patrols import VIEWS_TO_JUDGE, note_sightings, unwalked_paths
-from .routes import Hazards, RoutePlanner, duel_clearance
+from .routes import GapStep, Hazards, RoutePlanner, duel_clearance
 from .spellbook import SpellCatalog, deck_spells, learned_spell_ids
 from .spells import KNOWN_AT_FIRST_CHECK, LEARNED, SpellLog, learned_text, newly_learned, spell_entry
 from .session import NoClient, attached, hooks_ready
@@ -71,6 +71,8 @@ DOOR_POLL_SECONDS = 0.5
 WATCHED_PATH_LENGTH = 2000.0
 MIN_SECONDS_BETWEEN_REROUTES = 0.3
 PATH_SAMPLE_SECONDS = 1.0
+GAP_EDGE_RADIUS = 80.0
+GAP_OVERSHOOT = 120.0
 SPELL_CHECK_SECONDS = 60.0
 BARELY_MOVED_DISTANCE = 100.0
 ENEMY_PASS_WAIT_SECONDS = 1.5
@@ -854,6 +856,31 @@ class QuestLoop:
         return await self.travel_turn("travel to waypoint", arrow, arrive_radius=WAYPOINT_ARRIVE_RADIUS,
                                       avoid=await nearby_enemies(self.client))
 
+    async def gap_turn(self, step: GapStep, zone: str, planner: RoutePlanner) -> dict:
+        """Walk to the edge of the wizard's walkable piece where the goal's comes nearest (`RoutePlanner.gap_step`),
+        then straight across. A step that does not land in the goal's piece is not tried again this run, and
+        teleporters are looked for instead."""
+        here = await self.client.body.position()
+        gap = flat_distance(step.start, step.end)
+        if flat_distance(here, step.start) > GAP_EDGE_RADIUS:
+            self.events.emit("walk", f"the goal is in walkable piece {step.pieces[1]}, {gap:.0f} units across a gap "
+                                     f"from piece {step.pieces[0]}; walking to its edge")
+            return await self.travel_turn("walk to the edge of a gap", XYZ(*step.start, here.z),
+                                          arrive_radius=GAP_EDGE_RADIUS, avoid=await nearby_enemies(self.client))
+        turn = await face(self.client, XYZ(*step.end, here.z))
+        if not turn["ok"]:
+            return stalled("could not face across the gap", reason=turn["reason"])
+        await tap(self.client, Keycode.W, (flat_distance(here, step.end) + GAP_OVERSHOOT) / WALK_UNITS_PER_SECOND)
+        now = await self.client.body.position()
+        landed = planner.piece_of((now.x, now.y))
+        if landed == step.pieces[1]:
+            self.events.emit("walk", f"stepped {gap:.0f} units across a gap into walkable piece {landed}")
+            return progressed("stepped across a gap", gap=round(gap), piece=landed)
+        self.record.failed_gaps.setdefault(zone, []).append(step.pieces)
+        self.events.emit("walk", f"a step across a {gap:.0f}-unit gap toward piece {step.pieces[1]} ended in piece "
+                                 f"{landed}; not trying it again")
+        return stalled("stepped toward another walkable piece, but did not reach it", landed=landed)
+
     async def zone_door_turn(self, door) -> dict:
         """Walk into the door, then give the zone change a few seconds to start. Towers and dungeons open only
         with X: when the interact prompt shows at the door, press X once."""
@@ -925,6 +952,8 @@ class QuestLoop:
         start = await self.client.body.position()
         zone = await self.client.zone_name()
         planner = await self.planner()
+        if (step := planner.gap_step(start, destination, self.record.failed_gaps.get(zone, []))) is not None:
+            return await self.gap_turn(step, zone, planner)
         crossing = planner.crossing(start, destination, self.record.teleport_outcomes.get(zone, {}))
         if crossing is not None:
             return await self.teleport_turn(crossing, zone, planner)

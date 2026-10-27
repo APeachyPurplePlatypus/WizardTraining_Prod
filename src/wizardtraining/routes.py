@@ -49,6 +49,7 @@ PLANNING_SECONDS = 4.0
 REROUTE_DISTANCE = 2500.0
 REROUTE_SECONDS = 0.25
 GOAL_PIECE_REACH = 600.0
+MAX_GAP_STEP = 300.0
 TELEPORT_CLEARANCE = 60.0
 ENEMY_KEEP_OUT = 520.0
 
@@ -147,6 +148,15 @@ def duel_clearance(here: Point, circle: Point) -> float:
     the first time duel circles were seen, the wizard stood 800 units from one, every route from there entered
     that radius, and it stood still until a Fire Elf engaged it."""
     return min(DUEL_CIRCLE_NO_GO, max(0.0, math.dist(xy(here), xy(circle)) - DUEL_WALK_AWAY_MARGIN))
+
+
+@dataclass(frozen=True)
+class GapStep:
+    """A short step across a gap between two walkable pieces: walk to `start`, on the edge of the wizard's piece,
+    then straight on to `end`, on the edge of the goal's."""
+    start: Point
+    end: Point
+    pieces: tuple[int, int]
 
 
 @dataclass
@@ -308,6 +318,7 @@ class RoutePlanner:
         self.status = status or {}
         self.piece_of: Callable[..., int | None] | None = None
         self.piece_reaches: Callable[[int, Point, float], bool] | None = None
+        self.piece_gap: Callable[[int, int], tuple[Point, Point, float]] | None = None
         self.teleports: list[tuple[TeleportVolume, int | None]] = []
         self.placed_objects: list = []
         self.exploration_points: list[tuple[Point, int]] = []
@@ -335,6 +346,19 @@ class RoutePlanner:
             return None
         return choose_crossing(self.teleports, start_piece=start_piece, goal_piece=goal_piece, outcomes=outcomes,
                                goal=goal)
+
+    def gap_step(self, start, goal, failed=()) -> GapStep | None:
+        """A step across the gap when `goal` lies in another walkable piece no more than MAX_GAP_STEP from the
+        wizard's, unless that pair of pieces is among `failed`. The walk data can cut a gate or a flight of steps
+        out of the walkable area: Sapphyra's Tower's courtyard in Olde Town is a piece of its own, 175 units from
+        the street, and looking for a teleporter to it walked the wizard into the Bazaar and out of the zone."""
+        if self.piece_of is None or self.piece_gap is None:
+            return None
+        pieces = self.piece_of(xy(start)), self.piece_of(xy(goal), GOAL_PIECE_REACH)
+        if None in pieces or pieces[0] == pieces[1] or pieces in set(failed):
+            return None
+        edge, other_edge, gap = self.piece_gap(*pieces)
+        return GapStep(xy(edge), xy(other_edge), pieces) if gap <= MAX_GAP_STEP else None
 
     def nav_links(self, start, goal) -> bool:
         """Whether the nav graph has a path from a waypoint within GOAL_PIECE_REACH of `start` to one within it of

@@ -2,7 +2,8 @@ import math
 import unittest
 
 from wizardtraining.patrols import PatrolMap
-from wizardtraining.routes import (COLLISION, DUEL_CIRCLE_NO_GO, GOAL_PIECE_REACH, LEG_ENEMY_CLEARANCE, NAV,
+from wizardtraining.routes import (COLLISION, DUEL_CIRCLE_NO_GO, GOAL_PIECE_REACH, LEG_ENEMY_CLEARANCE,
+                                   MAX_GAP_STEP, NAV, GapStep,
                                    NAV_CELL_REACH,
                                    OBSTACLE_RADIUS, STRAIGHT, Hazards, NavGraph, RoutePlanner, grid_path,
                                    no_more_dangerous, string_pull)
@@ -294,6 +295,26 @@ class RoutePlannerTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             RoutePlanner("zone").route("teleport", (0, 0), (1, 1))
 
+
+
+class GapStepTest(unittest.TestCase):
+    """Sapphyra's Tower's courtyard is a walkable piece of its own, 175 units from Olde Town's street."""
+
+    def planner(self, gap):
+        planner = RoutePlanner("WizardCity/WC_Streets/WC_OldeTown")
+        planner.piece_of = lambda point, reach=150.0: 1 if point[0] < -10000 else 4
+        planner.piece_gap = lambda first, second: ((-10568.0, -4613.0), (-10658.0, -4763.0), gap)
+        return planner
+
+    def test_steps_across_a_short_gap_to_the_goals_piece(self):
+        step = self.planner(175.0).gap_step((2467, 201), (-11333, -6232))
+        self.assertEqual(step, GapStep((-10568.0, -4613.0), (-10658.0, -4763.0), (4, 1)))
+
+    def test_no_step_within_one_piece_over_a_wide_gap_or_after_one_failed(self):
+        self.assertIsNone(self.planner(175.0).gap_step((2467, 201), (-6107, -3249)))
+        self.assertIsNone(self.planner(MAX_GAP_STEP + 1).gap_step((2467, 201), (-11333, -6232)))
+        self.assertIsNone(self.planner(175.0).gap_step((2467, 201), (-11333, -6232), failed=[(4, 1)]))
+        self.assertIsNone(RoutePlanner("zone").gap_step((0, 0), (1, 1)))
 
 if __name__ == "__main__":
     unittest.main()
