@@ -13,16 +13,18 @@ from __future__ import annotations
 
 import time
 
+from wizwalker import Keycode
 from wizwalker.constants import Primitive
 
 from .geometry import flat_distance
-from .movement import face_and_step
-from .targets import escape_point, measured
+from .keys import tap
+from .movement import bearing_to
+from .targets import back_away, measured, threat_centre
 
 DUEL_CIRCLE_NAME = "CombatSigil_Object"
 NPC_BEHAVIOR_ENEMY_FLAG_OFFSET = 288
 ENTITY_LIST_REFRESH_SECONDS = 0.5
-STEP_AWAY_SECONDS = 0.6
+STEP_AWAY_SECONDS = 0.8
 ENEMY, NPC, DUEL_CIRCLE, OTHER = "enemy", "npc", "duel circle", "other"
 HEALTH_WISP, MANA_WISP = "health wisp", "mana wisp"
 WISP_NAME_PARTS = {"wisphealth": HEALTH_WISP, "wispmana": MANA_WISP}
@@ -151,5 +153,11 @@ async def nearest_npc(client):
     return min(npcs, key=lambda where: flat_distance(me, where), default=None)
 
 
-async def step_away(client, close: list[dict]) -> None:
-    await face_and_step(client, escape_point(await client.body.position(), close), STEP_AWAY_SECONDS)
+async def step_away(client, close: list[dict]) -> str:
+    """Move away from close enemies without turning first: backward with S if they are in front, forward with
+    W if they are behind. A 180-degree turn with A and D takes almost 2 s, long enough for a chasing enemy to
+    catch the wizard, while S moves as fast as W. Returns the key used."""
+    facing = await client.body.yaw()
+    key = Keycode.S if back_away(await bearing_to(client, threat_centre(close)), facing) else Keycode.W
+    await tap(client, key, STEP_AWAY_SECONDS)
+    return key.name

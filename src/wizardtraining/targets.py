@@ -10,12 +10,11 @@ from __future__ import annotations
 
 import math
 
-from .geometry import Point, flat_distance, xy
+from .geometry import Point, angle_between, flat_distance, xy
 
 DUEL_CIRCLE_RADIUS = 500.0
 QUEST_TARGET_ARROW_RADIUS = 700.0
 ENEMY_CLEARANCE = 450.0
-STEP_AWAY_DISTANCE = 400.0
 WISP_REACH = 4000.0
 WISP_ENEMY_CLEARANCE = 600.0
 
@@ -70,10 +69,13 @@ def next_area_to_explore(points: list, *, me, explored=()) -> tuple | None:
     return min(left, key=lambda point: flat_distance(me, point[0]), default=None)
 
 
-def escape_point(me, close: list[dict], distance: float = STEP_AWAY_DISTANCE) -> Point:
-    """The point `distance` from `me`, directly away from the close enemies taken together."""
-    mx, my = xy(me)
-    away_x = sum(mx - xy(enemy["position"])[0] for enemy in close)
-    away_y = sum(my - xy(enemy["position"])[1] for enemy in close)
-    length = math.hypot(away_x, away_y) or 1.0
-    return mx + distance * away_x / length, my + distance * away_y / length
+def threat_centre(close: list[dict]) -> Point:
+    """The average position of the close enemies: the point to move away from."""
+    points = [xy(enemy["position"]) for enemy in close]
+    return sum(x for x, _ in points) / len(points), sum(y for _, y in points) / len(points)
+
+
+def back_away(bearing_to_threat: float, facing: float) -> bool:
+    """True when the threat is within 90 degrees of where the wizard faces, so walking backward (S) moves
+    away from it; False when it is behind, so walking forward (W) does. Neither needs a turn."""
+    return abs(angle_between(bearing_to_threat, facing)) < math.pi / 2

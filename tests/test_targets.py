@@ -1,8 +1,8 @@
 import math
 import unittest
 
-from wizardtraining.targets import (ENEMY_CLEARANCE, STEP_AWAY_DISTANCE, WISP_REACH, bystanders, escape_point, measured,
-                                    next_area_to_explore, others, quest_targets, safe_wisps, too_close)
+from wizardtraining.targets import (ENEMY_CLEARANCE, WISP_REACH, back_away, bystanders, measured, next_area_to_explore,
+                                    others, quest_targets, safe_wisps, threat_centre, too_close)
 
 
 def enemy(id_, name, x, y):
@@ -47,14 +47,14 @@ class TargetsTest(unittest.TestCase):
         self.assertEqual(next_area_to_explore(points, me=(0, 0), explored=[(0, 1000)]), ((0, 3000), 1))
         self.assertIsNone(next_area_to_explore(points, me=(0, 0), explored=[(0, 1000), (0, 3000), (0, 5000)]))
 
-    def test_escape_point_leads_directly_away(self):
-        point = escape_point((0, 0), [enemy(1, "Ghost", 100, 0)])
-        self.assertAlmostEqual(point[0], -STEP_AWAY_DISTANCE)
-        self.assertAlmostEqual(point[1], 0)
-        between = escape_point((0, 0), [enemy(1, "a", 100, 0), enemy(2, "b", 0, 100)])
-        self.assertAlmostEqual(math.dist(between, (0, 0)), STEP_AWAY_DISTANCE)
-        self.assertLess(between[0], 0)
-        self.assertLess(between[1], 0)
+    def test_threat_centre_is_the_average_position(self):
+        self.assertEqual(threat_centre([enemy(1, "a", 0, 0), enemy(2, "b", 100, 50)]), (50.0, 25.0))
+
+    def test_back_away_when_the_threat_is_in_front(self):
+        self.assertTrue(back_away(1.0, 1.2))
+        self.assertTrue(back_away(0.1, 2 * math.pi - 0.1))
+        self.assertFalse(back_away(1.0, 1.0 + math.pi))
+        self.assertFalse(back_away(0.0, 2.0))
 
 
 if __name__ == "__main__":

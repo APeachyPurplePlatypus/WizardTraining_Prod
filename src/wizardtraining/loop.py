@@ -644,10 +644,11 @@ class QuestLoop:
         return watch
 
     async def step_away_from(self, close: list[dict], when: str) -> None:
-        await step_away(self.client, close)
+        key = await step_away(self.client, close)
         self.record.step_aways.append(summary(close))
         nearest = close[0]
-        self.events.emit("step away", f"{when}: {enemy_names(close)}, nearest {nearest['distance']:.0f} away")
+        self.events.emit("step away", f"{when}: {enemy_names(close)}, nearest {nearest['distance']:.0f} away; "
+                                      f"{'backed off with S' if key == 'S' else 'walked on with W'}")
 
     async def record_end_state(self) -> None:
         try:
