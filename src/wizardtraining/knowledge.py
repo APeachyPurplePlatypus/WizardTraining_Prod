@@ -7,7 +7,8 @@ nav graph first, how often each patrol path was in view and how often an enemy w
 so a spell learned between runs is still noticed (`spells.newly_learned`), and zones where enemies have been met,
 so a run that starts in Cyclops Lane, or meets no enemy at its entrance, does not take it for a place to wait for
 mana, the zones entered with X at a prompt, towers and dungeons the wizard does not leave to train
-(`training.in_dungeon`), and the level it last trained at, so the school is visited once a level. Without them, every new run walked into teleporters
+(`training.in_dungeon`), and the level it last trained at, so the school is visited once a level, and the steps across a gap between two
+walkable pieces that did not land in the other piece, which the same two pieces will not do on another day. Without them, every new run walked into teleporters
 to find out again, and walked into Cyclops Lane's tents again. Not kept: obstacles, because the players and
 enemies that caused most of them move on, and "no effect" teleport verdicts, because a walk that fell short of a
 volume once looked like one.
@@ -32,6 +33,7 @@ class Knowledge:
     known_spells: list[int] = field(default_factory=list)
     entered_with_x: list[str] = field(default_factory=list)
     trained_at_level: int = 0
+    failed_gaps: dict[str, list[tuple[int, int]]] = field(default_factory=dict)
 
     @classmethod
     def load(cls, path: Path) -> "Knowledge":
@@ -48,7 +50,9 @@ class Knowledge:
                    path_views=counts_by_zone(data.get("path_views", {})),
                    known_spells=[int(spell) for spell in data.get("known_spells", [])],
                    entered_with_x=list(data.get("entered_with_x", [])),
-                   trained_at_level=int(data.get("trained_at_level", 0)))
+                   trained_at_level=int(data.get("trained_at_level", 0)),
+                   failed_gaps={zone: [(int(a), int(b)) for a, b in pairs]
+                                for zone, pairs in data.get("failed_gaps", {}).items()})
 
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -64,6 +68,7 @@ class Knowledge:
         record.known_spells = list(self.known_spells)
         record.entered_with_x = list(self.entered_with_x)
         record.trained_at_level = self.trained_at_level
+        record.failed_gaps = {zone: list(pairs) for zone, pairs in self.failed_gaps.items()}
 
     def learn_from(self, record) -> None:
         """Keep what a run found out, leaving out "no effect" verdicts."""
@@ -77,6 +82,9 @@ class Knowledge:
             if zone not in self.entered_with_x:
                 self.entered_with_x.append(zone)
         self.trained_at_level = max(self.trained_at_level, record.trained_at_level)
+        for zone, pairs in record.failed_gaps.items():
+            kept = self.failed_gaps.setdefault(zone, [])
+            kept.extend(pair for pair in map(tuple, pairs) if pair not in kept)
         for mine, theirs in ((self.path_sightings, record.path_sightings), (self.path_views, record.path_views)):
             for zone, counts in theirs.items():
                 for path, count in counts.items():

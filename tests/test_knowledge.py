@@ -31,6 +31,19 @@ class KnowledgeTest(unittest.TestCase):
         knowledge.learn_from(run)
         self.assertEqual(knowledge.teleport_outcomes, {TRITON: {"Tele Up": 0, "Olde Town exit": LEFT_ZONE}})
 
+    def test_remembers_a_step_across_a_gap_that_ended_where_it_began(self):
+        run = RunRecord(limits=Limits())
+        run.failed_gaps[TRITON] = [(18, 0), (0, 18)]
+        knowledge = Knowledge()
+        knowledge.learn_from(run)
+        knowledge.learn_from(run)
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "knowledge.json"
+            knowledge.save(path)
+            fresh = RunRecord(limits=Limits())
+            Knowledge.load(path).give_to(fresh)
+        self.assertEqual(fresh.failed_gaps, {TRITON: [(18, 0), (0, 18)]})
+
     def test_keeps_zones_routed_by_the_nav_graph_first(self):
         run = RunRecord(limits=Limits())
         run.nav_first_zones.append("WizardCity/WC_Streets/WC_Cyclops")

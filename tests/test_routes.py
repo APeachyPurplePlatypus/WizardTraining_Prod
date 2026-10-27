@@ -389,6 +389,35 @@ class BlockedOnlyByDuelsTest(unittest.TestCase):
         self.assertFalse(planner.blocked_only_by_duels((0.0, 0.0), (4480.0, 0.0), hazards))
 
 
+class AfterAFailedStepTest(unittest.TestCase):
+    """Coming out of the Haunted Cave gate puts the wizard on Triton Avenue's upper level (piece 0); the Headmistress's
+    house is on the lower street (piece 18), 198 units across a ledge the wizard cannot cross."""
+
+    def planner(self):
+        planner = RoutePlanner("WizardCity/WC_Streets/WC_Triton")
+        planner.piece_of = lambda point, reach=150.0: 0 if point[0] < -16200 else 18
+        planner.piece_reaches = lambda piece, point, reach: piece == 0
+        planner.piece_gap = lambda first, second: ((-16273.0, 110.0), (-16077.0, 140.0), 198.0)
+        planner.teleports = [(TeleportVolume("Tele Up", -16336.0, 1176.0, 0.0, 177.0), 18),
+                             (TeleportVolume("Tele Down", -17514.0, 1145.0, 0.0, 188.0), 0),
+                             (TeleportVolume("To TempestNexus", -17564.0, -4043.0, 0.0, 185.0), 0)]
+        return planner
+
+    start, goal = (-17120.0, 880.0), (-16100.0, 140.0)
+
+    def test_the_wizards_piece_reaching_the_goal_means_walk_there_until_a_step_failed(self):
+        planner = self.planner()
+        self.assertIsNone(planner.crossing(self.start, self.goal, {}))
+        self.assertEqual(planner.crossing(self.start, self.goal, {}, failed_gaps=[(0, 18)]).name, "Tele Down")
+
+    def test_after_the_step_failed_the_untried_volume_nearest_the_goal_is_walked_into(self):
+        way = self.planner().way_across(self.start, self.goal, {}, failed_gaps=[(0, 18)])
+        self.assertEqual(way.name, "Tele Down")
+
+    def test_a_failed_step_for_other_pieces_changes_nothing(self):
+        self.assertIsNone(self.planner().crossing(self.start, self.goal, {}, failed_gaps=[(18, 0)]))
+
+
 def nav_file(waypoints, links) -> bytes:
     data = bytearray(b"\x00\x00") + struct.pack("<i", len(waypoints))
     for (x, y, z), number in waypoints:

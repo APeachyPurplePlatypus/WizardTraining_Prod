@@ -354,7 +354,7 @@ class RoutePlanner:
         self.streets = None
         self.nav_first = False
 
-    def crossing(self, start, goal, outcomes: dict[str, object]) -> TeleportVolume | None:
+    def crossing(self, start, goal, outcomes: dict[str, object], failed_gaps=()) -> TeleportVolume | None:
         """A teleport volume to walk into when `goal` lies in another walkable piece than `start`, or None
         when they are in the same piece, the pieces are unknown, or no volume is left to try.
 
@@ -366,31 +366,38 @@ class RoutePlanner:
 
         A nav graph link gives way to a volume already seen to land in the goal's piece: Triton Avenue's nav graph
         links the lower street to the upper level, where the Haunted Cave's door is, through the teleporter
-        between them, and walking that link stuck at a wall while "Tele Up" was known to lead there."""
-        pieces = self.pieces_to_cross(start, goal)
+        between them, and walking that link stuck at a wall while "Tele Up" was known to lead there.
+
+        Neither shortcut holds for a pair of pieces in `failed_gaps`: a step across the gap between them has
+        already ended where it began, so the pieces are not one walk apart however near they lie."""
+        pieces = self.pieces_to_cross(start, goal, failed_gaps)
         if pieces is None:
             return None
         start_piece, goal_piece = pieces
-        if self.nav_links(start, goal):
+        if pieces not in set(failed_gaps) and self.nav_links(start, goal):
             return known_crossing(self.teleports, start_piece=start_piece, goal_piece=goal_piece, outcomes=outcomes)
         return choose_crossing(self.teleports, start_piece=start_piece, goal_piece=goal_piece, outcomes=outcomes,
                                goal=goal)
 
-    def pieces_to_cross(self, start, goal) -> tuple[int, int] | None:
+    def pieces_to_cross(self, start, goal, failed_gaps=()) -> tuple[int, int] | None:
         """The walkable pieces of `start` and `goal` when the wizard has to get from one to the other, else None:
-        the pieces are unknown, the same, or the wizard's own piece reaches the goal."""
+        the pieces are unknown, the same, or the wizard's own piece reaches the goal (unless a step across the gap
+        between the two pieces is among `failed_gaps`: the reach is then a ledge, not a way)."""
         if self.piece_of is None:
             return None
         start_piece, goal_piece = self.piece_of(xy(start)), self.piece_of(xy(goal), GOAL_PIECE_REACH)
         if start_piece is None or goal_piece is None or start_piece == goal_piece:
             return None
+        pieces = start_piece, goal_piece
+        if pieces in set(failed_gaps):
+            return pieces
         if self.piece_reaches is not None and self.piece_reaches(start_piece, xy(goal), GOAL_PIECE_REACH):
             return None
-        return start_piece, goal_piece
+        return pieces
 
-    def seen_crossing(self, start, goal, outcomes: dict[str, object]) -> TeleportVolume | None:
+    def seen_crossing(self, start, goal, outcomes: dict[str, object], failed_gaps=()) -> TeleportVolume | None:
         """The first teleport volume of a chain already seen to lead to the goal's walkable piece, else None."""
-        pieces = self.pieces_to_cross(start, goal)
+        pieces = self.pieces_to_cross(start, goal, failed_gaps)
         if pieces is None:
             return None
         return known_crossing(self.teleports, start_piece=pieces[0], goal_piece=pieces[1], outcomes=outcomes)
@@ -400,11 +407,11 @@ class RoutePlanner:
         across a short gap, or a volume not tried yet (`crossing`). In Triton Avenue the step across a 198-unit
         gap to the upper level, where the Haunted Cave's door is, cost two minutes among 13 enemies and ended where
         it began, while "Tele Up", seen to land there, took 9 seconds."""
-        if (volume := self.seen_crossing(start, goal, outcomes)) is not None:
+        if (volume := self.seen_crossing(start, goal, outcomes, failed_gaps)) is not None:
             return volume
         if (step := self.gap_step(start, goal, failed_gaps)) is not None:
             return step
-        return self.crossing(start, goal, outcomes)
+        return self.crossing(start, goal, outcomes, failed_gaps)
 
     def gap_step(self, start, goal, failed=()) -> GapStep | None:
         """A step across the gap when `goal` lies in another walkable piece no more than MAX_GAP_STEP from the
