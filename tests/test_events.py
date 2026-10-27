@@ -48,8 +48,16 @@ class DescriptionTest(unittest.TestCase):
         text = describe_battle(battle, seconds=41.6, outcome="won",
                                before={"health": 624, "max_health": 624, "gold": 100, "level": 5},
                                after={"health": 534, "max_health": 624, "gold": 113, "level": 5})
-        self.assertEqual(text, "won after 2 rounds in 42 s against 1 (Haunted Minion); health 624/624 -> 534/624, "
-                               "gold +13, level 5")
+        self.assertEqual(text, "won after 2 rounds in 42 s against up to 1 at once (Haunted Minion); "
+                               "health 624/624 -> 534/624, gold +13, level 5")
+
+    def test_counts_enemies_that_join_after_the_first_round(self):
+        battle = {"rounds": [round_entry(1, 624, "cast", [("Electric Eel", 150)]),
+                             round_entry(2, 624, "cast", [("Electric Eel", 55), ("Electric Eel", 150)]),
+                             round_entry(3, 454, "cast", [("Electric Eel", 138)])]}
+        text = describe_battle(battle, seconds=157, outcome="won", before={"health": 624, "max_health": 624},
+                               after={"health": 454, "max_health": 624})
+        self.assertIn("against up to 2 at once (Electric Eel x2)", text)
 
     def test_describe_changes(self):
         before = {"zone": "OldeTown", "level": 5}

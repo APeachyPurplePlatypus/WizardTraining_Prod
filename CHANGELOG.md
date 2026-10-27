@@ -22,7 +22,7 @@ Every change, enhancement or addition is listed with its rationale, so later con
     - rests (seconds and health before and after), step-aways (which enemies, how close);
     - dialogs (pages, follow-ups, offers) and NPC menus (options and choice).
 
-    The state snapshot now includes gold, the turn line includes health, and the report names its event file.
+    The state snapshot now includes gold, the turn line includes health, and the report names its event file. A battle's summary gives the most enemies seen at once, because enemies join after the first round (an Electric Eel fight on Triton Avenue grew from one eel to two), and same-named enemies can't be told apart.
   - **Why:** the operator asked for a way to describe the environment so the watcher stops making assumptions. While watching a run, a 90-second battle was reported as "probably a bigger group of enemies". The report later showed it was 5 rounds against a single Haunted Minion. The end-of-run report alone can't answer questions while a run is live, and timings invite guesses. WizWalker exposes no experience-points reading, so rewards are shown as gold, health and level.
 
 - **NPC services menus, and quest titles from the game's language files.**

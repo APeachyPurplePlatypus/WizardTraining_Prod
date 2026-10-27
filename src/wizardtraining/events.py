@@ -51,8 +51,22 @@ def change(before, after) -> str:
 
 
 def enemy_names(enemies: list[dict]) -> str:
-    counts = Counter(enemy.get("name") or "unknown" for enemy in enemies)
+    return names_with_counts(Counter(enemy.get("name") or "unknown" for enemy in enemies))
+
+
+def names_with_counts(counts: Counter) -> str:
     return ", ".join(name if count == 1 else f"{name} x{count}" for name, count in counts.items()) or "none seen"
+
+
+def enemies_at_once(rounds: list[dict]) -> tuple[int, Counter]:
+    """The most enemies seen in one round, and for each name the most seen at once. Enemies join battles
+    after the first round, and same-named enemies can't be told apart, so this is what can be said for sure."""
+    most, by_name = 0, Counter()
+    for battle_round in rounds:
+        enemies = battle_round["view"]["enemies"]
+        most = max(most, len(enemies))
+        by_name |= Counter(enemy.get("name") or "unknown" for enemy in enemies)
+    return most, by_name
 
 
 def describe_round(entry: dict) -> str:
@@ -64,9 +78,9 @@ def describe_round(entry: dict) -> str:
 
 def describe_battle(battle: dict, *, seconds: float, before: dict, after: dict, outcome: str) -> str:
     rounds = battle["rounds"]
-    enemies = rounds[0]["view"]["enemies"] if rounds else []
-    return (f"{outcome} after {len(rounds)} rounds in {seconds:.0f} s against {len(enemies)} "
-            f"({enemy_names(enemies)}); health {health_text(before)} -> {health_text(after)}, "
+    most, by_name = enemies_at_once(rounds)
+    return (f"{outcome} after {len(rounds)} rounds in {seconds:.0f} s against up to {most} at once "
+            f"({names_with_counts(by_name)}); health {health_text(before)} -> {health_text(after)}, "
             f"gold {change(before.get('gold'), after.get('gold'))}, level {after.get('level')}")
 
 
