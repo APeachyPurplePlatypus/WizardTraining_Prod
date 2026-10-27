@@ -63,6 +63,8 @@ from .targets import (bystanders, enemies_to_route_around, in_grace_after_battle
                       next_area_to_explore, others, quest_targets, refill_reach, safe_wisps, summary, too_close,
                       WISP_REACH)
 from .teleports import LEFT_ZONE, NO_EFFECT, TeleportVolume, describe_outcome, volume_at
+from .trainer import OPENED_DIALOG, OPENED_MENU, close_training, learn_free_spells, open_training, open_with_professor
+from .training import GATE, SCHOOLS, TRAINER, School, in_dungeon, spells_to_learn, way_to_school
 from .ui import POTION_BUTTON, answer_known_popup, click, message_box, visible_children
 
 TARGET_REACH = 1200.0
@@ -75,6 +77,7 @@ ENTRANCE_ARRIVE_RADIUS = 80.0
 INTERACT_PROMPT = "interact prompt"
 LOADING_WAIT_SECONDS = 3.0
 DOOR_WAIT_SECONDS = 15.0
+MAX_PROFESSOR_DIALOGS = 2
 DOOR_POLL_SECONDS = 0.5
 WATCHED_PATH_LENGTH = 2000.0
 MIN_SECONDS_BETWEEN_REROUTES = 0.3
@@ -127,6 +130,11 @@ class QuestLoop:
         self._not_doors: list[tuple[str, tuple[float, float]]] = []
         self._spells_checked_at: float | None = None
         self._spell_catalog: SpellCatalog | None = None
+        self._to_learn: list[str] | None = None
+        self._training_checked: tuple | None = None
+        self._said_last: dict[str, str] = {}
+        self._professor_dialogs = 0
+        self._entering_with_x_from: str | None = None
         self.spell_log = SpellLog(settings.runtime_folder)
         self._topping_up_in: str | None = None
         self._potion_failed = False
@@ -233,6 +241,10 @@ class QuestLoop:
         for kind, text in describe_changes(self._last_state, state, self._last_quest, self.record.quest):
             self.events.emit(kind, text)
         arrived = self._last_state is not None and state["zone"] != self._last_state["zone"]
+        if arrived and isinstance(state["zone"], str) and self._entering_with_x_from is not None:
+            if state["zone"] != self._entering_with_x_from and state["zone"] not in self.record.entered_with_x:
+                self.record.entered_with_x.append(state["zone"])
+            self._entering_with_x_from = None
         if arrived and isinstance(state["zone"], str) and isinstance(state["position"], dict):
             self.record.arrivals[state["zone"]] = {"from": self._last_state["zone"],
                                                    "position": (state["position"]["x"], state["position"]["y"])}
@@ -290,7 +302,99 @@ class QuestLoop:
             return turn
         if self._finishing_since is not None and (turn := await self.leave_for_safety_turn(state)) is not None:
             return turn
+        if self._finishing_since is None and (turn := await self.training_turn(state)) is not None:
+            return turn
         return await self.quest_turn(state)
+
+    async def training_turn(self, state: dict) -> dict | None:
+        """The operator's rule for new spells: when the wizard's level allows school spells it does not know
+        (`training.spells_to_learn`), and it is not inside a dungeon (`training.in_dungeon`), walk to the school's
+        professor and learn them, then go back to the quest at hand. Checked when the level or the zone changes, and
+        the school is visited once a level. None when there is nothing to do here, so the quest goes on."""
+        zone, level = state["zone"], state["level"]
+        if not isinstance(level, int) or level <= self.record.trained_at_level:
+            return None
+        if self._to_learn is None and (level, zone) != self._training_checked:
+            self._training_checked = (level, zone)
+            self._to_learn = await self.spells_to_learn_now()
+        wizard = await read_wizard(self.client) if self._to_learn else None
+        if wizard is None:
+            return None
+        school, wanted = SCHOOLS[wizard.school], ", ".join(self._to_learn)
+        if in_dungeon(zone, self.record.entered_with_x):
+            self.say_once("training", f"level {level} allows {wanted}, but the wizard is in a dungeon ({zone}); "
+                                      "training waits until it is out")
+            return None
+        planner = await self.planner()
+        way = way_to_school(zone, school, [volume.name for volume, _ in planner.teleports])
+        door = None if way is None else self.door_on_the_way(way, planner)
+        if door is None and (way is None or way.kind != TRAINER):
+            self.events.emit("training", f"no way known from {zone} to {school.professor}; training waits for "
+                                         "another zone")
+            self._to_learn = None
+            return None
+        self.say_once("training", f"level {level} allows {wanted}, and the wizard is not in a dungeon: going to "
+                                  f"{school.professor} to train, then back to the quest")
+        if way.kind == TRAINER:
+            return await self.professor_turn(school, level)
+        point, radius = door
+        if flat_distance(await self.client.body.position(), point) <= max(WAYPOINT_ARRIVE_RADIUS, radius):
+            return await self.zone_door_turn(point)
+        return await self.travel_turn("walk toward the school to train", point, arrive_radius=WAYPOINT_ARRIVE_RADIUS,
+                                      avoid=await nearby_enemies(self.client))
+
+    def door_on_the_way(self, way, planner: RoutePlanner) -> tuple[XYZ, float] | None:
+        """Where the next door of `way` is in this zone, and its radius: a gate toward the zone it names, or the
+        teleport volume it names."""
+        if way.kind == GATE:
+            gate = gate_toward(planner.placed_objects, way.name)
+            return None if gate is None else (XYZ(gate.x, gate.y, gate.z), 0.0)
+        volume = next((volume for volume, _ in planner.teleports if volume.name == way.name), None)
+        return None if volume is None else (XYZ(volume.x, volume.y, volume.z), volume.radius)
+
+    def say_once(self, kind: str, text: str) -> None:
+        """Emit `text` unless it was the last thing said this way, so a turn repeated while walking says it once."""
+        if self._said_last.get(kind) != text:
+            self._said_last[kind] = text
+            self.events.emit(kind, text)
+
+    async def spells_to_learn_now(self) -> list[str] | None:
+        """The school spells the wizard's level allows that it does not know yet, by name (`training`)."""
+        wizard = await read_wizard(self.client)
+        learned = await or_default(learned_spell_ids(self.client), None)
+        if wizard is None or learned is None or wizard.school not in SCHOOLS:
+            return None
+        if self._spell_catalog is None:
+            self._spell_catalog = SpellCatalog(game_language())
+        known = [spell.name for spell in [await self._spell_catalog.describe(spell_id) for spell_id in learned]
+                 if spell.name]
+        return spells_to_learn(wizard.school, wizard.level, known) or None
+
+    async def professor_turn(self, school: School, level: int) -> dict:
+        """In the school: walk to its professor, the only NPC there, open the spell training from their menu, learn
+        every free spell offered at or below the wizard's level (`trainer`), and close it. A professor who speaks
+        first is heard out by the next turns' dialog handling, at most MAX_PROFESSOR_DIALOGS times."""
+        professor = await nearest_npc(self.client)
+        if professor is None:
+            return stalled(f"{school.professor} is not in sight in the school")
+        if flat_distance(await self.client.body.position(), professor) > NPC_ARRIVE_DISTANCE:
+            return await self.travel_turn(f"walk to {school.professor}", professor, arrive_radius=NPC_ARRIVE_DISTANCE)
+        opened = await open_with_professor(self.client, professor)
+        if opened == OPENED_DIALOG and self._professor_dialogs < MAX_PROFESSOR_DIALOGS:
+            self._professor_dialogs += 1
+            return progressed(f"{school.professor} spoke first")
+        learned, left = [], []
+        try:
+            if opened == OPENED_MENU and await open_training(self.client):
+                learned, left = await learn_free_spells(self.client, level)
+        finally:
+            await close_training(self.client)
+        self.record.trained_at_level = level
+        self._to_learn = None
+        self._spells_checked_at = None
+        self.events.emit("training", f"learned {', '.join(learned) or 'nothing'} from {school.professor} at level "
+                                     f"{level}; next offered: {', '.join(left[:3]) or 'nothing'}; back to the quest")
+        return progressed(f"trained with {school.professor}", learned=learned, opened=opened)
 
     async def safe_here(self) -> bool:
         """`progress.safe_to_stand` here, with enemies recognised up to about 4,000 units away. A zone's patrol paths
@@ -915,6 +1019,7 @@ class QuestLoop:
         deadline = time.monotonic() + DOOR_WAIT_SECONDS
         while time.monotonic() < deadline and not self.settings.stop_requested():
             if await self.zone_changing(zone):
+                self._entering_with_x_from = zone
                 return progressed("entered with X at the interact prompt")
             if await dialog_open(self.client):
                 self._not_doors.append((zone, xy(here)))

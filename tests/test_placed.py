@@ -21,6 +21,15 @@ class ParseTest(unittest.TestCase):
         self.assertAlmostEqual(placed[0].x, -18329.4, places=1)
         self.assertAlmostEqual(placed[1].z, -151.1, places=1)
 
+    def test_reads_gates_named_without_the_instance_suffix(self):
+        """The Commons' gates: "WC_GateCommons_ToRavenWood" is followed by a letter of the next field."""
+        data = (placed_bytes("WC_GateCommons_ToRavenWood", -93.2, 1992.5, 223.1)[:-8] + b"P\x00\x00"
+                + placed_bytes("WC-GateStreet_TritonLane instance", -7550.0, -388.0, -1398.0))
+        placed = parse_placed_objects(data)
+        self.assertEqual([thing.template for thing in placed], ["WC_GateCommons_ToRavenWood", "WC-GateStreet_TritonLane"])
+        self.assertAlmostEqual(placed[0].y, 1992.5, places=1)
+        self.assertEqual(gate_toward(placed, "WizardCity/WC_Ravenwood").template, "WC_GateCommons_ToRavenWood")
+
     def test_skips_names_with_a_wrong_length(self):
         good = placed_bytes("WC_TA_Cog instance", 1, 2, 3)
         broken = good.replace(struct.pack("<H", 18), struct.pack("<H", 5))

@@ -23,6 +23,7 @@ from .geometry import Point
 
 INSTANCE_NAME = re.compile(rb"[\x20-\x7e]+? instance(?: \(\d+\))?")
 INSTANCE_SUFFIX = re.compile(r" instance(?: \(\d+\))?$")
+GATE_NAME = re.compile(rb"[A-Za-z0-9_\-]*Gate[A-Za-z0-9_\-]*")
 X_BEFORE_NAME, Y_BEFORE_NAME, Z_BEFORE_NAME = 54, 50, 46
 
 
@@ -43,20 +44,34 @@ class PlacedObject:
 
 
 def parse_placed_objects(data: bytes) -> list[PlacedObject]:
+    """Objects named "<template> instance", and gates, which in the Commons are named without the suffix
+    ("WC_GateCommons_ToRavenWood", in the same layout)."""
+    instances = [(start, INSTANCE_SUFFIX.sub("", name)) for start, name, _ in _named_records(data, INSTANCE_NAME)
+                 if INSTANCE_SUFFIX.search(name)]
+    gates = [(start, name) for start, name, matched in _named_records(data, GATE_NAME)
+             if GATE_WORD in name.lower() and matched.startswith(name)]
     placed = []
-    for match in INSTANCE_NAME.finditer(data):
+    for start, template in sorted(instances + gates):
+        x, y, z = (struct.unpack_from("<f", data, start - offset)[0]
+                   for offset in (X_BEFORE_NAME, Y_BEFORE_NAME, Z_BEFORE_NAME))
+        if all(math.isfinite(value) for value in (x, y, z)) and max(abs(x), abs(y)) < 200_000 and abs(z) < 20_000:
+            placed.append(PlacedObject(template, x, y, z))
+    return placed
+
+
+def _named_records(data: bytes, pattern: re.Pattern) -> list[tuple[int, str, str]]:
+    """Where each match of `pattern` starts, the name as long as the 2-byte length before it says, and the match.
+    A gate's name is the whole of its match or the start of it: "WC_GateCommons_ToRavenWood" is followed by a
+    letter that belongs to the next field."""
+    records = []
+    for match in pattern.finditer(data):
         start = match.start()
         if start < X_BEFORE_NAME:
             continue
         length = struct.unpack_from("<H", data, start - 2)[0]
         name = data[start:start + length].decode("ascii", errors="replace")
-        if not INSTANCE_SUFFIX.search(name):
-            continue
-        x, y, z = (struct.unpack_from("<f", data, start - offset)[0]
-                   for offset in (X_BEFORE_NAME, Y_BEFORE_NAME, Z_BEFORE_NAME))
-        if all(math.isfinite(value) for value in (x, y, z)) and max(abs(x), abs(y)) < 200_000 and abs(z) < 20_000:
-            placed.append(PlacedObject(INSTANCE_SUFFIX.sub("", name), x, y, z))
-    return placed
+        records.append((start, name, match.group().decode("ascii", errors="replace")))
+    return records
 
 
 GATE_WORD = "gate"
@@ -70,12 +85,12 @@ def words(text: str) -> set[str]:
 
 
 def gate_toward(placed: list[PlacedObject], destination_zone: str, *, arrival=None) -> PlacedObject | None:
-    """The street gate leading to `destination_zone`: one whose name shares a word of at least MIN_SHARED_WORD
-    letters with the zone's name ("TritonLane" and "WC_Triton"), else the gate nearest `arrival`, the point
-    where the wizard came in from that zone, if given."""
+    """The street gate leading to `destination_zone`: one whose name holds a word of at least MIN_SHARED_WORD
+    letters of the zone's name ("TritonLane" and "WC_Triton", "ToRavenWood" and "WC_Ravenwood"), else the gate
+    nearest `arrival`, the point where the wizard came in from that zone, if given."""
     gates = [thing for thing in placed if GATE_WORD in thing.template.lower()]
     zone_words = {word for word in words(destination_zone.rsplit("/", 1)[-1]) if len(word) >= MIN_SHARED_WORD}
-    named = [gate for gate in gates if zone_words & words(gate.template)]
+    named = [gate for gate in gates if any(word in gate.template.lower() for word in zone_words)]
     if named:
         return named[0]
     if arrival is not None and gates:

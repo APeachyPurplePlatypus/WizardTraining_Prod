@@ -1,0 +1,84 @@
+import unittest
+
+from wizardtraining.training import (COMMONS, GATE, RAVENWOOD, SCHOOLS, TRAINER, VOLUME, Way, in_dungeon,
+                                     same_spell, spells_to_learn, way_out_toward_the_commons, way_to_school)
+
+ICE = SCHOOLS["Ice"]
+KNOWN_AT_LEVEL_10 = ["Frost Beetle", "Pixie", "Freeze", "Snow Serpent", "Volcanic Shield"]
+
+
+class SpellsToLearnTest(unittest.TestCase):
+    def test_level_10_ice_wizard_can_learn_evil_snowman(self):
+        self.assertEqual(spells_to_learn("Ice", 10, KNOWN_AT_LEVEL_10), ["Evil Snowman"])
+
+    def test_nothing_once_known_or_before_its_level(self):
+        self.assertEqual(spells_to_learn("Ice", 10, [*KNOWN_AT_LEVEL_10, "Evil Snowman"]), [])
+        self.assertEqual(spells_to_learn("Ice", 9, KNOWN_AT_LEVEL_10), [])
+
+    def test_names_spelled_without_spaces_are_the_same_spell(self):
+        self.assertTrue(same_spell("Blood Bat", "Bloodbat"))
+        self.assertEqual(spells_to_learn("Myth", 1, ["Bloodbat"]), [])
+
+    def test_schools_without_a_known_way_learn_nothing(self):
+        self.assertEqual(spells_to_learn("Life", 10, []), [])
+        self.assertEqual(spells_to_learn(None, 10, []), [])
+
+
+class DungeonTest(unittest.TestCase):
+    def test_towers_and_dungeons_by_name(self):
+        self.assertTrue(in_dungeon("WizardCity/WC_Streets/Interiors/WC_HauntedCave_T1", []))
+        self.assertTrue(in_dungeon("WizardCity/WC_Streets/Interiors/WC_Cyclops_T2", []))
+        self.assertFalse(in_dungeon("WizardCity/WC_Streets/Interiors/WC_Firecat_H2", []))
+        self.assertFalse(in_dungeon("WizardCity/WC_Streets/WC_HauntedCave", []))
+        self.assertFalse(in_dungeon(COMMONS, []))
+
+    def test_zones_entered_with_x(self):
+        self.assertTrue(in_dungeon("WizardCity/WC_Streets/Interiors/WC_Firecat_Theatre",
+                                   ["WizardCity/WC_Streets/Interiors/WC_Firecat_Theatre"]))
+        self.assertFalse(in_dungeon(None, []))
+
+
+class WayTest(unittest.TestCase):
+    def test_streets_lead_back_toward_the_commons(self):
+        cases = {
+            "Triton Avenue": (["TeleportVol_Teleport (Street4 Street2 Exit)",
+                               "TeleportVol_Teleport location (Street4 to Cavern)",
+                               "TeleportVol_Teleport location (Tele Up)"], "TeleportVol_Teleport (Street4 Street2 Exit)"),
+            "Olde Town": (["TeleportVol_Teleport (Street 2 WC_Shop_Area Exit)", "TeleportVol_ToBazaar",
+                           "TeleportVol_Teleport-Foulgaze"], "TeleportVol_Teleport (Street 2 WC_Shop_Area Exit)"),
+            "Shopping District": (["TeleportVol_Teleport location (Shop Area to Street2)",
+                                   "TeleportVol_Teleport location (WC_Shop Hub)",
+                                   "TeleportVol_Teleport location (WC_Shop Jewelry)"],
+                                  "TeleportVol_Teleport location (WC_Shop Hub)"),
+            "Unicorn Way": (["TeleportVol_Teleport location (Street1 Arena Entrance)",
+                             "TeleportVol_Teleport location (Street1 Hub Exit)"],
+                            "TeleportVol_Teleport location (Street1 Hub Exit)"),
+            "Haunted Cave": (["TeleportVol_Teleport location (Cavern to Street4)"],
+                             "TeleportVol_Teleport location (Cavern to Street4)"),
+        }
+        for zone, (volumes, expected) in cases.items():
+            with self.subTest(zone):
+                self.assertEqual(way_out_toward_the_commons(volumes), expected)
+
+    def test_no_way_out_when_nothing_says_so(self):
+        self.assertIsNone(way_out_toward_the_commons(["TeleportVol_Teleport location (Tele Up)",
+                                                      "TeleportVol_Teleport location (Tele Down)"]))
+        self.assertIsNone(way_out_toward_the_commons([]))
+
+    def test_the_commons_ravenwood_and_the_school(self):
+        self.assertEqual(way_to_school(COMMONS, ICE, ["TeleportVol_Teleport location (WC_Hub WC_Headmistress_House "
+                                                      "Entrance)"]), Way(GATE, RAVENWOOD))
+        ravenwood = ["TeleportVol_Teleport location (to MythSchool)", "TeleportVol_Teleport location (to IceSchool)",
+                     "TeleportVol_Teleport location (to Commons)"]
+        self.assertEqual(way_to_school(RAVENWOOD, ICE, ravenwood),
+                         Way(VOLUME, "TeleportVol_Teleport location (to IceSchool)"))
+        self.assertEqual(way_to_school(ICE.interior, ICE, []), Way(TRAINER, "Lydia Greyrose"))
+
+    def test_from_another_school_the_way_is_out_to_ravenwood(self):
+        self.assertEqual(way_to_school("WizardCity/Interiors/WC_SchoolMyth", ICE,
+                                       ["TeleportVol_Teleport location (MythSchool Ravenwood Exit)"]),
+                         Way(VOLUME, "TeleportVol_Teleport location (MythSchool Ravenwood Exit)"))
+
+
+if __name__ == "__main__":
+    unittest.main()

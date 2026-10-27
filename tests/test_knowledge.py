@@ -84,6 +84,22 @@ class KnowledgeTest(unittest.TestCase):
             Knowledge.load(path).give_to(later)
         self.assertEqual(later.known_spells, [74836240, 1887199642])
 
+    def test_keeps_zones_entered_with_x_and_the_level_last_trained_at(self):
+        knowledge = Knowledge(trained_at_level=8)
+        run = RunRecord(limits=Limits())
+        knowledge.give_to(run)
+        self.assertEqual(run.trained_at_level, 8)
+        run.entered_with_x.append("WizardCity/WC_Streets/Interiors/WC_OldeTown_T2")
+        run.trained_at_level = 10
+        knowledge.learn_from(run)
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "knowledge.json"
+            knowledge.save(path)
+            later = RunRecord(limits=Limits())
+            Knowledge.load(path).give_to(later)
+        self.assertEqual(later.entered_with_x, ["WizardCity/WC_Streets/Interiors/WC_OldeTown_T2"])
+        self.assertEqual(later.trained_at_level, 10)
+
     def test_a_new_run_starts_with_it(self):
         run = RunRecord(limits=Limits())
         Knowledge({TRITON: {"Tele Up": 0}}).give_to(run)

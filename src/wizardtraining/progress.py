@@ -106,6 +106,8 @@ class RunRecord:
     path_sightings: dict[str, dict[str, int]] = field(default_factory=dict)
     path_views: dict[str, dict[str, int]] = field(default_factory=dict)
     known_spells: list[int] = field(default_factory=list)
+    entered_with_x: list[str] = field(default_factory=list)
+    trained_at_level: int = 0
 
     def record_turn(self, turn: dict) -> None:
         self.turns.append(turn)
