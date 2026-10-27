@@ -134,6 +134,8 @@ class RoutePlannerTest(unittest.TestCase):
         planner = RoutePlanner("zone", walk_grid=SquareWalkGrid(3), grid_line_walkable=lambda a, b: True,
                                nav_graph=square_nav_graph(2))
         self.assertEqual(planner.methods(), [COLLISION, NAV, STRAIGHT])
+        planner.nav_first = True
+        self.assertEqual(planner.methods(), [NAV, COLLISION, STRAIGHT])
 
     def test_nav_route_ends_at_the_goal_and_avoids_a_duel(self):
         planner = RoutePlanner("zone", nav_graph=square_nav_graph(6))

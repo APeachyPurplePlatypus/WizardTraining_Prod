@@ -38,7 +38,7 @@ from .movement import KeysIgnored, Reroute, face, travel
 from .navigation import load_planner
 from .policy import LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, SpellTypePolicy
 from .progress import (DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY, ENEMY_NEAR_PATH, Limits, PATH_THREATS, PlannedRoute,
-                       RunRecord, StopRun, check_limits, leaves_world, needs_rest, progressed, remember_obstacles,
+                       RunRecord, StopRun, check_limits, leaves_world, nav_did_better, needs_rest, progressed, remember_obstacles,
                        should_drink_potion, stalled, travel_outcome, wanted_wisp, world_of)
 from .quests import arrow_shows_no_target, game_language, open_goals, read_quest_arrow, read_quests
 from .reports import plain, save_report
@@ -576,6 +576,7 @@ class QuestLoop:
         zone = await self.client.zone_name()
         if zone not in self._planners:
             self._planners[zone] = await load_planner(zone, self.settings.deimos_root)
+            self._planners[zone].nav_first = zone in self.record.nav_first_zones
             self.record.planner_status[zone] = self._planners[zone].status
         return self._planners[zone]
 
@@ -595,6 +596,11 @@ class QuestLoop:
                                                reroute=self.rerouter(planner, hazards, destination)),
                             hazards=hazards)
         moved = flat_distance(start, await self.client.body.position())
+        if nav_did_better(trip["attempts"]) and zone not in self.record.nav_first_zones:
+            self.record.nav_first_zones.append(zone)
+            planner.nav_first = True
+            self.events.emit("walk", f"the collision walk data got stuck in {zone} where the nav graph walked on; "
+                                     "routes there try the nav graph first from now on")
         if trip["reason"] == "every route method failed" and around and moved < BARELY_MOVED_DISTANCE:
             trip["reason"] = ENEMIES_IN_THE_WAY
             self.record.immobile_threat_stops_in_a_row += 1

@@ -11,6 +11,8 @@ from __future__ import annotations
 import datetime
 from dataclasses import asdict, dataclass, field
 
+from .routes import COLLISION, NAV
+
 ENEMY_NEAR_PATH = "an enemy is near the path ahead"
 DUEL_NEAR_PATH = "a duel is near the path ahead"
 ENEMIES_IN_THE_WAY = "enemies leave no route"
@@ -69,6 +71,7 @@ class RunRecord:
     battle_log: list[dict] = field(default_factory=list)
     dialog_log: list[dict] = field(default_factory=list)
     zones_without_regeneration: list[str] = field(default_factory=list)
+    nav_first_zones: list[str] = field(default_factory=list)
     obstacles: dict[str, list] = field(default_factory=dict)
     zone_changes_without_quest_change: int = 0
     last_place: tuple | None = None
@@ -177,6 +180,13 @@ def travel_outcome(did: str, stop_reason: str | None, moved: float, record: RunR
             or new_obstacles > 0):
         return progressed(did, new_obstacles=new_obstacles, **details)
     return stalled(did, new_obstacles=new_obstacles, **details)
+
+
+def nav_did_better(attempts: list[dict]) -> bool:
+    """A trip where the collision route got stuck on the way and the nav route then walked on: the collision
+    data misses something there."""
+    results = {attempt["method"]: attempt.get("result") for attempt in attempts}
+    return results.get(COLLISION) == "failed" and results.get(NAV) in ("arrived", "interrupted")
 
 
 def remember_obstacles(record: RunRecord, zone: str, found: list) -> int:

@@ -1,13 +1,22 @@
 import unittest
 
 from wizardtraining.progress import (APPROACH_MARGIN, ENEMY_NEAR_PATH, ENEMY_PATH_CLEARANCE, MEANINGFUL_TRAVEL_DISTANCE,
-                                     Limits, PlannedRoute, RunRecord, StopRun, check_limits, leaves_world, needs_rest,
-                                     progressed, remember_obstacles, should_drink_potion, stalled, travel_outcome,
-                                     wanted_wisp, world_of)
+                                     Limits, PlannedRoute, RunRecord, StopRun, check_limits, leaves_world,
+                                     nav_did_better, needs_rest, progressed, remember_obstacles, should_drink_potion,
+                                     stalled, travel_outcome, wanted_wisp, world_of)
 
 
 def record(**limits) -> RunRecord:
     return RunRecord(limits=Limits(**limits))
+
+
+class NavDidBetterTest(unittest.TestCase):
+    def test_collision_stuck_then_nav_walked_on(self):
+        self.assertTrue(nav_did_better([{"method": "collision", "result": "failed"},
+                                        {"method": "nav", "result": "interrupted"}]))
+        self.assertFalse(nav_did_better([{"method": "collision", "result": "no route"},
+                                         {"method": "nav", "result": "arrived"}]))
+        self.assertFalse(nav_did_better([{"method": "collision", "result": "arrived"}]))
 
 
 class WorldTest(unittest.TestCase):

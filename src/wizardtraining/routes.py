@@ -272,6 +272,7 @@ class RoutePlanner:
         self.placed_objects: list = []
         self.exploration_points: list[tuple[Point, int]] = []
         self.patrols = None
+        self.nav_first = False
 
     def crossing(self, start, goal, outcomes: dict[str, object]) -> TeleportVolume | None:
         """A teleport volume to walk into when `goal` lies in another walkable piece than `start`, or None
@@ -324,11 +325,13 @@ class RoutePlanner:
         return circles
 
     def methods(self) -> list[str]:
+        """The route methods whose data loaded, collision first unless `nav_first`: in a zone where the collision
+        data misses obstacles, such as Cyclops Lane's fairground tents, the nav graph comes first."""
         usable = []
         if self.walk_grid is not None and self.grid_line_walkable is not None:
             usable.append(COLLISION)
         if self.nav_graph is not None and self.nav_graph.vertices:
-            usable.append(NAV)
+            usable.insert(0 if self.nav_first else len(usable), NAV)
         return usable + [STRAIGHT]
 
     def straight_line_ok(self, a: Point, b: Point, hazards: Hazards) -> bool:

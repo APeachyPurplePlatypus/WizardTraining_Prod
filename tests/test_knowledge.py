@@ -19,7 +19,7 @@ class KnowledgeTest(unittest.TestCase):
             self.assertEqual(Knowledge.load(broken), Knowledge())
 
     def test_saves_and_loads(self):
-        knowledge = Knowledge([TOWER], {TRITON: {"Tele Up": 0}})
+        knowledge = Knowledge([TOWER], {TRITON: {"Tele Up": 0}}, ["WizardCity/WC_Streets/WC_Cyclops"])
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "runtime" / "knowledge.json"
             knowledge.save(path)
@@ -33,6 +33,15 @@ class KnowledgeTest(unittest.TestCase):
         knowledge.learn_from(run)
         self.assertEqual(knowledge.zones_without_regeneration, [TOWER])
         self.assertEqual(knowledge.teleport_outcomes, {TRITON: {"Tele Up": 0, "Olde Town exit": LEFT_ZONE}})
+
+    def test_keeps_zones_routed_by_the_nav_graph_first(self):
+        run = RunRecord(limits=Limits())
+        run.nav_first_zones.append("WizardCity/WC_Streets/WC_Cyclops")
+        knowledge = Knowledge()
+        knowledge.learn_from(run)
+        fresh = RunRecord(limits=Limits())
+        knowledge.give_to(fresh)
+        self.assertEqual(fresh.nav_first_zones, ["WizardCity/WC_Streets/WC_Cyclops"])
 
     def test_a_new_run_starts_with_it(self):
         run = RunRecord(limits=Limits())

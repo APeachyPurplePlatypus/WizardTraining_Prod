@@ -55,6 +55,10 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **The nav graph first where the collision data misses obstacles.**
+  - **What:** when a trip's collision route gets stuck on the way and the nav route then walks on, the zone is marked: its routes try the zone's nav graph first from then on, and `runtime/knowledge.json` remembers it for later runs. The event log says so once per zone.
+  - **Why:** the operator noticed the wizard "seem[s] to like to walk into the fairground tents" on Cyclops Lane. The tents are placed objects whose footprints are not in the collision walls the framework subtracts. Every collision route there got stuck at a tent, recorded five obstacles and fell back to the nav route, which walks around them because the zone's nav waypoints were laid out on walkable paths. Deimos can build the placed objects' footprints (`entity_collision.build_zone_static_shapes`), but it needs the `katsuba`, `kinif` and `wiztype` packages, which are not installed here; with them, the tents could join the walls instead.
+
 - **No teleporter for a goal the wizard's own area reaches.**
   - **What:** a goal in another walkable piece no longer calls for a teleporter when the wizard's piece also comes within 600 units of it, or when the zone's nav graph has a path from near the wizard to near the goal. The wizard walks there instead, by the nav route if the collision data has none.
   - **Why:** Ravenwood's walkway to the Commons is missing from its collision mesh. So the gate lay in a walkable sliver of its own (about 400 by 130 units), 1,053 units from the main area. The planner looked for a teleporter into that sliver: it walked into the Ice school's door, then headed for the Myth school's, before the run was stopped. The nav graph walks straight to the gate. Triton, whose levels really are joined only by teleporters, has no nav graph that loads, so its crossings are unchanged.
