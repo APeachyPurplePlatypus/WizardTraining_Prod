@@ -50,6 +50,7 @@ from .quests import arrow_shows_no_target, game_language, open_goals, read_quest
 from .reports import plain, save_report
 from .patrols import VIEWS_TO_JUDGE, note_sightings, unwalked_paths
 from .routes import GapStep, Hazards, RoutePlanner, duel_clearance
+from .screen import or_default
 from .spellbook import SpellCatalog, deck_spells, learned_spell_ids
 from .spells import KNOWN_AT_FIRST_CHECK, LEARNED, SpellLog, learned_text, newly_learned, spell_entry
 from .session import NoClient, attached, hooks_ready
@@ -197,15 +198,14 @@ class QuestLoop:
         if not (due or leveled) or not free_to_move(state):
             return
         self._spells_checked_at = now
-        learned = await attempt(learned_spell_ids(self.client))
-        if not isinstance(learned, list):
+        learned = await or_default(learned_spell_ids(self.client), None)
+        if learned is None:
             return
         first = not self.record.known_spells
         new = newly_learned(self.record.known_spells, learned)
         if not new:
             return
-        deck = await attempt(deck_spells(self.client))
-        deck = deck if isinstance(deck, dict) else {}
+        deck = await or_default(deck_spells(self.client), {})
         if self._spell_catalog is None:
             self._spell_catalog = SpellCatalog(game_language())
         for template_id in new:
@@ -356,8 +356,8 @@ class QuestLoop:
         """Note where the loaded enemies are every SETTLE_LOOK_SECONDS for `seconds`, for their velocities."""
         deadline = time.monotonic() + seconds
         while time.monotonic() < deadline:
-            enemies = await attempt(nearby_enemies(self.client))
-            if isinstance(enemies, list):
+            enemies = await or_default(nearby_enemies(self.client), None)
+            if enemies is not None:
                 self.motion.observe(enemies, time.monotonic())
             await asyncio.sleep(SETTLE_LOOK_SECONDS)
 

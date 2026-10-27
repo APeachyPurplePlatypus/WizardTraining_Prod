@@ -25,6 +25,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **Readings that are lists are no longer turned into text.**
+  - **What:** the spell check and the enemy watch while settling into a zone read their lists through `screen.or_default`, which keeps the value, instead of `state.attempt`, which makes it plain for a report (`reports.plain`) and so turns a list into its text.
+  - **Why:** the first run with the spell log logged nothing: the learned spells came back as the text "[1496157882, 74836240, ...]", which is not a list, and the check gave up quietly. The same mistake meant that the watch of enemies while settling into a zone, added in 0.2.0 ("enemies watched before the first route out of a door"), never recorded one: that part of 0.2.0 did not work.
+  - **Verified:** through `attempt` the spells read as text and through `or_default` as the list, against the game and in a test.
+
 - **A teleport is judged to stay in the zone only once no loading follows.**
   - **What:** after the wizard's position jumps in a teleport volume, the run waits up to 2 seconds for loading or a zone change (`loop.TELEPORT_CONFIRM_SECONDS`) before recording which walkable piece of the zone the volume leads to.
   - **Why:** entering the Bazaar from Olde Town moved the wizard before the loading screen began. Its new position, in the Bazaar's own coordinates, read as Olde Town's walkable piece 4, and that verdict was kept in the knowledge file for later runs (corrected there by hand to "left the zone").
