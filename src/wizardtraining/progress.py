@@ -41,6 +41,11 @@ class StopRun(Exception):
     """Ends the run. The message is the reason given in the report."""
 
 
+class LimitReached(StopRun):
+    """A planned end: the target level, or the time, turn or battle limit. Unlike the other stops, which say
+    something is wrong or the operator asked, the run may play on a little to end somewhere safe."""
+
+
 @dataclass
 class Limits:
     target_level: int = 5
@@ -133,11 +138,11 @@ def check_limits(record: RunRecord, *, seconds_left: float, stop_requested: bool
     if stop_requested:
         raise StopRun("stop requested (STOP file)")
     if seconds_left <= 0:
-        raise StopRun("time limit reached")
+        raise LimitReached("time limit reached")
     if len(record.turns) >= limits.max_turns:
-        raise StopRun("turn limit reached")
+        raise LimitReached("turn limit reached")
     if record.battles >= limits.max_battles:
-        raise StopRun("battle limit reached")
+        raise LimitReached("battle limit reached")
     if record.turns_without_progress >= limits.max_turns_without_progress:
         raise StopRun("several turns without progress")
     if len(record.step_aways) >= limits.max_step_aways:

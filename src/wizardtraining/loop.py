@@ -39,10 +39,10 @@ from .motion import MotionTracker, closest_approach
 from .movement import KeysIgnored, Reroute, face, travel
 from .navigation import NO_PATROLS, load_planner
 from .policy import FLEE_BELOW_MANA, LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, SpellTypePolicy
-from .progress import (DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY, ENEMY_NEAR_PATH, Limits, PATH_THREATS, PlannedRoute,
-                       RunRecord, StopRun, check_limits, leaves_world, nav_did_better, progressed, remember_obstacles,
-                       should_drink_potion, stalled, travel_outcome, wanted_wisp, WISP_ANY_DIRECTION_BELOW_FRACTION,
-                       world_of)
+from .progress import (DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY, ENEMY_NEAR_PATH, LimitReached, Limits, PATH_THREATS,
+                       PlannedRoute, RunRecord, StopRun, check_limits, leaves_world, nav_did_better, progressed,
+                       remember_obstacles, should_drink_potion, stalled, travel_outcome, wanted_wisp,
+                       WISP_ANY_DIRECTION_BELOW_FRACTION, world_of)
 from .quests import arrow_shows_no_target, game_language, open_goals, read_quest_arrow, read_quests
 from .reports import plain, save_report
 from .routes import DUEL_CIRCLE_NO_GO, Hazards, RoutePlanner
@@ -66,6 +66,7 @@ MIN_SECONDS_BETWEEN_REROUTES = 0.3
 BARELY_MOVED_DISTANCE = 100.0
 ENEMY_PASS_WAIT_SECONDS = 1.5
 ARRIVAL_SETTLE_SECONDS = 1.5
+FINISH_SAFELY_MINUTES = 15.0
 ENEMIES_IN_THE_WAY_WAIT_SECONDS = 4.0
 DEFEATED_HEALTH_FRACTION = 0.05
 NOT_FREE_TO_MOVE_WAIT_SECONDS = 3.0
@@ -92,6 +93,7 @@ class QuestLoop:
         self.use_potions = use_potions
         self.wear_gear = wear_gear
         self._gear_checked: tuple | None = None
+        self._finishing_since: float | None = None
         self._potion_failed = False
         self._object_in_use = None
         self._dodges: list[float] = []
@@ -138,11 +140,14 @@ class QuestLoop:
     async def run_turns(self) -> None:
         deadline = time.monotonic() + self.limits.minutes * 60
         while True:
-            check_limits(self.record, seconds_left=deadline - time.monotonic(),
-                         stop_requested=self.settings.stop_requested())
             state = await snapshot(self.client)
-            if isinstance(state["level"], int) and state["level"] >= self.limits.target_level:
-                raise StopRun(f"reached level {state['level']}")
+            try:
+                check_limits(self.record, seconds_left=deadline - time.monotonic(),
+                             stop_requested=self.settings.stop_requested())
+                if isinstance(state["level"], int) and state["level"] >= self.limits.target_level:
+                    raise LimitReached(f"reached level {state['level']}")
+            except LimitReached as reached:
+                await self.finish_safely(reached, state)
             turn = await self.checked_turn(state)
             quest = self.record.quest or {}
             turn.update(level=state["level"], health=state["health"], zone=state["zone"], position=plain_xy(state),
@@ -212,12 +217,33 @@ class QuestLoop:
             return turn
         return await self.quest_turn(state)
 
+    async def safe_here(self) -> bool:
+        """In a zone whose files show no enemy patrols, with no enemy nearby: where the wizard may stand still."""
+        if (await snapshot(self.client))["loading"] is not False:
+            return False
+        planner = await self.planner()
+        return planner.status.get("patrols") == NO_PATROLS and not await nearby_enemies(self.client)
+
+    async def finish_safely(self, reached: LimitReached, state: dict) -> None:
+        """Stop for a planned limit only where it is safe; until then, play on for up to FINISH_SAFELY_MINUTES.
+        A run that stopped in Cyclops Lane left the wizard idle among enemies, and one pulled it into a fight
+        (the operator: "ur in a fight because you didnt go to a safe area")."""
+        if self._finishing_since is None:
+            self._finishing_since = time.monotonic()
+            self.events.emit("run", f"{reached}; playing on until in a zone without enemies "
+                                    f"(at most {FINISH_SAFELY_MINUTES:g} minutes)")
+        if battle_showing(state) or not free_to_move(state):
+            return
+        if await self.safe_here():
+            raise StopRun(f"{reached}, in a zone without enemies")
+        if time.monotonic() - self._finishing_since > FINISH_SAFELY_MINUTES * 60:
+            raise StopRun(f"{reached}; no zone without enemies reached in {FINISH_SAFELY_MINUTES:g} minutes")
+
     async def gear_turn(self) -> dict | None:
         """Wear the best gear the wizard has (`gear.upgrades`). Checked again after a level-up or new loot, and only
         where it is safe: in a zone whose files show no enemy patrols, with no enemy nearby, since the spellbook
         stays open a few seconds per item. None when there is nothing to do here, so the turn goes on."""
-        planner = await self.planner()
-        if planner.status.get("patrols") != NO_PATROLS or await nearby_enemies(self.client):
+        if not await self.safe_here():
             return None
         wizard = await read_wizard(self.client)
         count = await attempt(count_items(self.client))

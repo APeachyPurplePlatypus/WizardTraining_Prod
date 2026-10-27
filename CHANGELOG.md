@@ -6,6 +6,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Added
 
+- **Runs end in a zone without enemies.**
+  - **What:** the target level and the time, turn and battle limits are now `LimitReached`, a planned end. At one, the run logs it and plays on, for up to 15 minutes (`loop.FINISH_SAFELY_MINUTES`), until it is out of battle in a zone whose files show no enemy patrols and with no enemy nearby (`QuestLoop.safe_here`, which the gear turn uses too). Then it stops, saying so. The STOP file and the stops that mean something is wrong still stop at once.
+  - **Why:** the operator: "ur in a fight because you didnt go to a safe area". A run stopped in Cyclops Lane left the wizard standing among the enemies, and one walked into it. The level-10 stop would have ended the same way wherever the last fight happened.
+  - **Not verified yet:** a planned end in the game.
+
 - **Wearing the best gear, opt-in (`--wear-gear`).**
   - **What:** `equipment.py` reads the worn and backpack items from memory, with each one's slot, equip effects and equip requirements, plus the wizard's school and real level. `gear.py` turns each canonical stat effect into a stat, scores it, and picks for each slot (hat, robe, shoes, athame, amulet, ring) the best item the wizard surely may wear. The loop equips upgrades through the spellbook's Inventory page, only in a zone whose files show no enemy patrols and with no enemy nearby. It checks again after a level-up or new loot. Each item equipped is logged with its stats, then the change in max health and mana. Wands, decks, pets and mounts are left alone, and a requirement it does not understand counts as unmet.
   - **What counts as best:** max health first, the buffer that saves heal rounds and defeats; max mana at half weight, since every school spell costs it; then resistance to every school; resistance to one school at a quarter weight; then the wizard's own school's damage and accuracy. Stats of other schools count for nothing.

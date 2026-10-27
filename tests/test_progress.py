@@ -1,7 +1,7 @@
 import unittest
 
 from wizardtraining.progress import (APPROACH_MARGIN, ENEMY_NEAR_PATH, ENEMY_PATH_CLEARANCE, MEANINGFUL_TRAVEL_DISTANCE,
-                                     Limits, PlannedRoute, RunRecord, StopRun, check_limits, leaves_world,
+                                     LimitReached, Limits, PlannedRoute, RunRecord, StopRun, check_limits, leaves_world,
                                      nav_did_better, progressed, remember_obstacles, should_drink_potion,
                                      stalled, travel_outcome, wanted_wisp, world_of)
 
@@ -55,6 +55,18 @@ class LimitsTest(unittest.TestCase):
         run.step_aways.append(["Ghost", 300, False])
         with self.assertRaisesRegex(StopRun, "stepped away"):
             self.check(run)
+
+    def test_planned_limits_may_finish_safely_but_the_stop_file_and_trouble_may_not(self):
+        with self.assertRaises(LimitReached):
+            self.check(record(), seconds_left=0)
+        run = record(max_battles=1)
+        run.battles = 1
+        with self.assertRaises(LimitReached):
+            self.check(run)
+        for run, stop_requested in ((record(), True), (record(max_step_aways=0), False)):
+            with self.assertRaises(StopRun) as caught:
+                self.check(run, stop_requested=stop_requested)
+            self.assertNotIsInstance(caught.exception, LimitReached)
 
     def test_turns_without_progress_stop_the_run_and_progress_resets_the_count(self):
         run = record(max_turns_without_progress=2)
