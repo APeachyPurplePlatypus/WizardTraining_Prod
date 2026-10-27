@@ -76,9 +76,9 @@ def next_area_to_explore(points: list, *, me, explored=(), prefer=()) -> tuple |
 
 
 def still_worth_dodging(dodge_times: list[float], *, now: float, health: float | None) -> bool:
-    """False once an enemy has been stepped away from DODGES_BEFORE_FACING times in DODGE_MEMORY_SECONDS while
-    the wizard's health is at least FACE_ABOVE_HEALTH: it keeps blocking the way, and dodging it again only
-    loops. The wizard then walks on, and passes it or fights it."""
+    """False once the wizard has stepped away DODGES_BEFORE_FACING times in DODGE_MEMORY_SECONDS while its health
+    is at least FACE_ABOVE_HEALTH: enemies keep blocking the way, and dodging again only loops. The wizard
+    then walks on, and passes them or fights."""
     recent = [moment for moment in dodge_times if now - moment <= DODGE_MEMORY_SECONDS]
     healthy = health is not None and health >= FACE_ABOVE_HEALTH
     return not (healthy and len(recent) >= DODGES_BEFORE_FACING)

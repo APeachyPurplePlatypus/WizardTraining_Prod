@@ -6,6 +6,10 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **The dodge limit counts all step-aways, not each enemy's.**
+  - **What:** after three step-aways of any kind within a minute, at half health or more, the wizard walks on. The exception is a group of three or more enemies, which it still steps away from.
+  - **Why:** on the way to Triton's Tele Up, several Ghost-Blue-L02 stood around the path. The per-enemy count let the wizard walk past one, then step away from the next, and the run stopped on turns without progress again.
+
 - **A potion before distant wisps when health is low.**
   - **What:** below the potion threshold (40%), with potions allowed, the wizard drinks before looking for wisps. Wisps are now only sought within 2,500 units, down from 4,000.
   - **Why:** at 31% health on Triton Avenue, the wizard walked to three health wisps 1,500 to 3,700 units away through eel territory. Two had been used up and one trip was interrupted, before a fourth gave +163. Used-up wisps stay among the loaded entities, so a far trip can come back empty, and at low health every extra walk risks a fight.

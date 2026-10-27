@@ -43,8 +43,8 @@ from .routes import DUEL_CIRCLE_NO_GO, Hazards, RoutePlanner
 from .session import NoClient, attached, hooks_ready
 from .state import attempt, battle_showing, free_to_move, health_fraction, mana_fraction, snapshot
 from .placed import gate_toward, objects_for_goal
-from .targets import (bystanders, next_area_to_explore, others, quest_targets, safe_wisps, still_worth_dodging,
-                      summary, too_close)
+from .targets import (DODGE_MEMORY_SECONDS, bystanders, next_area_to_explore, others, quest_targets, safe_wisps,
+                      still_worth_dodging, summary, too_close)
 from .teleports import LEFT_ZONE, NO_EFFECT, TeleportVolume, describe_outcome
 from .ui import POTION_BUTTON, click, close_known_popup, visible_children
 
@@ -69,6 +69,7 @@ WISP_SETTLE_SECONDS = 1.5
 TELEPORT_WAIT_SECONDS = 8.0
 TELEPORT_POLL_SECONDS = 0.25
 JUMP_DISTANCE = 500.0
+GROUP_SIZE = 3
 TELEPORTED = "teleported"
 KEYS_IGNORED = ("the game ignored a turn key while free to move; a popup (such as the Endorse Wizard window) "
                 "may be holding the keyboard; left for the operator")
@@ -84,8 +85,8 @@ class QuestLoop:
         self.use_potions = use_potions
         self._potion_failed = False
         self._object_in_use = None
-        self._dodges: dict[int, list[float]] = {}
-        self._facing: set[int] = set()
+        self._dodges: list[float] = []
+        self._facing_since: float | None = None
         self.events = events or EventLog()
         self._last_state = self._last_quest = None
         self.settings = settings
@@ -659,22 +660,20 @@ class QuestLoop:
         return watch
 
     def worth_dodging(self, close: list[dict], health: float | None) -> list[dict]:
-        """The close enemies still worth stepping away from; see `targets.still_worth_dodging`."""
+        """The close enemies still worth stepping away from; see `targets.still_worth_dodging`. The count covers
+        every step-away, because several same-named enemies around one path each needed their own three
+        before. A group of GROUP_SIZE or more is always dodged."""
         now = time.monotonic()
-        kept = []
-        for enemy in close:
-            if still_worth_dodging(self._dodges.get(enemy["id"], []), now=now, health=health):
-                kept.append(enemy)
-            elif enemy["id"] not in self._facing:
-                self._facing.add(enemy["id"])
-                self.events.emit("step away", f"{enemy['name']} keeps blocking the way; no longer stepping away from "
-                                              f"it at {health:.0%} health")
-        return kept
+        if not close or len(close) >= GROUP_SIZE or still_worth_dodging(self._dodges, now=now, health=health):
+            return close
+        if self._facing_since is None or now - self._facing_since > DODGE_MEMORY_SECONDS:
+            self._facing_since = now
+            self.events.emit("step away", f"stepped away {len(self._dodges)} times recently; walking on past "
+                                          f"{enemy_names(close)} at {health:.0%} health")
+        return []
 
     async def step_away_from(self, close: list[dict], when: str) -> None:
-        now = time.monotonic()
-        for enemy in close:
-            self._dodges.setdefault(enemy["id"], []).append(now)
+        self._dodges.append(time.monotonic())
         key = await step_away(self.client, close)
         self.record.step_aways.append(summary(close))
         nearest = close[0]
