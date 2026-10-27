@@ -48,7 +48,7 @@ from .progress import (DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY, ENEMY_NEAR_PATH, Limi
 from .quests import arrow_shows_no_target, game_language, open_goals, read_quest_arrow, read_quests
 from .reports import plain, save_report
 from .patrols import VIEWS_TO_JUDGE, note_sightings, unwalked_paths
-from .routes import DUEL_CIRCLE_NO_GO, Hazards, RoutePlanner
+from .routes import Hazards, RoutePlanner, duel_clearance
 from .session import NoClient, attached, hooks_ready
 from .state import attempt, battle_showing, free_to_move, health_fraction, mana_fraction, snapshot
 from .placed import gate_toward, objects_for_goal
@@ -977,7 +977,7 @@ class QuestLoop:
         hazards = Hazards.of(enemies=[enemy["position"] for enemy in avoid], duel_circles=duel_circles,
                              obstacles=self.record.obstacles.get(zone, []), patrols=planner.streets,
                              keep_out=planner.teleports_to_keep_out_of(start, destination, arrive_radius),
-                             tracks=[self.motion.track(enemy, now) for enemy in around])
+                             tracks=[self.motion.track(enemy, now) for enemy in around], start=start)
         return hazards, around
 
     def rerouter(self, planner: RoutePlanner, hazards: Hazards, destination):
@@ -985,7 +985,8 @@ class QuestLoop:
         def reroute(path_ahead, threats: list[dict], now: float):
             around = enemies_to_route_around(threats, me=path_ahead[0], destination=destination)
             live = replace(hazards, enemies=tuple(xy(enemy["position"]) for enemy in threats),
-                           tracks=tuple(self.motion.track(enemy, now) for enemy in around))
+                           tracks=tuple(self.motion.track(enemy, now) for enemy in around),
+                           start=xy(path_ahead[0]))
             return planner.reroute(path_ahead, live)
         return reroute
 
@@ -1021,7 +1022,8 @@ class QuestLoop:
                 await self.step_away_from(close, "while walking", ignore=ignore)
                 return "stepped away from an enemy"
             stretch = path_within(path_ahead, WATCHED_PATH_LENGTH)
-            if any(distance_to_path(circle, stretch) < DUEL_CIRCLE_NO_GO for circle in duel_circles):
+            if any(distance_to_path(circle, stretch) < duel_clearance(path_ahead[0], circle)
+                   for circle in duel_circles):
                 return DUEL_NEAR_PATH
             if route.is_new(path_ahead):
                 route.remember_clearances({enemy["id"]: closest_approach(self.motion.track(enemy, now), path_ahead)

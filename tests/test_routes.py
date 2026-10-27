@@ -63,6 +63,21 @@ class HazardsTest(unittest.TestCase):
         self.assertFalse(hazards.forbids((DUEL_CIRCLE_NO_GO + 1, 0)))
         self.assertFalse(hazards.line_is_open((-2000, 0), (2000, 0)))
 
+    def test_a_walk_beginning_near_a_duel_may_only_lead_away(self):
+        hazards = Hazards.of(duel_circles=[(0, 0)], start=(800, 0))
+        self.assertFalse(hazards.forbids((900, 0)))
+        self.assertFalse(hazards.forbids((800, 300)))
+        self.assertTrue(hazards.forbids((600, 0)))
+        self.assertTrue(Hazards.of(duel_circles=[(0, 0)], start=(5000, 0)).forbids((DUEL_CIRCLE_NO_GO - 1, 0)))
+
+    def test_routes_out_from_beside_a_duel(self):
+        grid = SquareWalkGrid(60)
+        circle, start, goal = (3000, 3000), (3700, 3000), (5500, 3000)
+        cells = grid_path(grid, start, goal, Hazards.of(duel_circles=[circle], start=start))
+        self.assertIsNotNone(cells)
+        self.assertTrue(all(math.dist(cell, circle) >= 650 for cell in cells))
+        self.assertIsNone(grid_path(grid, start, goal, Hazards.of(duel_circles=[circle])))
+
     def test_obstacles_are_no_go_and_block_lines(self):
         hazards = Hazards.of(obstacles=[(0, 0)])
         self.assertTrue(hazards.forbids((OBSTACLE_RADIUS - 1, 0)))

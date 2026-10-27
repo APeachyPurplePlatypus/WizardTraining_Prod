@@ -10,11 +10,12 @@ Grid and graph routes are searched with A*, then merged into as few straight leg
 allows ("string pulling"). Steps near enemies cost more, so routes keep to the parts of a street that
 enemies are not on, and merged legs keep LEG_ENEMY_CLEARANCE from them. Steps near the zone's enemy patrol
 paths cost much more (`patrols.PatrolMap`, `Hazards.step_cost`), so routes keep to the sidewalks enemies do
-not walk, and merging never makes a leg more dangerous than the steps it replaces. Enemies with a track (`motion.Track`) are no-go
-areas ENEMY_KEEP_OUT wide where they will be when the wizard gets there, so a route passes behind an enemy
-walking away and keeps clear of where one is heading. Duel circles, other players'
-fights in progress, are no-go areas: walking into one joins that fight. So are obstacles: places where the
-wizard was blocked although the walk data said the way was clear.
+not walk, and merging never makes a leg more dangerous than the steps it replaces. Enemies with a track
+(`motion.Track`) are no-go areas ENEMY_KEEP_OUT wide where they will be when the wizard gets there, so a route
+passes behind an enemy walking away and keeps clear of where one is heading. Duel circles, other players'
+fights in progress, are no-go areas: walking into one joins that fight. A walk that begins inside a circle's
+no-go area may only lead away from it (`duel_clearance`). So are obstacles: places where the wizard was blocked
+although the walk data said the way was clear.
 """
 
 from __future__ import annotations
@@ -34,6 +35,7 @@ ENEMY_AVOID_RADIUS = 900.0
 ENEMY_AVOID_WEIGHT = 6.0
 LEG_ENEMY_CLEARANCE = 450.0
 DUEL_CIRCLE_NO_GO = 900.0
+DUEL_WALK_AWAY_MARGIN = 50.0
 OBSTACLE_RADIUS = 150.0
 SIDEWALK_DISTANCE = 600.0
 STREET_WEIGHT = 12.0
@@ -62,12 +64,15 @@ class Hazards:
     patrols: object = field(default=None, compare=False)
     keep_out: tuple[tuple[Point, float], ...] = ()
     tracks: tuple = ()
+    start: Point | None = None
 
     @classmethod
-    def of(cls, enemies=(), duel_circles=(), obstacles=(), patrols=None, keep_out=(), tracks=()) -> "Hazards":
+    def of(cls, enemies=(), duel_circles=(), obstacles=(), patrols=None, keep_out=(), tracks=(),
+           start=None) -> "Hazards":
         return cls(tuple(xy(enemy) for enemy in enemies), tuple(xy(circle) for circle in duel_circles),
                    tuple(xy(obstacle) for obstacle in obstacles), patrols,
-                   tuple((xy(centre), radius) for centre, radius in keep_out), tuple(tracks))
+                   tuple((xy(centre), radius) for centre, radius in keep_out), tuple(tracks),
+                   None if start is None else xy(start))
 
     def with_obstacles(self, obstacles) -> "Hazards":
         return replace(self, obstacles=self.obstacles + tuple(xy(obstacle) for obstacle in obstacles))
@@ -101,10 +106,13 @@ class Hazards:
 
     def forbids(self, point: Point, seconds: float = 0.0) -> bool:
         """Whether the wizard may not be at `point`, reached `seconds` from now."""
-        return (any(math.dist(point, circle) < DUEL_CIRCLE_NO_GO for circle in self.duel_circles)
+        return (any(math.dist(point, circle) < self.duel_clearance(circle) for circle in self.duel_circles)
                 or any(math.dist(point, obstacle) < OBSTACLE_RADIUS for obstacle in self.obstacles)
                 or any(math.dist(point, centre) < radius for centre, radius in self.keep_out)
                 or self.enemy_will_be_near(point, seconds))
+
+    def duel_clearance(self, circle: Point) -> float:
+        return DUEL_CIRCLE_NO_GO if self.start is None else duel_clearance(self.start, circle)
 
     def enemy_will_be_near(self, point: Point, seconds: float) -> bool:
         return any(math.dist(point, track.at(seconds)) < ENEMY_KEEP_OUT for track in self.tracks)
@@ -112,7 +120,7 @@ class Hazards:
     def line_is_open(self, a: Point, b: Point, seconds: float = 0.0) -> bool:
         """The line enters no duel circle, obstacle or keep-out circle, and no tracked enemy will be near it as
         the wizard walks it, reaching `a` `seconds` from now."""
-        return (all(distance_to_segment(circle, a, b) >= DUEL_CIRCLE_NO_GO for circle in self.duel_circles)
+        return (all(distance_to_segment(circle, a, b) >= self.duel_clearance(circle) for circle in self.duel_circles)
                 and all(distance_to_segment(obstacle, a, b) >= OBSTACLE_RADIUS for obstacle in self.obstacles)
                 and all(distance_to_segment(centre, a, b) >= radius for centre, radius in self.keep_out)
                 and self.line_clear_of_tracks(a, b, seconds))
@@ -131,6 +139,14 @@ class Hazards:
     def line_is_safe(self, a: Point, b: Point, seconds: float = 0.0) -> bool:
         return (self.line_is_open(a, b, seconds)
                 and all(distance_to_segment(enemy, a, b) >= LEG_ENEMY_CLEARANCE for enemy in self.enemies))
+
+
+def duel_clearance(here: Point, circle: Point) -> float:
+    """How near a route from `here` may pass a duel circle: DUEL_CIRCLE_NO_GO, or, when the wizard is already nearer,
+    a little less than where it is, so it can walk away from someone's fight. A route counted only the 900 units:
+    the first time duel circles were seen, the wizard stood 800 units from one, every route from there entered
+    that radius, and it stood still until a Fire Elf engaged it."""
+    return min(DUEL_CIRCLE_NO_GO, max(0.0, math.dist(xy(here), xy(circle)) - DUEL_WALK_AWAY_MARGIN))
 
 
 @dataclass
