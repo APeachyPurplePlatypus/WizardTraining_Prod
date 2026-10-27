@@ -80,9 +80,10 @@ class FreeArea:
     pieces with no walkable path between them, such as the two levels of Triton Avenue."""
 
     def __init__(self, area):
+        import shapely
         from shapely.geometry import LineString, Point
-        from shapely.prepared import prep
-        self._area, self._line, self._point = prep(area), LineString, Point
+        shapely.prepare(area)
+        self._area, self._line, self._point, self._contains_xy = area, LineString, Point, shapely.contains_xy
         self._pieces = list(getattr(area, "geoms", [area]))
 
     @property
@@ -116,7 +117,7 @@ class FreeArea:
         return nearest if nearest is not None and distances[nearest] <= reach else None
 
     def contains_point(self, x: float, y: float) -> bool:
-        return self._area.contains(self._point(x, y))
+        return bool(self._contains_xy(self._area, x, y))
 
     def contains_line(self, a, b) -> bool:
         if a[0] == b[0] and a[1] == b[1]:

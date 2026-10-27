@@ -1,3 +1,5 @@
+import math
+import random
 import struct
 import unittest
 
@@ -44,6 +46,26 @@ class PatrolMapTest(unittest.TestCase):
         self.assertLess(patrols.distance((500, 30), 2000), 31)
         self.assertEqual(patrols.distance((5000, 5000), 2000), 2000)
         self.assertEqual(len(patrols.segments), 1)
+
+
+class DistanceTest(unittest.TestCase):
+    def test_bucketed_distance_matches_every_sample_checked(self):
+        rng = random.Random(7)
+        nodes = {i: (rng.uniform(-5000, 5000), rng.uniform(-5000, 5000), 0) for i in range(1, 41)}
+        patrols = PatrolMap.from_paths(nodes, {f"Path {n}": [2 * n - 1, 2 * n] for n in range(1, 21)})
+        samples = [sample for bucket in patrols._buckets.values() for sample in bucket]
+        for _ in range(300):
+            point = (rng.uniform(-6000, 6000), rng.uniform(-6000, 6000))
+            for within in (300, 700, 1600):
+                expected = min([within, *(math.dist(point, sample) for sample in samples)])
+                self.assertAlmostEqual(patrols.distance(point, within), expected, places=6)
+
+    def test_a_path_added_later_is_seen(self):
+        patrols = PatrolMap()
+        patrols.add_segment((0, 0), (100, 0))
+        self.assertEqual(patrols.distance((0, 5000), 700), 700)
+        patrols.add_segment((0, 4900), (100, 4900))
+        self.assertAlmostEqual(patrols.distance((0, 5000), 700), 100)
 
 
 class NameMatchTest(unittest.TestCase):

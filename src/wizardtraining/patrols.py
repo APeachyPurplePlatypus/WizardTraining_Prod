@@ -28,7 +28,7 @@ PATH_ID_STRIDE = 8
 PATH_NAME = re.compile(rb"Path[\x20-\x7e]{1,80}")
 NOT_ENEMY_PATHS = ("wisp", "flax", "mistwood", "cattail", "chest", "reagent")
 SAMPLE_SPACING = 100.0
-BUCKET_SIZE = 1000.0
+BUCKET_SIZE = 250.0
 MIN_SHARED_PREFIX = 4
 MIN_WORD_LETTERS = 3
 SEASONAL_PATHS = ("event",)
@@ -81,6 +81,7 @@ class PatrolMap:
     segments: list[tuple[Point, Point]] = field(default_factory=list)
     paths: dict[str, list[Point]] = field(default_factory=dict)
     _buckets: dict[tuple[int, int], list[Point]] = field(default_factory=dict)
+    _around: dict[tuple, list[Point]] = field(default_factory=dict)
 
     @classmethod
     def from_paths(cls, nodes: dict[int, tuple], paths: dict[str, list[int]]) -> "PatrolMap":
@@ -99,6 +100,7 @@ class PatrolMap:
 
     def add_segment(self, a: Point, b: Point) -> None:
         self.segments.append((a, b))
+        self._around.clear()
         steps = max(1, int(math.dist(a, b) // SAMPLE_SPACING))
         for k in range(steps + 1):
             point = (a[0] + (b[0] - a[0]) * k / steps, a[1] + (b[1] - a[1]) * k / steps)
@@ -109,15 +111,24 @@ class PatrolMap:
         return int(point[0] // BUCKET_SIZE), int(point[1] // BUCKET_SIZE)
 
     def distance(self, point: Point, within: float) -> float:
-        """Distance from `point` to the nearest patrol path, or `within` when none is closer than that."""
-        reach = int(within // BUCKET_SIZE) + 1
-        bx, by = self._bucket(point)
-        nearest = within
-        for dx in range(-reach, reach + 1):
-            for dy in range(-reach, reach + 1):
-                for sample in self._buckets.get((bx + dx, by + dy), ()):
-                    nearest = min(nearest, math.dist(point, sample))
-        return nearest
+        """Distance from `point` to the nearest patrol path, or `within` when none is closer than that. Route
+        searches ask this for every cell they visit, tens of thousands of times, so it compares squared distances
+        over the samples of the surrounding buckets, gathered once per bucket."""
+        x, y = point
+        limit = nearest = within * within
+        for sample_x, sample_y in self._samples_around(self._bucket(point), int(within // BUCKET_SIZE) + 1):
+            squared = (sample_x - x) ** 2 + (sample_y - y) ** 2
+            if squared < nearest:
+                nearest = squared
+        return math.sqrt(nearest) if nearest < limit else within
+
+    def _samples_around(self, bucket: tuple[int, int], reach: int) -> list[Point]:
+        key = (bucket, reach)
+        if key not in self._around:
+            bx, by = bucket
+            self._around[key] = [sample for dx in range(-reach, reach + 1) for dy in range(-reach, reach + 1)
+                                 for sample in self._buckets.get((bx + dx, by + dy), ())]
+        return self._around[key]
 
     def segment_distance(self, point: Point) -> float:
         return min((distance_to_segment(point, a, b) for a, b in self.segments), default=math.inf)
