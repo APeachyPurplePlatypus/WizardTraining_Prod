@@ -87,8 +87,9 @@ def describe_round(entry: dict) -> str:
                         f"{modifier_text(enemy.get('incoming'), enemy.get('resistances'))}"
                         for enemy in view["enemies"]) or "none"
     mana = f", {view['mana']} mana" if view.get("mana") is not None else ""
+    reopened = "reopened the card choice; " if entry.get("reopened card choice") else ""
     return (f"round {view['round_number']}: me {view['health']}/{view['max_health']} with {view['pips']} pips{mana}; "
-            f"{entry['action']}; enemies left: {enemies}{hand_text(view.get('cards'))}")
+            f"{reopened}{entry['action']}; enemies left: {enemies}{hand_text(view.get('cards'))}")
 
 
 def hand_text(cards) -> str:

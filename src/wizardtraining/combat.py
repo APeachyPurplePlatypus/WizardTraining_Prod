@@ -37,7 +37,11 @@ CARDS_DRAW_SECONDS = 0.5
 EMPTY_HAND_READS = 6
 PAUSE_BETWEEN_CAST_CLICKS_SECONDS = 0.5
 FLEE_CONFIRM_WAIT_SECONDS = 1.0
-ACTION_BUTTONS = ["WorldView", "PlanningPhase", "Alignment", "PlanningPhaseSubWindow", "SpellSelection", "ActionButtons"]
+PLANNING = ["WorldView", "PlanningPhase", "Alignment", "PlanningPhaseSubWindow"]
+ACTION_BUTTONS = [*PLANNING, "SpellSelection", "ActionButtons"]
+WAITING_FOR_OTHERS = [*PLANNING, "WaitingForOthers"]
+CHANGE_CHOICE = [*WAITING_FOR_OTHERS, "Change"]
+CHANGE_SETTLE_SECONDS = 0.5
 PASS_BUTTON = [*ACTION_BUTTONS, "Focus"]
 FLEE_BUTTON = [*ACTION_BUTTONS, "Flee"]
 MESSAGE_BOX = ["MessageBoxModalWindow"]
@@ -206,9 +210,10 @@ async def read_hand(combat):
 
 
 async def play_round(combat, policy: CombatPolicy, can_flee: bool = True) -> dict:
+    changed = await reopen_card_choice(combat.client)
     view, me, cards, enemies = await read_hand(combat)
     view = replace(view, can_flee=can_flee and await flee_button_enabled(combat.client))
-    entry = {"round": view.round_number, "view": asdict(view)}
+    entry = {"round": view.round_number, "view": asdict(view), "reopened card choice": changed}
     if not view.cards:
         await pass_round(combat)
         entry["action"] = "pass: the hand read empty"
@@ -237,6 +242,21 @@ async def pass_round(combat) -> None:
     is visible, and in this client it always does: no pass or flee click took, and the round timer passed instead.
     After such a flee click, the wizard's casts stopped landing for the rest of the battle."""
     await click(combat.client, PASS_BUTTON)
+
+
+async def reopen_card_choice(client) -> bool:
+    """When the planning window still shows "waiting for others" at the start of the wizard's turn to choose, click
+    its Change button to get the hand back. A click on Flee that did not end the battle left that panel up, and
+    from then on no card click landed, into the next battle too: a Warhorn stayed at 285 for 13 rounds while the
+    wizard's casts and heals did nothing. True when it clicked."""
+    if not await showing(client, WAITING_FOR_OTHERS):
+        return False
+    try:
+        await click(client, CHANGE_CHOICE)
+    except LookupError:
+        return False
+    await asyncio.sleep(CHANGE_SETTLE_SECONDS)
+    return True
 
 
 async def flee_button_enabled(client) -> bool:
