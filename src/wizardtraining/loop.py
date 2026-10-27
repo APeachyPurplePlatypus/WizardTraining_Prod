@@ -36,14 +36,14 @@ from .equipment import count_items, equip, read_items, read_wizard
 from .events import (EventLog, describe_battle, describe_changes, describe_round, dialog_text, enemy_names, health_text,
                      threat_text)
 from .gear import describe_stats, upgrades
-from .geometry import distance_to_path, flat_distance, path_within, xy
+from .geometry import Point, distance_to_path, flat_distance, path_within, xy
 from .keys import tap
 from .knowledge import Knowledge
 from .motion import WALK_UNITS_PER_SECOND, ApproachLog, MotionTracker, closest_approach
 from .movement import LOADING, KeysIgnored, Reroute, face, travel
 from .navigation import load_planner
 from .policy import LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, SpellTypePolicy
-from .progress import (DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY, ENEMY_NEAR_PATH, LimitReached, Limits, PATH_THREATS,
+from .progress import (DUEL_BLOCKS_THE_WAY, DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY, ENEMY_NEAR_PATH, LimitReached, Limits, PATH_THREATS,
                        PlannedRoute, RunRecord, StopRun, check_limits, leaves_world, mana_for_a_fight, mana_to_travel,
                        nav_did_better,
                        progressed, remember_obstacles, safe_to_stand, short_for_a_fight, should_drink_potion, stalled,
@@ -98,6 +98,8 @@ FINISH_SAFELY_MINUTES = 15.0
 MANA_WAIT_SECONDS = 90.0
 MANA_WAIT_POLL_SECONDS = 10.0
 ENEMIES_IN_THE_WAY_WAIT_SECONDS = 4.0
+DUEL_WAIT_SECONDS = 30.0
+DUEL_WAIT_POLL_SECONDS = 3.0
 DEFEATED_HEALTH_FRACTION = 0.05
 NOT_FREE_TO_MOVE_WAIT_SECONDS = 3.0
 POTION_SETTLE_SECONDS = 3.0
@@ -1163,7 +1165,15 @@ class QuestLoop:
             planner.nav_first = True
             self.events.emit("walk", f"the collision walk data got stuck in {zone} where the nav graph walked on; "
                                      "routes there try the nav graph first from now on")
-        if trip["reason"] == "every route method failed" and around and moved < BARELY_MOVED_DISTANCE:
+        blocking_duel = await self.duel_blocking_the_way(planner, hazards, destination, trip, moved)
+        if blocking_duel is not None:
+            trip["reason"] = DUEL_BLOCKS_THE_WAY
+            self.record.duel_waits_in_a_row += 1
+            self.events.emit("walk", f"{did}: another player's fight at ({blocking_duel[0]:.0f}, "
+                                     f"{blocking_duel[1]:.0f}) is all that leaves no route; waiting for it to end "
+                                     f"({self.record.duel_waits_in_a_row} of {self.record.limits.max_duel_waits_in_a_row})")
+            await self.wait_for_duels_to_change(hazards.duel_circles)
+        elif trip["reason"] == "every route method failed" and around and moved < BARELY_MOVED_DISTANCE:
             trip["reason"] = ENEMIES_IN_THE_WAY
             self.record.immobile_threat_stops_in_a_row += 1
             self.events.emit("walk", f"{did}: {len(around)} enemies leave no route that keeps away from where "
@@ -1174,6 +1184,8 @@ class QuestLoop:
             await asyncio.sleep(ENEMY_PASS_WAIT_SECONDS)
         else:
             self.record.immobile_threat_stops_in_a_row = 0
+        if blocking_duel is None:
+            self.record.duel_waits_in_a_row = 0
         trip_summary = {"result": trip["result"], "reason": trip["reason"], "moved": round(moved),
                         "methods": [(tried["method"], tried.get("result"), tried.get("reason"),
                                      tried.get("sidesteps"), tried.get("seconds")) for tried in trip["attempts"]]}
@@ -1188,6 +1200,28 @@ class QuestLoop:
                                  f"{threat_text(threat)}", nearest_threat=threat)
         return travel_outcome(did, trip["reason"], moved, self.record, new_obstacles=new_obstacles,
                               trip=trip_summary, **details)
+
+    async def duel_blocking_the_way(self, planner: RoutePlanner, hazards: Hazards, destination, trip: dict,
+                                    moved: float) -> Point | None:
+        """The duel circle nearest the wizard when every route method failed, the wizard barely moved, and a route
+        exists without the circles: another player's fight is on the only way, not enemies."""
+        if trip["reason"] != "every route method failed" or moved >= BARELY_MOVED_DISTANCE:
+            return None
+        here = await self.client.body.position()
+        if not planner.blocked_only_by_duels(here, destination, hazards):
+            return None
+        return min(hazards.duel_circles, key=lambda circle: flat_distance(here, circle))
+
+    async def wait_for_duels_to_change(self, circles) -> None:
+        """Stand still for up to DUEL_WAIT_SECONDS, ending early when the duel circles loaded are no longer the ones
+        that blocked the way: a fight ended, or another began somewhere else."""
+        blocking = {(round(circle[0]), round(circle[1])) for circle in circles}
+        deadline = time.monotonic() + DUEL_WAIT_SECONDS
+        while time.monotonic() < deadline and not self.settings.stop_requested():
+            await asyncio.sleep(DUEL_WAIT_POLL_SECONDS)
+            _, now = await or_default(surroundings(self.client), ([], []))
+            if {(round(circle.x), round(circle.y)) for circle in now} != blocking:
+                return
 
     async def teleport_turn(self, volume: TeleportVolume, zone: str, planner: RoutePlanner) -> dict:
         """Walk into a teleport volume, wait for the jump, and remember where it led: another piece of this

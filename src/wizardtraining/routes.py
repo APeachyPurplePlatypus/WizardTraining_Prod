@@ -461,6 +461,21 @@ class RoutePlanner:
             usable.insert(0 if self.nav_first else len(usable), NAV)
         return usable + [STRAIGHT]
 
+    def has_mapped_route(self, start, goal, hazards: Hazards) -> bool:
+        """The walk data (collision or nav graph) gives a way from `start` to `goal` that keeps clear of `hazards`.
+        A straight line does not count: it knows of no wall."""
+        return any(self.route(method, start, goal, hazards) is not None
+                   for method in self.methods() if method != STRAIGHT)
+
+    def blocked_only_by_duels(self, start, goal, hazards: Hazards) -> bool:
+        """The duel circles in `hazards` are all that leave no route: the walk data gives none with them and one
+        without. In the Haunted Cave street the only way on passes 887 units from a circle, and the margin kept
+        from other players' fights is 900."""
+        if not hazards.duel_circles:
+            return False
+        return (not self.has_mapped_route(start, goal, hazards)
+                and self.has_mapped_route(start, goal, replace(hazards, duel_circles=())))
+
     def straight_line_ok(self, a: Point, b: Point, hazards: Hazards) -> bool:
         """A straight leg has nothing keeping it on the sidewalks, so it must stay clear of enemies, and when walk
         data loaded it may be no more dangerous than its ends: a straight line to a door once cut across a

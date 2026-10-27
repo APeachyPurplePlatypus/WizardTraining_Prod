@@ -359,6 +359,36 @@ class WayAcrossTest(unittest.TestCase):
         self.assertIsNone(self.planner().way_across(self.street, (-15000.0, 100.0), {"Tele Up": 0}))
 
 
+class BlockedOnlyByDuelsTest(unittest.TestCase):
+    """The Haunted Cave street: one way on, passing 887 units from another player's fight, with 900 kept clear."""
+
+    def corridor_planner(self):
+        vertices = [(480.0 * step, 0.0) for step in range(10)]
+        edges = [(a, a + 1) for a in range(9)] + [(a + 1, a) for a in range(9)]
+        return RoutePlanner("WizardCity/WC_Streets/WC_HauntedCave", nav_graph=NavGraph.from_edges(vertices, edges))
+
+    start, goal = (0.0, 0.0), (4320.0, 0.0)
+
+    def test_a_circle_beside_the_only_way_is_all_that_blocks_it(self):
+        planner = self.corridor_planner()
+        near = Hazards.of(duel_circles=[(2000.0, 887.0)])
+        self.assertTrue(planner.blocked_only_by_duels(self.start, self.goal, near))
+        self.assertTrue(planner.has_mapped_route(self.start, self.goal, Hazards.of(duel_circles=[(2000.0, 2000.0)])))
+
+    def test_a_circle_far_from_the_way_blocks_nothing(self):
+        planner = self.corridor_planner()
+        far = Hazards.of(duel_circles=[(2000.0, 3000.0)])
+        self.assertFalse(planner.blocked_only_by_duels(self.start, self.goal, far))
+        self.assertFalse(planner.blocked_only_by_duels(self.start, self.goal, Hazards()))
+
+    def test_a_goal_no_route_reaches_even_without_the_circles_is_not_blamed_on_them(self):
+        cut_in_two = NavGraph.from_edges([(0.0, 0.0), (480.0, 0.0), (4000.0, 0.0), (4480.0, 0.0)],
+                                         [(0, 1), (1, 0), (2, 3), (3, 2)])
+        planner = RoutePlanner("zone", nav_graph=cut_in_two)
+        hazards = Hazards.of(duel_circles=[(240.0, 800.0)])
+        self.assertFalse(planner.blocked_only_by_duels((0.0, 0.0), (4480.0, 0.0), hazards))
+
+
 def nav_file(waypoints, links) -> bytes:
     data = bytearray(b"\x00\x00") + struct.pack("<i", len(waypoints))
     for (x, y, z), number in waypoints:

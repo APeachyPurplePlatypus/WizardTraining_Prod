@@ -16,6 +16,7 @@ from .routes import COLLISION, NAV
 ENEMY_NEAR_PATH = "an enemy is near the path ahead"
 DUEL_NEAR_PATH = "a duel is near the path ahead"
 ENEMIES_IN_THE_WAY = "enemies leave no route"
+DUEL_BLOCKS_THE_WAY = "another player's fight leaves no route"
 PATH_THREATS = {ENEMY_NEAR_PATH, DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY}
 STATE_CHANGING_INTERRUPTS = {"battle", "dialog", "loading", "target in reach", "arrived"}
 MEANINGFUL_TRAVEL_DISTANCE = 300.0
@@ -60,6 +61,7 @@ class Limits:
     max_defeats: int = 0
     max_loading_waits_in_a_row: int = 40
     max_immobile_threat_stops_in_a_row: int = 8
+    max_duel_waits_in_a_row: int = 20
     max_obstacles_per_zone: int = 40
     max_zone_changes_without_quest_change: int = 10
     max_menu_choices_without_quest_change: int = 3
@@ -76,6 +78,7 @@ class RunRecord:
     turns_without_progress: int = 0
     loading_waits_in_a_row: int = 0
     immobile_threat_stops_in_a_row: int = 0
+    duel_waits_in_a_row: int = 0
     step_aways: list = field(default_factory=list)
     battle_log: list[dict] = field(default_factory=list)
     dialog_log: list[dict] = field(default_factory=list)
@@ -229,12 +232,15 @@ def should_drink_potion(fraction: float | None, charges) -> bool:
 def travel_outcome(did: str, stop_reason: str | None, moved: float, record: RunRecord, *,
                    new_obstacles: int = 0, **details) -> dict:
     """`stop_reason` is why the walk ended early, or None. Waiting for an enemy to clear the path counts
-    as progress for a few stops in a row, no more. Finding new obstacles is progress, because the next
-    route goes around them; `remember_obstacles` caps how many a zone may collect."""
+    as progress for a few stops in a row, no more; waiting for another player's fight to end, which leaves the
+    only way unwalkable, counts for `max_duel_waits_in_a_row` stops. Finding new obstacles is progress, because
+    the next route goes around them; `remember_obstacles` caps how many a zone may collect."""
     waiting_for_the_path = (stop_reason in PATH_THREATS and record.immobile_threat_stops_in_a_row
                             <= record.limits.max_immobile_threat_stops_in_a_row)
+    waiting_for_a_duel = (stop_reason == DUEL_BLOCKS_THE_WAY
+                          and record.duel_waits_in_a_row <= record.limits.max_duel_waits_in_a_row)
     if (moved >= MEANINGFUL_TRAVEL_DISTANCE or stop_reason in STATE_CHANGING_INTERRUPTS or waiting_for_the_path
-            or new_obstacles > 0):
+            or waiting_for_a_duel or new_obstacles > 0):
         return progressed(did, new_obstacles=new_obstacles, **details)
     return stalled(did, new_obstacles=new_obstacles, **details)
 

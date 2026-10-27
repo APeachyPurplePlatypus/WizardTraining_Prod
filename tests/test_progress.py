@@ -1,6 +1,6 @@
 import unittest
 
-from wizardtraining.progress import (APPROACH_MARGIN, ENEMY_NEAR_PATH, ENEMY_PATH_CLEARANCE, ENGAGE_HEALTH_FRACTION,
+from wizardtraining.progress import (APPROACH_MARGIN, DUEL_BLOCKS_THE_WAY, ENEMY_NEAR_PATH, ENEMY_PATH_CLEARANCE, ENGAGE_HEALTH_FRACTION,
                                      ENGAGE_MANA_FRACTION, MEANINGFUL_TRAVEL_DISTANCE, LimitReached, Limits,
                                      PlannedRoute, RunRecord, StopRun, check_limits, health_for_a_fight, leaves_world,
                                      mana_for_a_fight, mana_to_travel, nav_did_better, progressed, remember_obstacles,
@@ -147,6 +147,14 @@ class TravelOutcomeTest(unittest.TestCase):
     def test_waiting_for_an_enemy_counts_only_a_few_times(self):
         self.assertTrue(self.outcome(ENEMY_NEAR_PATH, 0, stops_in_a_row=1))
         self.assertFalse(self.outcome(ENEMY_NEAR_PATH, 0, stops_in_a_row=Limits().max_immobile_threat_stops_in_a_row + 1))
+
+    def test_waiting_for_another_players_fight_counts_for_longer_than_waiting_for_an_enemy(self):
+        run = record()
+        run.duel_waits_in_a_row = Limits().max_duel_waits_in_a_row
+        self.assertTrue(travel_outcome("travel", DUEL_BLOCKS_THE_WAY, 0, run)["progress"])
+        run.duel_waits_in_a_row += 1
+        self.assertFalse(travel_outcome("travel", DUEL_BLOCKS_THE_WAY, 0, run)["progress"])
+        self.assertGreater(Limits().max_duel_waits_in_a_row, Limits().max_immobile_threat_stops_in_a_row)
 
 
 class PlannedRouteTest(unittest.TestCase):
