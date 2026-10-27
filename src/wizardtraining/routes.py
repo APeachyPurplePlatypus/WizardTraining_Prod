@@ -191,6 +191,7 @@ class RoutePlanner:
         self.status = status or {}
         self.piece_of: Callable[[Point], int | None] | None = None
         self.teleports: list[tuple[TeleportVolume, int | None]] = []
+        self.placed_objects: list = []
 
     def crossing(self, start, goal, outcomes: dict[str, object]) -> TeleportVolume | None:
         """A teleport volume to walk into when `goal` lies in another walkable piece than `start`, or None

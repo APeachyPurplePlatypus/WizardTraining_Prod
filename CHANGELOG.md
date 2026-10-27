@@ -4,6 +4,14 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ## Unreleased
 
+### Added
+
+- **Targets for goals the quest arrow doesn't point at.**
+  - **What:** when the arrow reads (0, 0, 0), the loop now looks for the goal's target itself. It tries placed objects first: the zone's `gamedata.bin` gives every placed object's template and position (`placed.py`), and the goal's client tags name the objects it needs, so the loop walks to the nearest unused match. Otherwise it tries enemies: each goal now carries the language codes its text fills in for the item and the enemy, and each tracked enemy carries its template's display code, so the loop walks to the nearest loaded enemy whose code the goal names. A used object isn't visited again, and the event log says which target was chosen.
+  - **Why:** "Clear as Crystal" asks the wizard to collect a Cog, then defeat Scarlet Screamers. The goal the game tracked had no quest helper, so the arrow read (0, 0, 0), and the Cog wasn't among the loaded entities. The goal's tags were `WC_TA_Cog` and `Ddl_WC_TA_Cogs`, and Triton's `gamedata.bin` places six `WC_TA_Cog instance` objects on the upper level. The defeat goal names its enemy as `WizardMobs_00000331`, "Scarlet Screamer".
+  - **How the file was read:** the layout was inferred. An object's name is stored after a 2-byte length, and x, y and z are floats 54, 50 and 46 bytes before it. Triton's telepad 04 decodes to (-10536.5, -6778.9, 137.5), as the live entity reads, and its other telepads sit where its teleport volumes are.
+  - **Not verified:** other zones' files; goals whose tags name NPCs rather than objects; enemies not loaded yet.
+
 ### Fixed
 
 - **An arrow with no target stops the run instead of walking to the map's origin.**

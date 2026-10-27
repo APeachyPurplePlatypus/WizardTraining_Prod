@@ -20,12 +20,12 @@ import logging
 import time
 import traceback
 
-from wizwalker import Keycode
+from wizwalker import XYZ, Keycode
 
 from .combat import approach, fight
 from .config import Settings
 from .dialog import (DIALOG_FINISHED, FOLLOW_UP_WAIT_SECONDS, NPC_ARRIVE_DISTANCE, OFFER_LEFT_FOR_OPERATOR,
-                     choose_service, dialog_open, leave_services, near_npc, read_conversation, service_options,
+                     choose_service, close_enough, dialog_open, leave_services, near_npc, read_conversation, service_options,
                      services_open, talk, use_object, wait_for_dialog)
 from .entities import HEALTH_WISP, MANA_WISP, nearby_enemies, step_away, surroundings, wisps
 from .events import EventLog, describe_battle, describe_changes, describe_round, enemy_names, health_text
@@ -42,6 +42,7 @@ from .reports import plain, save_report
 from .routes import DUEL_CIRCLE_NO_GO, Hazards, RoutePlanner
 from .session import NoClient, attached, hooks_ready
 from .state import attempt, battle_showing, free_to_move, health_fraction, mana_fraction, snapshot
+from .placed import objects_for_goal
 from .targets import bystanders, others, quest_targets, safe_wisps, summary, too_close
 from .teleports import LEFT_ZONE, NO_EFFECT, TeleportVolume, describe_outcome
 from .ui import POTION_BUTTON, click, visible_children
@@ -81,6 +82,7 @@ class QuestLoop:
         self.client = client
         self.use_potions = use_potions
         self._potion_failed = False
+        self._object_in_use = None
         self.events = events or EventLog()
         self._last_state = self._last_quest = None
         self.settings = settings
@@ -336,8 +338,11 @@ class QuestLoop:
         goal = goals[0] if goals else {"type": "persona", "destination_zone": ""}
         arrow = await read_quest_arrow(self.client)
         if arrow_shows_no_target(arrow):
-            raise StopRun(f"the quest arrow shows no target for the {goal['type']} goal of "
-                          f"{quest.get('title') or quest['name_key']}; left for the operator")
+            arrow = await self.target_without_arrow(goal)
+            if arrow is None:
+                raise StopRun(f"the quest arrow shows no target for the {goal['type']} goal of "
+                              f"{quest.get('title') or quest['name_key']}, and neither its tags {goal.get('tags')} "
+                              f"nor its enemy {goal.get('target_code')} could be found; left for the operator")
         self.record.quest = {"name": quest["name_key"], "title": quest.get("title"), "goal": goal["type"],
                              "goal_id": goal.get("id"),
                              "goal_zone": goal["destination_zone"], "arrow": plain(arrow)}
@@ -347,6 +352,26 @@ class QuestLoop:
         if handler is None:
             raise StopRun(f"goal type {goal['type']} is not handled yet")
         return await handler(arrow, goal)
+
+    async def target_without_arrow(self, goal: dict):
+        """Where a goal's target is when the quest arrow has none: the nearest placed object matching the goal's
+        tags that has not been used yet, else the nearest loaded enemy whose display code the goal names."""
+        me = await self.client.body.position()
+        planner = await self.planner()
+        objects = objects_for_goal(planner.placed_objects, goal.get("tags") or [], me=(me.x, me.y),
+                                   visited=self.record.visited_objects)
+        if objects:
+            self._object_in_use = objects[0]
+            self.events.emit("target", f"no quest arrow; going to placed object {objects[0].template} at "
+                                       f"({objects[0].x:.0f}, {objects[0].y:.0f}), {len(objects)} not yet used")
+            return XYZ(objects[0].x, objects[0].y, objects[0].z)
+        code = goal.get("target_code")
+        matching = [enemy for enemy in await nearby_enemies(self.client) if code and enemy.get("display_code") == code]
+        if matching:
+            self.events.emit("target", f"no quest arrow; going to {matching[0]['name']} ({code}), "
+                                       f"{matching[0]['distance']:.0f} away, {len(matching)} in sight")
+            return matching[0]["position"]
+        return None
 
     async def active_main_quest(self) -> dict | None:
         active = (await read_quests(self.client))["active"]
@@ -400,6 +425,8 @@ class QuestLoop:
             goals_before = await self.open_goal_count()
             record = {}
             result = await use_object(self.client, arrow, record, self.offer_policy)
+            if self._object_in_use is not None and close_enough(record.get("nudges", [])):
+                self.record.visited_objects.append(self._object_in_use.key)
             self.record.dialog_log.append(record)
             if result == OFFER_LEFT_FOR_OPERATOR:
                 raise StopRun(result)

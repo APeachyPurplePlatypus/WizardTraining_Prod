@@ -75,6 +75,7 @@ class RunRecord:
     talks_leaving_goal_open: dict[str, int] = field(default_factory=dict)
     teleport_outcomes: dict[str, dict[str, object]] = field(default_factory=dict)
     tried_wisps: list = field(default_factory=list)
+    visited_objects: list[str] = field(default_factory=list)
 
     def record_turn(self, turn: dict) -> None:
         self.turns.append(turn)

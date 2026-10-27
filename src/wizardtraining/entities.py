@@ -49,12 +49,23 @@ async def classify(entity, name: str) -> str:
     return OTHER if flag is None else (ENEMY if flag else NPC)
 
 
+async def display_code(entity) -> str | None:
+    """The language code of an entity's display name, such as "WizardMobs_00000331" (Scarlet Screamer).
+    Quest goals name their enemies with the same codes."""
+    try:
+        template = await entity.object_template()
+        return (await template.display_name() or None) if template is not None else None
+    except Exception:
+        return None
+
+
 class EntityTracker:
     """Remembers what each loaded entity is, and re-reads only the positions of the ones that matter."""
 
     def __init__(self, client):
         self._client = client
         self._kinds: dict[tuple[int, str], str] = {}
+        self._display_codes: dict[tuple[int, str], str | None] = {}
         self._zone = None
         self._tracked = []
         self._refreshed_at = 0.0
@@ -65,7 +76,7 @@ class EntityTracker:
         self._refreshed_at = time.monotonic()
         zone = await self._client.zone_name()
         if zone != self._zone:
-            self._zone, self._kinds = zone, {}
+            self._zone, self._kinds, self._display_codes = zone, {}, {}
         tracked = []
         for entity in await self._client.get_base_entity_list():
             try:
@@ -75,6 +86,8 @@ class EntityTracker:
             key = (entity.base_address, name)
             if key not in self._kinds:
                 self._kinds[key] = await classify(entity, name)
+                if self._kinds[key] == ENEMY:
+                    self._display_codes[key] = await display_code(entity)
             if self._kinds[key] != OTHER:
                 tracked.append((entity, self._kinds[key], name))
         self._tracked = tracked
@@ -96,7 +109,8 @@ class EntityTracker:
             if kind == DUEL_CIRCLE:
                 circles.append(where)
             else:
-                enemies.append({"id": entity.base_address, "entity": entity, "name": name, "position": where})
+                enemies.append({"id": entity.base_address, "entity": entity, "name": name, "position": where,
+                                "display_code": self._display_codes.get((entity.base_address, name))})
         return enemies, circles
 
     async def npc_positions(self) -> list:

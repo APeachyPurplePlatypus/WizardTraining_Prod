@@ -51,17 +51,42 @@ async def read_quests(client) -> dict:
         journal.append(entry)
         if quest_id == active_id:
             active = entry
-            entry["goals"] = [
-                {
-                    "id": goal_id,
-                    "name_key": await attempt(goal.name_lang_key()),
-                    "type": await attempt(goal.goal_type()),
-                    "destination_zone": await attempt(goal.goal_destination_zone()),
-                    "done": await attempt(goal.goal_status()),
-                }
-                for goal_id, goal in (await quest.goal_data()).items()
-            ]
+            entry["goals"] = [await read_goal(goal_id, goal) for goal_id, goal in (await quest.goal_data()).items()]
     return {"active": active, "journal": journal}
+
+
+async def read_goal(goal_id, goal) -> dict:
+    """A goal's type and state, plus what locates it when the quest arrow does not: its client tags (which
+    name placed objects, such as "WC_TA_Cog"), whether it has a quest helper, and the language codes its
+    text fills in for the item ("TALLYTEXT") and the enemy or object ("TALLYTEXT2")."""
+    madlib = await _madlib(goal)
+    return {
+        "id": goal_id,
+        "name_key": await attempt(goal.name_lang_key()),
+        "type": await attempt(goal.goal_type()),
+        "destination_zone": await attempt(goal.goal_destination_zone()),
+        "done": await attempt(goal.goal_status()),
+        "no_quest_helper": await attempt(goal.no_quest_helper()),
+        "tags": await _tags(goal),
+        "item_code": madlib.get("TALLYTEXT") or None,
+        "target_code": madlib.get("TALLYTEXT2") or None,
+    }
+
+
+async def _madlib(goal) -> dict[str, str]:
+    try:
+        block = await goal.madlib_block()
+        return {await arg.identifier(): await arg.maybe_data_str() for arg in await block.entries()}
+    except Exception:
+        return {}
+
+
+async def _tags(goal) -> list[str]:
+    try:
+        tags = await goal.client_tag_list()
+        return list(await tags.client_tags()) if tags is not None else []
+    except Exception:
+        return []
 
 
 async def _title(name_key) -> str | None:
