@@ -60,7 +60,7 @@ Some zones' walkable areas come in separate pieces, such as Triton Avenue's lowe
 
 ## Battles
 
-`combat.fight` waits for each planning phase. It builds a `policy.RoundView` (health, pips, cards by spell type, living enemies) and asks the policy for a `Cast`. It validates the choice, casts through the mouseless cursor or passes, and waits for the next round. The battle code stops on timeouts, a round limit or any error, leaving the battle to the operator.
+`combat.fight` waits for each planning phase. It builds a `policy.RoundView` (health, pips, cards by spell type and school, living enemies with their shields, wards, traps and resistances) and asks the policy for a `Cast`. It validates the choice, casts through the mouseless cursor or passes, and waits for the next round. The battle code stops on timeouts, a round limit or any error, leaving the battle to the operator.
 
 ## Dialogs
 

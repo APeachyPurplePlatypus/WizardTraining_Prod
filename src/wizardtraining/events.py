@@ -71,9 +71,22 @@ def enemies_at_once(rounds: list[dict]) -> tuple[int, Counter]:
 
 def describe_round(entry: dict) -> str:
     view = entry["view"]
-    enemies = ", ".join(f"{enemy['name']} {enemy['health']}" for enemy in view["enemies"]) or "none"
+    enemies = ", ".join(f"{enemy['name']} {enemy['health']}"
+                        f"{modifier_text(enemy.get('incoming'), enemy.get('resistances'))}"
+                        for enemy in view["enemies"]) or "none"
     return (f"round {view['round_number']}: me {view['health']}/{view['max_health']} with {view['pips']} pips; "
             f"{entry['action']}; enemies left: {enemies}")
+
+
+def modifier_text(modifiers, resistances=None) -> str:
+    """" (Myth -50%; resists Fire 25%, Ice -15%)" for an enemy's shields, wards and traps, then its resistances
+    (negative for a weakness), or "" without any."""
+    parts = []
+    if modifiers:
+        parts.append(", ".join(f"{modifier['school']} {modifier['percent']:+d}%" for modifier in modifiers))
+    if resistances:
+        parts.append("resists " + ", ".join(f"{school} {value:.0%}" for school, value in resistances.items()))
+    return f" ({'; '.join(parts)})" if parts else ""
 
 
 def describe_battle(battle: dict, *, seconds: float, before: dict, after: dict, outcome: str) -> str:

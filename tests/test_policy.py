@@ -1,18 +1,20 @@
 import unittest
 
-from wizardtraining.policy import (ACCEPT, DECLINE, GO_BACK, LEAVE_MENU, STOP, Card, Cast, Combatant, MainQuestsOnly,
-                                   RoundView, SpellTypePolicy, problem_with)
+from wizardtraining.policy import (ACCEPT, DECLINE, GO_BACK, LEAVE_MENU, STOP, UNIVERSAL, Card, Cast, Combatant,
+                                   DamageModifier, MainQuestsOnly, Pass, RoundView, SpellTypePolicy, problem_with)
 
 HEAL = Card("Fairy", "Heal", True)
 BOLT = Card("Fire Cat", "Damage", True)
 STORM = Card("Firestorm", "AOE", True)
 TOO_DEAR = Card("Big Spell", "Damage", False)
 SHIELD = Card("Tower Shield", "Ward", True)
+MYTH_BOLT = Card("Blood Bat", "Damage", True, "Myth")
+ICE_BOLT = Card("Frost Beetle", "Damage", True, "Ice")
 ONE_ENEMY = (Combatant("Ghost", 200),)
 
 
-def view(cards, health=500, max_health=500, enemies=ONE_ENEMY):
-    return RoundView(round_number=1, health=health, max_health=max_health, pips=3, power_pips=0, cards=tuple(cards),
+def view(cards, health=500, max_health=500, enemies=ONE_ENEMY, pips=3):
+    return RoundView(round_number=1, health=health, max_health=max_health, pips=pips, power_pips=0, cards=tuple(cards),
                      enemies=enemies)
 
 
@@ -36,6 +38,49 @@ class SpellTypePolicyTest(unittest.TestCase):
 
     def test_passes_with_no_living_enemy(self):
         self.assertIsNone(self.policy.choose(view([BOLT], enemies=())))
+
+    def test_plays_around_a_ward(self):
+        warded = (Combatant("The Harvest Lord", 510, (DamageModifier("Myth", -50),)),)
+        self.assertEqual(self.policy.choose(view([MYTH_BOLT, ICE_BOLT], enemies=warded)), Cast(1, "enemy"))
+
+    def test_plays_into_a_trap(self):
+        trapped = (Combatant("Ghost", 200, (DamageModifier("Ice", 25),)),)
+        self.assertEqual(self.policy.choose(view([MYTH_BOLT, ICE_BOLT], enemies=trapped)), Cast(1, "enemy"))
+
+    def test_a_shield_on_every_school_keeps_the_hand_order(self):
+        shielded = (Combatant("Ghost", 200, (DamageModifier(UNIVERSAL, -30),)),)
+        self.assertEqual(self.policy.choose(view([MYTH_BOLT, ICE_BOLT], enemies=shielded)), Cast(0, "enemy"))
+
+    def test_damage_factor_combines_school_and_universal_modifiers(self):
+        enemy = Combatant("Ghost", 200, (DamageModifier("Myth", -50), DamageModifier(UNIVERSAL, -20)))
+        self.assertAlmostEqual(enemy.damage_factor("Myth"), 0.4)
+        self.assertAlmostEqual(enemy.damage_factor("Ice"), 0.8)
+        self.assertAlmostEqual(enemy.damage_factor(None), 0.8)
+
+    def test_plays_the_school_the_enemy_is_weak_to(self):
+        resists_myth = (Combatant("Ghost", 200, resistances={"Myth": 0.3, "Ice": -0.15}),)
+        self.assertEqual(self.policy.choose(view([MYTH_BOLT, ICE_BOLT], enemies=resists_myth)), Cast(1, "enemy"))
+
+    def test_resistance_to_every_school_applies_to_unlisted_schools(self):
+        enemy = Combatant("Ghost", 200, resistances={UNIVERSAL: 0.1, "Myth": 0.4})
+        self.assertAlmostEqual(enemy.damage_factor("Ice"), 0.9)
+        self.assertAlmostEqual(enemy.damage_factor("Myth"), 0.6)
+
+    def test_saves_pips_for_a_heal_when_low(self):
+        dear_heal = Card("Fairy", "Heal", False, "Life", pips=3)
+        choice = self.policy.choose(view([BOLT, dear_heal], health=100, pips=1))
+        self.assertIsInstance(choice, Pass)
+        self.assertIn("Fairy", choice.reason)
+
+    def test_attacks_when_low_and_the_heal_is_out_of_reach(self):
+        shadow_heal = Card("Big Heal", "Heal", False, "Life", pips=9)
+        unknown_cost = Card("Odd Heal", "Heal", False, "Life")
+        self.assertEqual(self.policy.choose(view([BOLT, shadow_heal, unknown_cost], health=100, pips=1)),
+                         Cast(0, "enemy"))
+
+    def test_does_not_save_pips_when_healthy(self):
+        dear_heal = Card("Fairy", "Heal", False, "Life", pips=3)
+        self.assertEqual(self.policy.choose(view([BOLT, dear_heal], health=400, pips=1)), Cast(0, "enemy"))
 
     def test_unknown_health_is_not_low(self):
         self.assertEqual(self.policy.choose(view([HEAL, BOLT], health=None)), Cast(1, "enemy"))

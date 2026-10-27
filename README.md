@@ -12,7 +12,7 @@ It comes out of one character's unattended run from level 1 to level 5 in Wizard
 - **Moves like a player:** turns with A/D and walks with W, steering on the move under a 20 Hz watcher. No teleport, no speed changes, no writes to position or facing.
 - **Plans routes** over the zone's walk data: Deimos's collision walk grid, then the zone.nav waypoint graph, then a straight line. Routes cost more near enemies and never cross another player's duel circle.
 - **Plays main quests:** goal types bounty, persona (talk), waypoint (including doors to other zones) and usage (use an object). Follow-up dialogs hand out the next main quest.
-- **Fights** with a replaceable combat policy. The default heals when low, otherwise casts the first affordable attack.
+- **Fights** with a replaceable combat policy. The default heals when low, saving pips for a heal it cannot afford yet; otherwise it casts the affordable attack whose school the target's shields, wards, traps and resistances let through best.
 - **Stops for the operator** whenever it is unsure: a non-main quest, an unknown goal type, an optional quest offer, a defeat, a popup holding the keyboard, turns without progress, or any limit.
 
 ## Status

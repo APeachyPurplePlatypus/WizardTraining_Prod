@@ -42,6 +42,13 @@ class DescriptionTest(unittest.TestCase):
         self.assertEqual(text, "round 2: me 450/624 with 3 pips; cast Frost Beetle on enemy; "
                                "enemies left: Haunted Minion 35")
 
+    def test_describe_round_shows_wards_and_traps(self):
+        entry = round_entry(3, 400, "cast Frost Beetle (Ice) on enemy", [("The Harvest Lord", 335)])
+        entry["view"]["enemies"][0]["incoming"] = [{"school": "Myth", "percent": -50}, {"school": "Ice", "percent": 25}]
+        self.assertTrue(describe_round(entry).endswith("enemies left: The Harvest Lord 335 (Myth -50%, Ice +25%)"))
+        entry["view"]["enemies"][0]["resistances"] = {"Myth": 0.3, "Storm": -0.1}
+        self.assertTrue(describe_round(entry).endswith("(Myth -50%, Ice +25%; resists Myth 30%, Storm -10%)"))
+
     def test_describe_battle_says_what_happened(self):
         battle = {"rounds": [round_entry(1, 624, "cast Imp", [("Haunted Minion", 135)]),
                              round_entry(2, 580, "cast Imp", [("Haunted Minion", 40)])]}

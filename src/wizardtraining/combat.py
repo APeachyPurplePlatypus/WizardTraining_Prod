@@ -1,7 +1,9 @@
 """Battles: walk into an enemy, then play each planning phase with a `CombatPolicy`.
 
 Cards are described by the game's own spell type ("Damage", "Steal", "AOE", "Heal"), as Deimos reads
-them. Clicks go through the mouseless cursor (see `ui`), switched on only for the battle.
+them, and by their magic school. Enemies carry their shields, wards and traps, read from their hanging
+effects the way Deimos's combat maths reads them: a "modify incoming damage" effect of one school, or of
+every school when its damage type is the universal one. Clicks go through the mouseless cursor (see `ui`), switched on only for the battle.
 
 Battle readings can be wrong: a failed duel lookup reads as "ended", so the end of a battle is read
 twice, BATTLE_END_CONFIRM_SECONDS apart. Anything unexpected stops the battle code and leaves the
@@ -19,7 +21,7 @@ from wizwalker.memory import DuelPhase
 
 from .geometry import flat_distance
 from .movement import KeysIgnored, face_and_step
-from .policy import Card, Cast, CombatPolicy, Combatant, RoundView, problem_with
+from .policy import UNIVERSAL, Card, Cast, CombatPolicy, Combatant, DamageModifier, Pass, RoundView, problem_with
 from .reports import plain
 from .state import attempt
 from .ui import enable_clicks
@@ -34,6 +36,12 @@ CARDS_DRAW_SECONDS = 0.5
 PAUSE_BETWEEN_CAST_CLICKS_SECONDS = 0.5
 BATTLE_END_CONFIRM_SECONDS = 1.0
 DUEL_CIRCLE_EXIT_SECONDS = 2.0
+SCHOOL_NAMES = {2343174: "Fire", 72777: "Ice", 83375795: "Storm", 2448141: "Myth", 2330892: "Life",
+                78318724: "Death", 1027491821: "Balance", 2625203: "Star", 78483: "Sun", 2504141: "Moon",
+                1429009101: "Shadow", 80289: UNIVERSAL}
+INCOMING_DAMAGE = "modify_incoming_damage"
+SCHOOLS_IN_STAT_ORDER = ("Fire", "Ice", "Storm", "Myth", "Life", "Death", "Balance", "Star", "Sun", "Moon",
+                         "Gardening", "Shadow")
 
 
 async def approach(client, enemy: dict) -> dict:
@@ -106,11 +114,58 @@ async def number(coro) -> int | None:
     return value if isinstance(value, int) and not isinstance(value, bool) else None
 
 
+async def card_school_and_pips(card) -> tuple[str | None, int | None]:
+    try:
+        spell = await card.wait_for_graphical_spell()
+    except Exception:
+        return None, None
+    school = SCHOOL_NAMES.get(await number(spell.magic_school_id()))
+    try:
+        pips = await number((await spell.pip_cost()).spell_rank())
+    except Exception:
+        pips = None
+    return school, pips
+
+
+async def resistances(member) -> dict[str, float]:
+    """A combatant's resistance (positive) or weakness (negative) to each school, as fractions, from its
+    stats: the per-school values in SCHOOLS_IN_STAT_ORDER plus the all-schools value, as Deimos adds them.
+    Only schools with a value are kept; the all-schools value is kept as UNIVERSAL."""
+    try:
+        stats = await member.get_stats()
+        by_school, every_school = await stats.dmg_reduce_percent(), await stats.dmg_reduce_percent_all()
+    except Exception:
+        return {}
+    found = {school: round(value + every_school, 3) for school, value in zip(SCHOOLS_IN_STAT_ORDER, by_school)
+             if round(value + every_school, 3)}
+    if round(every_school, 3):
+        found[UNIVERSAL] = round(every_school, 3)
+    return found
+
+
+async def incoming_modifiers(member) -> tuple[DamageModifier, ...]:
+    """The shields, wards and traps on a combatant. Effects that cannot be read are left out."""
+    try:
+        effects = await (await member.get_participant()).hanging_effects()
+    except Exception:
+        return ()
+    modifiers = []
+    for effect in effects:
+        if await attempt(effect.effect_type()) != INCOMING_DAMAGE:
+            continue
+        school = SCHOOL_NAMES.get(await number(effect.damage_type()))
+        percent = await number(effect.effect_param())
+        if school is not None and percent:
+            modifiers.append(DamageModifier(school, percent))
+    return tuple(modifiers)
+
+
 async def read_round(combat):
     """The round as a policy sees it, plus the game objects needed to act on its choice."""
     me = await combat.get_client_member()
     enemies = [member for member in await combat.get_all_monster_members() if not await member.is_dead()]
     cards = await combat.get_cards()
+    schools_and_pips = [await card_school_and_pips(card) for card in cards]
     view = RoundView(
         round_number=await number(combat.round_number()),
         health=await number(me.health()),
@@ -118,8 +173,10 @@ async def read_round(combat):
         pips=await number(me.normal_pips()),
         power_pips=await number(me.power_pips()),
         cards=tuple([Card(name=await attempt(card.name()), spell_type=await attempt(card.type_name()),
-                          castable=await attempt(card.is_castable()) is True) for card in cards]),
-        enemies=tuple([Combatant(name=await attempt(enemy.name()), health=await number(enemy.health()))
+                          castable=await attempt(card.is_castable()) is True, school=school, pips=pips)
+                     for card, (school, pips) in zip(cards, schools_and_pips)]),
+        enemies=tuple([Combatant(name=await attempt(enemy.name()), health=await number(enemy.health()),
+                                 incoming=await incoming_modifiers(enemy), resistances=await resistances(enemy))
                        for enemy in enemies]),
     )
     return view, me, cards, enemies
@@ -129,13 +186,17 @@ async def play_round(combat, policy: CombatPolicy) -> dict:
     view, me, cards, enemies = await read_round(combat)
     entry = {"round": view.round_number, "view": asdict(view)}
     choice = policy.choose(view)
-    problem = None if choice is None else problem_with(choice, view)
-    if choice is None or problem:
+    if choice is None or isinstance(choice, Pass):
         await combat.pass_button()
-        entry["action"] = "pass" if problem is None else f"pass: {problem}"
+        entry["action"] = "pass" if choice is None else f"pass: {choice.reason}"
+        return entry
+    if problem := problem_with(choice, view):
+        await combat.pass_button()
+        entry["action"] = f"pass: {problem}"
         return entry
     await cards[choice.card].cast(cast_target(choice, me, enemies), sleep_time=PAUSE_BETWEEN_CAST_CLICKS_SECONDS)
-    entry["action"] = f"cast {view.cards[choice.card].name} on {choice.target}"
+    card = view.cards[choice.card]
+    entry["action"] = f"cast {card.name}{f' ({card.school})' if card.school else ''} on {choice.target}"
     return entry
 
 

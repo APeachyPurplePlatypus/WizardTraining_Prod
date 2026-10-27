@@ -7,29 +7,55 @@ check what a policy returns before acting on it.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal, Protocol
 
 ATTACK_TARGETS = {"Damage": "enemy", "Steal": "enemy", "AOE": "all enemies"}
 HEAL_SPELL_TYPES = {"Heal"}
 LOW_HEALTH_FRACTION = 0.4
+MOST_PIPS_TO_SAVE_FOR = 7
 SIDE_QUEST_OFFER_PHRASE = "offering you a side quest"
 ACCEPT, DECLINE, GO_BACK, STOP = "accept", "decline", "go back", "stop"
 LEAVE_MENU = "leave menu"
+UNIVERSAL = "Universal"
 
 
 @dataclass(frozen=True)
 class Card:
-    """A card in hand. `spell_type` is the game's own type name ("Damage", "Steal", "AOE", "Heal", ...)."""
+    """A card in hand. `spell_type` is the game's own type name ("Damage", "Steal", "AOE", "Heal", ...) and
+    `school` its magic school ("Fire", "Myth", ...) when it could be read."""
     name: str | None
     spell_type: str | None
     castable: bool
+    school: str | None = None
+    pips: int | None = None
+
+
+@dataclass(frozen=True)
+class DamageModifier:
+    """A shield, ward or trap on a combatant: damage of `school`, or of every school when it is UNIVERSAL,
+    changes by `percent` on the next hit. Negative for shields and wards, positive for traps."""
+    school: str
+    percent: int
 
 
 @dataclass(frozen=True)
 class Combatant:
+    """A living combatant. `resistances` are its own stats by school, as fractions: 0.25 resists a quarter of
+    that school's damage, -0.15 takes 15% more. A school not listed takes the UNIVERSAL value, if any."""
     name: str | None
     health: int | None
+    incoming: tuple[DamageModifier, ...] = ()
+    resistances: dict[str, float] = field(default_factory=dict)
+
+    def damage_factor(self, school: str | None) -> float:
+        """The share of a hit of `school` that lands after this combatant's shields, wards, traps and
+        resistances."""
+        factor = 1.0
+        for modifier in self.incoming:
+            if modifier.school in (school, UNIVERSAL):
+                factor *= 1 + modifier.percent / 100
+        return factor * (1 - self.resistances.get(school, self.resistances.get(UNIVERSAL, 0.0)))
 
 
 @dataclass(frozen=True)
@@ -47,6 +73,12 @@ class RoundView:
         if isinstance(self.health, int) and isinstance(self.max_health, int) and self.max_health > 0:
             return self.health / self.max_health
         return None
+
+
+@dataclass(frozen=True)
+class Pass:
+    """Play no card this round, for `reason`."""
+    reason: str
 
 
 @dataclass(frozen=True)
@@ -73,27 +105,40 @@ def problem_with(choice: Cast, view: RoundView) -> str | None:
 
 
 class CombatPolicy(Protocol):
-    def choose(self, view: RoundView) -> Cast | None:
-        """The card to play this round, or None to pass."""
+    def choose(self, view: RoundView) -> Cast | Pass | None:
+        """The card to play this round, or a Pass (or None) to play none."""
 
 
 class SpellTypePolicy:
-    """Below LOW_HEALTH_FRACTION heal, else the first affordable attack on the first living enemy, else pass.
-    It won every early Wizard City battle it played with starter cards; it knows nothing of schools,
-    shields, blades or pip planning."""
+    """Below LOW_HEALTH_FRACTION, heal; with a heal in hand that needs more pips than the wizard has, pass to
+    save pips for it. Otherwise attack the first living enemy, with the affordable attack whose school its
+    shields, wards, traps and resistances let through best: the first in hand on a tie. It knows nothing of
+    blades or of saving pips for attacks."""
 
-    def choose(self, view: RoundView) -> Cast | None:
+    def choose(self, view: RoundView) -> Cast | Pass | None:
         fraction = view.health_fraction()
         if fraction is not None and fraction < LOW_HEALTH_FRACTION:
             heal = first_castable(view.cards, lambda card: card.spell_type in HEAL_SPELL_TYPES)
             if heal is not None:
                 return Cast(heal, "self")
+            if (worth_saving_for := heal_worth_saving_for(view)) is not None:
+                return Pass(f"saving pips for {worth_saving_for.name} ({worth_saving_for.pips} pips)")
         if not view.enemies:
             return None
-        attack = first_castable(view.cards, lambda card: card.spell_type in ATTACK_TARGETS)
-        if attack is None:
+        attacks = [index for index, card in enumerate(view.cards) if card.castable and card.spell_type in ATTACK_TARGETS]
+        if not attacks:
             return None
+        target = view.enemies[0]
+        attack = max(attacks, key=lambda index: target.damage_factor(view.cards[index].school))
         return Cast(attack, ATTACK_TARGETS[view.cards[attack].spell_type])
+
+
+def heal_worth_saving_for(view: RoundView) -> Card | None:
+    """A heal in hand that is not castable only because the wizard lacks pips, and costs at most
+    MOST_PIPS_TO_SAVE_FOR: passing gains a pip each round, so it becomes castable."""
+    have = (view.pips or 0) + (view.power_pips or 0)
+    return next((card for card in view.cards if card.spell_type in HEAL_SPELL_TYPES and not card.castable
+                 and card.pips is not None and have < card.pips <= MOST_PIPS_TO_SAVE_FOR), None)
 
 
 def first_castable(cards: tuple[Card, ...], wanted) -> int | None:
