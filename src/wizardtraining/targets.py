@@ -13,7 +13,8 @@ import math
 from .geometry import Point, angle_between, flat_distance, xy
 from .routes import ENEMY_KEEP_OUT
 
-DUEL_CIRCLE_RADIUS = 500.0
+DUEL_CIRCLE_NAMES = frozenset({"Duel Circle", "CombatSigil_Object"})
+DUEL_CIRCLE_RADIUS = 700.0
 QUEST_TARGET_ARROW_RADIUS = 700.0
 ENEMY_CLEARANCE = 450.0
 WISP_REACH = 2500.0
@@ -22,6 +23,16 @@ WISP_DETOUR = 1200.0
 AFTER_BATTLE_GRACE_SECONDS = 6.0
 DODGES_BEFORE_WAITING = 3
 DODGE_MEMORY_SECONDS = 60.0
+
+
+def is_duel_circle(name: str) -> bool:
+    """A fight in progress shows as a "Duel Circle" entity at its centre, the name Deimos looks for
+    (`nearest_duel_circle_distance_and_xyz` in Deimos.py), with its fighters seated about 600 units round it:
+    590 to 610 in Deimos, and 599 in the client's log when the wizard joined one. Looking only for
+    `CombatSigil_Object`, seen once 3,500 units off in Unicorn Way, found no duel in 35 runs, and the wizard
+    walked straight into another player's fight in Firecat Alley. An enemy within DUEL_CIRCLE_RADIUS of one
+    is seated in it."""
+    return name in DUEL_CIRCLE_NAMES
 
 
 def measured(enemies: list[dict], me, duel_circles) -> list[dict]:

@@ -6,7 +6,7 @@ placeholders without NPC data, so enemies are recognisable only nearby.
 
 Each entity is classified once and remembered by address and name. The game reuses addresses, notably
 after a zone change, which also clears what is remembered. Later checks re-read only names and
-positions. A duel circle (CombatSigil_Object) is someone's fight in progress; walking into one joins it.
+positions. A duel circle (`targets.is_duel_circle`) is someone's fight in progress; walking into one joins it.
 """
 
 from __future__ import annotations
@@ -19,9 +19,8 @@ from wizwalker.constants import Primitive
 from .geometry import flat_distance
 from .keys import tap
 from .movement import bearing_to
-from .targets import back_away, measured, threat_centre
+from .targets import back_away, is_duel_circle, measured, threat_centre
 
-DUEL_CIRCLE_NAME = "CombatSigil_Object"
 NPC_BEHAVIOR_ENEMY_FLAG_OFFSET = 288
 ENTITY_LIST_REFRESH_SECONDS = 0.5
 STEP_AWAY_SECONDS = 0.8
@@ -42,7 +41,7 @@ async def npc_enemy_flag(entity) -> bool | None:
 
 
 async def classify(entity, name: str) -> str:
-    if name == DUEL_CIRCLE_NAME:
+    if is_duel_circle(name):
         return DUEL_CIRCLE
     for part, kind in WISP_NAME_PARTS.items():
         if part in name.lower():

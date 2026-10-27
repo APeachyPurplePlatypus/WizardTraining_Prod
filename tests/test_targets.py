@@ -4,7 +4,7 @@ import unittest
 from wizardtraining.routes import ENEMY_KEEP_OUT
 from wizardtraining.targets import (AFTER_BATTLE_GRACE_SECONDS, ENEMY_CLEARANCE, WISP_DETOUR, WISP_REACH,
                                     back_away, bystanders, detour, enemies_to_route_around, in_grace_after_battle,
-                                    keeps_blocking, measured, next_area_to_explore, others, quest_targets,
+                                    is_duel_circle, keeps_blocking, measured, next_area_to_explore, others, quest_targets,
                                     refill_reach, safe_wisps, threat_centre, too_close)
 
 
@@ -20,6 +20,12 @@ class TargetsTest(unittest.TestCase):
     def test_measured_sorts_by_distance_and_marks_duels(self):
         self.assertEqual([e["id"] for e in self.enemies], [2, 1, 3])
         self.assertEqual([e["in_a_duel"] for e in self.enemies], [False, False, True])
+
+    def test_a_fight_in_progress_is_a_duel_circle_with_its_fighters_seated_round_it(self):
+        self.assertTrue(is_duel_circle("Duel Circle"))
+        self.assertFalse(is_duel_circle("Ghost-Blue-L02-B"))
+        seated = measured([enemy(1, "Ghost", 600, 0)], me=(3000, 3000), duel_circles=[(0, 0)])
+        self.assertTrue(seated[0]["in_a_duel"])
 
     def test_quest_targets_are_near_the_arrow_and_not_in_a_duel(self):
         self.assertEqual([e["id"] for e in quest_targets(self.enemies, arrow=(900, 0))], [2, 1])
