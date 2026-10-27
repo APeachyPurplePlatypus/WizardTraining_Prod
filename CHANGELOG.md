@@ -6,6 +6,8 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Added
 
+- **The cheapest attack that surely finishes the target.** When an attack in hand surely finishes the first enemy (at least 60 damage per pip, `policy.SURE_DAMAGE_PER_PIP`, after its shields, wards, traps and resistances), the policy plays the one with the fewest pips. Otherwise it still plays the attack expected to do the most. A Warhorn with 15 health left took a 2-pip Snow Serpent where a 1-pip Frost Beetle would do, and mana, a pip each, is the scarcest thing at this level.
+
 - **No fight the quest asks for without the mana for it.**
   - **What:** before walking to or into a bounty goal's enemies, the wizard needs 40% of its mana (`progress.ENGAGE_MANA_FRACTION`). Below that, `mana_turn` fetches the nearest safe mana wisp in the zone, however far. With none, it walks back to where it entered the zone and waits there, a minute at a time (`MANA_WAIT_SECONDS`), for mana to come back, logging a "mana" event each time. Out of battle, low mana (below 20%) now comes before middling health when choosing a wisp, and a mana wisp counts in any direction.
   - **Why:** every spell costs a mana per pip, wand spells too: the round log shows Scarab, Imp and Frost Beetle from the starter wand each taking 1 mana. The pool is 30 at level 8; a Warhorn fight took 6 to 10, mana comes back slowly, and potions are never bought. With 1 mana the wizard walked into General Akilles and his Cyclops, could not flee, and was defeated.

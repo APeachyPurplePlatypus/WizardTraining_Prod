@@ -15,6 +15,7 @@ HEAL_SPELL_TYPES = {"Heal"}
 LOW_HEALTH_FRACTION = 0.4
 MOST_PIPS_TO_SAVE_FOR = 7
 FLEE_BELOW_MANA = 2
+SURE_DAMAGE_PER_PIP = 60
 SIDE_QUEST_OFFER_PHRASE = "offering you a side quest"
 ACCEPT, DECLINE, GO_BACK, STOP = "accept", "decline", "go back", "stop"
 LEAVE_MENU = "leave menu"
@@ -129,8 +130,8 @@ class SpellTypePolicy:
     more pips than the wizard has, pass to save pips for it. Otherwise attack the first living enemy with the
     affordable attack expected to do the most: its pip cost (damage grows with pips: Frost Beetle, 1 pip, about 85;
     Snow Serpent, 2 pips, about 175), times the share the target's shields, wards, traps and resistances let
-    through, times the card's accuracy. The first in hand on a tie. It knows nothing of blades or of saving pips
-    for attacks."""
+    through, times the card's accuracy; the first in hand on a tie. When an attack surely finishes the target, the
+    cheapest one, to save mana. It knows nothing of blades or of saving pips for attacks."""
 
     def choose(self, view: RoundView) -> Cast | Pass | Flee | None:
         if out_of_mana(view) and view.can_flee:
@@ -148,7 +149,11 @@ class SpellTypePolicy:
         if not attacks:
             return None
         target = view.enemies[0]
-        attack = max(attacks, key=lambda index: expected_damage(view.cards[index], target))
+        finishers = [index for index in attacks if surely_finishes(view.cards[index], target)]
+        if finishers:
+            attack = min(finishers, key=lambda index: view.cards[index].pips or 1)
+        else:
+            attack = max(attacks, key=lambda index: expected_damage(view.cards[index], target))
         return Cast(attack, ATTACK_TARGETS[view.cards[attack].spell_type])
 
 
@@ -157,6 +162,14 @@ def out_of_mana(view: RoundView) -> bool:
     spells are left. The operator's rule: "if no mana you have to flee". With 0 mana and no wand spell in hand, the
     wizard passed four rounds and was defeated by a Cyclops Legionnaire it could not hurt."""
     return isinstance(view.mana, int) and view.mana < FLEE_BELOW_MANA
+
+
+def surely_finishes(card: Card, target: Combatant) -> bool:
+    """The card does at least SURE_DAMAGE_PER_PIP per pip after the target's shields, wards, traps and resistances,
+    and that is the target's remaining health or more. Then the cheapest such card is played: a Warhorn with 15
+    health left took a 2-pip Snow Serpent where a 1-pip Frost Beetle would do, with mana the scarcest thing."""
+    return (isinstance(target.health, int)
+            and (card.pips or 1) * SURE_DAMAGE_PER_PIP * target.damage_factor(card.school) >= target.health)
 
 
 def expected_damage(card: Card, target: Combatant) -> float:

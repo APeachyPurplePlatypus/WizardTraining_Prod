@@ -50,6 +50,14 @@ class SpellTypePolicyTest(unittest.TestCase):
         self.assertEqual(self.policy.choose(view([BOLT], mana=2)), Cast(0, "enemy"))
         self.assertEqual(self.policy.choose(view([BOLT])), Cast(0, "enemy"))
 
+    def test_finishes_a_weak_enemy_with_the_cheapest_sure_attack(self):
+        serpent = Card("Snow Serpent", "Damage", True, "Ice", pips=2)
+        beetle = Card("Frost Beetle", "Damage", True, "Ice", pips=1)
+        nearly_dead = (Combatant("Warhorn", 15),)
+        self.assertEqual(self.policy.choose(view([serpent, beetle], enemies=nearly_dead)), Cast(1, "enemy"))
+        healthy = (Combatant("Warhorn", 285),)
+        self.assertEqual(self.policy.choose(view([serpent, beetle], enemies=healthy)), Cast(0, "enemy"))
+
     def test_passes_with_no_living_enemy(self):
         self.assertIsNone(self.policy.choose(view([BOLT], enemies=())))
 
