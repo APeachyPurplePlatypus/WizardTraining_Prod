@@ -593,8 +593,8 @@ class QuestLoop:
         volume: the streets have wisps, and General Akilles' tower has none. With none in a street, explore it:
         wisps are spawned, not placed, and load only nearby. In a zone where no enemy has shown up this run, such
         as the Commons, None, so the wizard goes on toward the quest: wisps come with the enemies. Neither comes
-        back by itself (0 mana stayed 0 for minutes of standing, 263 health for over two minutes), potions are never
-        bought, and every spell costs mana, wand spells too."""
+        back by itself in the streets (0 mana stayed 0 for minutes of standing, 402 health for a minute of walking),
+        potions are never bought, and every spell costs mana, wand spells too."""
         turn = await self.wisp_turn(stat, state, reach=math.inf)
         if turn is not None:
             return turn
