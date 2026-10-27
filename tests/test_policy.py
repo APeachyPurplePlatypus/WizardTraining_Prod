@@ -180,6 +180,27 @@ class SeveralEnemiesTest(unittest.TestCase):
         self.assertEqual(self.policy.choose(view([WAND, pixie, FREEZE], health=100, enemies=AKILLES_AND_CYCLOPS,
                                                  pips=1)), Cast(2, "enemy", 0))
 
+    def test_heals_when_an_enemy_holds_the_pips_to_take_what_is_left(self):
+        heartbeat = Card("Heartbeat", "Heal", True, "Life", pips=1)
+        beetle = Card("Frost Beetle", "Damage", True, "Ice", pips=1)
+        saved_up = (Combatant("General Akilles", 145, pips=5),)
+        self.assertEqual(self.policy.choose(view([beetle, heartbeat], health=357, max_health=801, enemies=saved_up,
+                                                 pips=1)), Cast(1, "self"))
+        spent = (Combatant("General Akilles", 145, pips=1),)
+        self.assertEqual(self.policy.choose(view([beetle, heartbeat], health=357, max_health=801, enemies=spent,
+                                                 pips=1)), Cast(0, "enemy", 0))
+
+    def test_stuns_the_enemy_holding_the_pips_when_there_is_no_heal(self):
+        beetle = Card("Frost Beetle", "Damage", True, "Ice", pips=1)
+        saved_up = (Combatant("General Akilles", 145, pips=5),)
+        self.assertEqual(self.policy.choose(view([beetle, FREEZE], health=357, max_health=801, enemies=saved_up,
+                                                 pips=1)), Cast(1, "enemy", 0))
+
+    def test_stuns_the_enemy_holding_the_most_pips(self):
+        enemies = (Combatant("General Akilles", 470, pips=1), Combatant("Cyclops Legionnaire", 235, pips=3))
+        self.assertEqual(self.policy.choose(view([WAND, SERPENT_NEXT_ROUND, FREEZE], enemies=enemies, pips=1)),
+                         Cast(2, "enemy", 1))
+
     def test_heals_before_stunning_when_low(self):
         hand = [WAND, SERPENT_NEXT_ROUND, FREEZE, HEAL]
         self.assertEqual(self.policy.choose(view(hand, health=100, enemies=AKILLES_AND_CYCLOPS, pips=1)),

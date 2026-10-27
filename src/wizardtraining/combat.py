@@ -195,6 +195,12 @@ async def incoming_modifiers(effects) -> tuple[DamageModifier, ...]:
     return tuple(modifiers)
 
 
+async def pips_of(member) -> int | None:
+    """What a combatant can spend next round: its pips, a power pip counting two. None when unreadable."""
+    normal, power = await number(member.normal_pips()), await number(member.power_pips())
+    return None if normal is None else normal + 2 * (power or 0)
+
+
 async def read_round(combat):
     """The round as a policy sees it, plus the game objects needed to act on its choice."""
     me = await combat.get_client_member()
@@ -215,7 +221,7 @@ async def read_round(combat):
                      for card, (school, pips, card_effects) in zip(cards, details)]),
         enemies=tuple([Combatant(name=await attempt(enemy.name()), health=await number(enemy.health()),
                                  incoming=await incoming_modifiers(hanging), resistances=await resistances(enemy),
-                                 stunnable=await stunnable(hanging))
+                                 stunnable=await stunnable(hanging), pips=await pips_of(enemy))
                        for enemy, hanging in zip(enemies, effects)]),
     )
     return view, me, cards, enemies

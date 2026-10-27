@@ -85,12 +85,17 @@ def describe_round(entry: dict) -> str:
     view = entry["view"]
     enemies = ", ".join(f"{enemy['name']} {enemy['health']}"
                         f"{modifier_text(enemy.get('incoming'), enemy.get('resistances'))}"
-                        f"{' (cannot be stunned now)' if enemy.get('stunnable') is False else ''}"
+                        f"{' (cannot be stunned now)' if enemy.get('stunnable') is False else ''}{pips_text(enemy)}"
                         for enemy in view["enemies"]) or "none"
     mana = f", {view['mana']} mana" if view.get("mana") is not None else ""
     reopened = "reopened the card choice; " if entry.get("reopened card choice") else ""
     return (f"round {view['round_number']}: me {view['health']}/{view['max_health']} with {view['pips']} pips{mana}; "
             f"{reopened}{entry['action']}; enemies left: {enemies}{hand_text(view.get('cards'))}")
+
+
+def pips_text(enemy: dict) -> str:
+    """" (5 pips)" for an enemy holding pips, or ""."""
+    return f" ({enemy['pips']} pips)" if enemy.get("pips") else ""
 
 
 def hand_text(cards) -> str:

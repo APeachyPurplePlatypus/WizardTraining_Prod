@@ -47,6 +47,11 @@ class DescriptionTest(unittest.TestCase):
         self.assertEqual(text, "round 2: me 450/624 with 3 pips; cast Frost Beetle on enemy; "
                                "enemies left: Haunted Minion 35")
 
+    def test_describe_round_shows_the_pips_an_enemy_holds(self):
+        entry = round_entry(8, 357, "cast Frost Beetle (Ice) on enemy General Akilles", [("General Akilles", 145)])
+        entry["view"]["enemies"][0]["pips"] = 5
+        self.assertTrue(describe_round(entry).endswith("enemies left: General Akilles 145 (5 pips)"))
+
     def test_describe_round_lists_the_hand(self):
         entry = round_entry(1, 600, "cast Snow Serpent (Ice) on enemy", [("Warhorn", 285)])
         entry["view"]["cards"] = [{"name": "Frost Beetle", "pips": 1}, {"name": "Snow Serpent", "pips": 2},
