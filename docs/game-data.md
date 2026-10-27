@@ -42,6 +42,7 @@ Worth reaching for before adding guesswork:
 | File | Reader | Used for |
 |---|---|---|
 | `collision.bcd` | Deimos `CollisionWorld`, `get_walk_grid`, `walkable_union`, `zone_bcd_walls` | the walk grid, walls, walkable pieces |
+| `gamedata.bin` plus each placed object's model | Deimos `entity_collision.build_zone_static_shapes` (needs `katsuba` 0.4, `kinif`, `wiztype`) | footprints of tents, trees and crates, taken out of the walkable area |
 | `zone.nav` | Deimos | the nav waypoint graph |
 | `volumes.xml` | `teleports.parse_teleport_volumes` (layout inferred) | teleport volumes between walkable pieces; each shop or building door in a street is one too |
 | `gamedata.bin` | `placed.parse_placed_objects` (layout inferred) | placed objects: gates, quest objects, signs |

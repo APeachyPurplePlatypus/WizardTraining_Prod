@@ -34,6 +34,16 @@ $env:WIZARDTRAINING_DEIMOS = "$PWD\Deimos-Wizard101"
 
 - **WizWalker** comes from the copy vendored in Deimos (`libs/wizwalker`), which tracks the current game better than the old PyPI release.
 - **Deimos** is not installed as a package. `WIZARDTRAINING_DEIMOS` points at the checkout so the collision route method can use its walk grid (`src/collision.py`, `src/collision_math.py`), which needs numpy and shapely. Without it, routes use the zone.nav graph.
+- **Placed objects (optional, recommended).** Tents, trees and crates are not in a zone's `collision.bcd`, so routes walk into them. Deimos can read their footprints from the game's models if `katsuba` 0.4, `wiztype` and Deimos's own `kinif` are installed. `kinif` is a Rust extension with no published wheel: build it with [rustup](https://rustup.rs) (the GNU toolchain needs no Visual Studio) and `maturin`:
+
+  ```powershell
+  .venv\Scripts\python -m pip install "katsuba==0.4.0" "wiztype>=0.1.12" "maturin>=1,<2"
+  cd Deimos-Wizard101\libs\kinif
+  ..\..\..\.venv\Scripts\maturin build --release --target x86_64-pc-windows-gnu -i ..\..\..\.venv\Scripts\python.exe
+  ..\..\..\.venv\Scripts\python -m pip install (Get-ChildItem target\wheels\kinif-*.whl)
+  ```
+
+  The first time, `wiztype` reads a type list from the running game client (read-only, about 20 s) and caches it for that game version. Without these packages, the framework works as before.
 - **Reports** go to `./runtime`, or to the folder in `WIZARDTRAINING_RUNTIME`.
 
 ## Use

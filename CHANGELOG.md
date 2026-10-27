@@ -6,6 +6,10 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Added
 
+- **Placed objects are obstacles.**
+  - **What:** when Deimos's model reader is available, the footprints of a zone's placed objects (tents, trees, crates: `entity_collision.build_zone_static_shapes`) are taken out of the walkable area along with the collision walls. On Cyclops Lane that is 25 footprints; a fairground tent's centre is no longer walkable, and the collision route to the quest NPC takes 7 legs. The planner status names the count. The reader needs `katsuba` 0.4 (0.6 removed an API it uses), `wiztype`, and Deimos's `kinif` Rust extension, which has no published wheel; the README shows how to build it with the GNU Rust toolchain and `maturin`. The first time, `wiztype` reads a type list from the running client (read-only, about 20 seconds) and caches it per game version. Without these packages, nothing changes.
+  - **Why:** the operator saw the wizard walk into Cyclops Lane's fairground tents, and asked for the tools to be installed. `collision.bcd` leaves placed objects out. The nav-graph-first fallback works around them; this removes the cause.
+
 - **Runs remember what earlier runs learned.**
   - **What:** `runtime/knowledge.json` keeps the zones where health does not come back while resting and where each teleport volume leads. A run starts with it, logs a one-line summary, and adds what it learned when it ends. Obstacles and "no effect" teleport verdicts are not kept: the players and enemies behind most obstacles move on, and a walk that fell short of a volume once looked like "no effect". Delete the file to start fresh.
   - **Why:** runs are bounded (an hour, a battle count), so a night of play is many runs. Each one started blank. After the rematch with The Harvest Lord, a new run rested a minute in his tower for nothing: the run before it had already found that health does not come back there. Each run also walked into Triton's teleporters to learn where they go.

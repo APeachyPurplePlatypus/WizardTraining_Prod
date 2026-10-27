@@ -15,6 +15,7 @@ grid cells and straight legs must stay inside it.
 
 from __future__ import annotations
 
+import asyncio
 import sys
 from collections import deque
 from pathlib import Path
@@ -63,17 +64,21 @@ async def _collision_grid(wad, zone: str, deimos_root: Path | None):
     if deimos_root is None:
         return None, None, f"skipped: {DEIMOS_VARIABLE} is not set"
     try:
+        from shapely.ops import unary_union
         deimos = _deimos_collision(deimos_root)
         world = deimos.CollisionWorld()
         world.load(await wad.get_file("collision.bcd"))
         grid = deimos.get_walk_grid(world, zone)
         if not grid.has_mesh:
             return None, None, "no walkable mesh"
-        free_area = deimos.walkable_union(world, zone).difference(deimos.zone_bcd_walls(world, zone).buffer(WALL_CLEARANCE))
+        footprints = await asyncio.to_thread(deimos.placed_object_footprints, zone)
+        blocked = unary_union([deimos.zone_bcd_walls(world, zone), *footprints])
+        free_area = deimos.walkable_union(world, zone).difference(blocked.buffer(WALL_CLEARANCE))
     except Exception as exc:
         return None, None, f"unavailable: {type(exc).__name__}"
     free = FreeArea(free_area)
-    return WallAwareGrid(grid, free), free, f"{len(world.objects)} objects, walls avoided, {free.piece_count} pieces"
+    return WallAwareGrid(grid, free), free, (f"{len(world.objects)} objects, {len(footprints)} placed-object footprints, "
+                                             f"walls avoided, {free.piece_count} pieces")
 
 
 class FreeArea:
@@ -170,6 +175,17 @@ class _DeimosCollision:
         from src.collision_math import _walkable_union, get_walk_grid, zone_bcd_walls
         self.CollisionWorld, self.get_walk_grid = CollisionWorld, get_walk_grid
         self.walkable_union, self.zone_bcd_walls = _walkable_union, zone_bcd_walls
+
+    @staticmethod
+    def placed_object_footprints(zone: str) -> list:
+        """The footprints of the zone's placed objects (tents, trees, crates), from Deimos's model reader, or
+        none when its optional packages (katsuba 0.4, kinif, wiztype) are missing. collision.bcd leaves these
+        out: Cyclops Lane's fairground tents were walked into on every collision route."""
+        try:
+            from src.entity_collision import build_zone_static_shapes
+            return build_zone_static_shapes(zone, None)
+        except Exception:
+            return []
 
 
 def _deimos_collision(deimos_root: Path) -> _DeimosCollision:
