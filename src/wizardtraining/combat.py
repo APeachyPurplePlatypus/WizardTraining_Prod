@@ -24,7 +24,7 @@ from .movement import KeysIgnored, face_and_step
 from .policy import UNIVERSAL, Card, Cast, CombatPolicy, Combatant, DamageModifier, Flee, Pass, RoundView, problem_with
 from .reports import plain
 from .state import attempt
-from .ui import click, click_window, enable_clicks, showing, text_of, windows_named_like
+from .ui import click, enable_clicks, showing, text_of
 
 APPROACH_STEP_SECONDS = 0.4
 MAX_APPROACH_STEPS = 15
@@ -36,6 +36,9 @@ CARDS_DRAW_SECONDS = 0.5
 EMPTY_HAND_READS = 6
 PAUSE_BETWEEN_CAST_CLICKS_SECONDS = 0.5
 FLEE_CONFIRM_WAIT_SECONDS = 1.0
+ACTION_BUTTONS = ["WorldView", "PlanningPhase", "Alignment", "PlanningPhaseSubWindow", "SpellSelection", "ActionButtons"]
+PASS_BUTTON = [*ACTION_BUTTONS, "Focus"]
+FLEE_BUTTON = [*ACTION_BUTTONS, "Flee"]
 MESSAGE_BOX = ["MessageBoxModalWindow"]
 MESSAGE_BOX_CAPTION = [*MESSAGE_BOX, "messageBoxBG", "messageBoxLayout", "TextArea", "CaptionText"]
 MESSAGE_BOX_YES = [*MESSAGE_BOX, "messageBoxBG", "messageBoxLayout", "AdjustmentWindow", "Layout", "centerButton"]
@@ -206,7 +209,7 @@ async def play_round(combat, policy: CombatPolicy, can_flee: bool = True) -> dic
     view = replace(view, can_flee=can_flee)
     entry = {"round": view.round_number, "view": asdict(view)}
     if not view.cards:
-        await combat.pass_button()
+        await pass_round(combat)
         entry["action"] = "pass: the hand read empty"
         return entry
     choice = policy.choose(view)
@@ -214,11 +217,11 @@ async def play_round(combat, policy: CombatPolicy, can_flee: bool = True) -> dic
         entry["action"] = f"flee: {choice.reason} ({await flee(combat)})"
         return entry
     if choice is None or isinstance(choice, Pass):
-        await combat.pass_button()
+        await pass_round(combat)
         entry["action"] = "pass" if choice is None else f"pass: {choice.reason}"
         return entry
     if problem := problem_with(choice, view):
-        await combat.pass_button()
+        await pass_round(combat)
         entry["action"] = f"pass: {problem}"
         return entry
     await cards[choice.card].cast(cast_target(choice, me, enemies), sleep_time=PAUSE_BETWEEN_CAST_CLICKS_SECONDS)
@@ -227,21 +230,23 @@ async def play_round(combat, policy: CombatPolicy, can_flee: bool = True) -> dic
     return entry
 
 
+async def pass_round(combat) -> None:
+    """Click the Pass action button (the window named Focus) by its path. WizWalker's pass_button and flee_button
+    click the DoneWindow's "Defeated" buttons, meant for a wizard knocked out in battle, whenever DoneWindow says it
+    is visible, and in this client it always does: no pass or flee click took, and the round timer passed instead.
+    After such a flee click, the wizard's casts stopped landing for the rest of the battle."""
+    await click(combat.client, PASS_BUTTON)
+
+
 async def flee(combat) -> str:
-    """Click the visible window named like "flee", then answer Yes when the game asks to confirm with a message box
-    whose caption mentions fleeing, like its "Are you sure you want to add this spell to your spellbook?" box
-    (centerButton is Yes). Says what was found and what followed. WizWalker's flee_button clicks the one window
-    named exactly "Flee"; in the game that click never ended a battle and showed no box."""
+    """Click the Flee action button, then answer Yes when the game asks to confirm with a message box whose caption
+    mentions fleeing, like its "Are you sure you want to add this spell to your spellbook?" box (centerButton is
+    Yes). Says what followed."""
     client = combat.client
-    buttons = await windows_named_like(client, "flee")
-    visible = [(path, window) for path, shown, window in buttons if shown]
-    found = ", ".join(f"{'/'.join(path[-3:])}{'' if shown else ' (hidden)'}" for path, shown, _ in buttons) or "none"
-    if not visible:
-        return f"no visible flee button; windows named like flee: {found}"
-    await click_window(client, visible[0][1])
+    await click(client, FLEE_BUTTON)
     await asyncio.sleep(FLEE_CONFIRM_WAIT_SECONDS)
     if not await showing(client, MESSAGE_BOX):
-        return f"clicked {'/'.join(visible[0][0][-3:])}, no confirmation box; windows named like flee: {found}"
+        return "no confirmation box"
     caption = (await text_of(client, MESSAGE_BOX_CAPTION)).replace("<center>", "").replace("</center>", "").strip()
     if "flee" not in caption.lower():
         return f"a message box that does not mention fleeing was left alone: {caption!r}"

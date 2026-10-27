@@ -95,32 +95,3 @@ async def visible_children(client, path: list[str]) -> list[str]:
     except Exception:
         return []
 
-
-async def windows_named_like(client, word: str, depth: int = 10) -> list[tuple[list[str], bool, object]]:
-    """Every window whose name contains `word` (any case), as (path, visible, window), searched breadth first up to
-    `depth` levels below the root. For finding a button whose path is not known, such as the battle's Flee."""
-    found, level = [], [([], client.root_window)]
-    for _ in range(depth):
-        below = []
-        for path, window in level:
-            try:
-                children = await window.children()
-            except Exception:
-                continue
-            for child in children:
-                try:
-                    name = await child.name()
-                except Exception:
-                    continue
-                if word.lower() in name.lower():
-                    found.append(([*path, name], bool(await attempt_visible(child)), child))
-                below.append(([*path, name], child))
-        level = below
-    return found
-
-
-async def attempt_visible(window) -> bool:
-    try:
-        return await window.is_visible()
-    except Exception:
-        return False
