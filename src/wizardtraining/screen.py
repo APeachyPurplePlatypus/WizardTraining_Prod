@@ -10,6 +10,7 @@ import re
 MARKUP = re.compile(r"<[^>]*>")
 FRIEND_BOX_TITLE = "friend"
 FRIEND_REQUEST_QUESTION = "as your friend?"
+TALK_PROMPT_ENDING = "to talk"
 
 
 async def or_default(coro, default):
@@ -63,6 +64,18 @@ def plain_text(markup: str) -> str:
 def is_friend_request(title: str, caption: str) -> bool:
     """Another player's friend request: a box titled "Friend" asking "Accept <player> ... as your friend?"."""
     return title.lower() == FRIEND_BOX_TITLE and caption.lower().endswith(FRIEND_REQUEST_QUESTION)
+
+
+def prompt_offers_talk(prompt: str) -> bool:
+    """The interact prompt is a person's: it reads "Press X to Talk" (the game's NPCInteractText). A door's reads
+    "to Enter" or "to Teleport", a chest's "to Open", an object's "to Use"."""
+    return plain_text(prompt).lower().endswith(TALK_PROMPT_ENDING)
+
+
+def prompt_action(prompt: str) -> str:
+    """The word the interact prompt ends with, such as "Talk" or "Enter": what pressing X would do."""
+    words = plain_text(prompt).split()
+    return words[-1] if words else ""
 
 
 async def visible_names_under(window, depth: int, limit: int = 60) -> list[str]:

@@ -53,7 +53,7 @@ from .quests import arrow_shows_no_target, game_language, open_goals, read_quest
 from .reports import plain, save_report
 from .patrols import VIEWS_TO_JUDGE, note_sightings, unwalked_paths
 from .routes import GapStep, Hazards, RoutePlanner, duel_clearance
-from .screen import or_default
+from .screen import or_default, prompt_action, prompt_offers_talk
 from .spellbook import SpellCatalog, deck_spells, learned_spell_ids
 from .spells import KNOWN_AT_FIRST_CHECK, LEARNED, SpellLog, learned_text, newly_learned, spell_entry
 from .session import NoClient, attached, hooks_ready
@@ -65,7 +65,7 @@ from .targets import (bystanders, enemies_to_route_around, in_grace_after_battle
 from .teleports import LEFT_ZONE, NO_EFFECT, TeleportVolume, describe_outcome, volume_at
 from .trainer import OPENED_DIALOG, OPENED_MENU, close_training, learn_free_spells, open_training, open_with_professor
 from .training import GATE, SCHOOLS, TRAINER, School, in_dungeon, spells_to_learn, way_to_school
-from .ui import POTION_BUTTON, answer_known_popup, click, message_box, visible_children
+from .ui import POTION_BUTTON, answer_known_popup, click, interact_prompt_text, message_box, visible_children
 
 TARGET_REACH = 1200.0
 ARROW_ARRIVE_RADIUS = 250.0
@@ -995,14 +995,18 @@ class QuestLoop:
                                       also=prompt_shows, avoid=await nearby_enemies(self.client))
 
     async def door_prompt_near(self, arrow) -> bool:
-        """The interact prompt shows within PROMPT_DOOR_REACH of a door's arrow, with no friendly NPC within
-        NPC_PROMPT_RANGE, whose prompt it would be: in the Shopping District an NPC's prompt was taken for a door's,
-        X did nothing, and 15 seconds went."""
+        """The interact prompt shows within PROMPT_DOOR_REACH of a door's arrow, it does not read "to Talk", and no
+        friendly NPC is within NPC_PROMPT_RANGE, whose prompt it would be: in the Shopping District an NPC's prompt
+        was taken for a door's, X did nothing, and 15 seconds went. In Ravenwood, Mr. Lincoln, who the entity list
+        does not hold as an NPC, had a prompt reading "to Talk"; X opened his Training Point Buyback box, which took
+        every click and stopped the run."""
         here = await self.client.body.position()
         if flat_distance(here, arrow) > PROMPT_DOOR_REACH or await attempt(self.client.is_in_npc_range()) is not True:
             return False
         zone = await self.client.zone_name()
         if any(where == zone and flat_distance(here, spot) <= NOT_A_DOOR_RADIUS for where, spot in self._not_doors):
+            return False
+        if prompt_offers_talk(await or_default(interact_prompt_text(self.client), "")):
             return False
         npc = await or_default(nearest_npc(self.client), None)
         return npc is None or flat_distance(here, npc) > NPC_PROMPT_RANGE
@@ -1014,8 +1018,10 @@ class QuestLoop:
         then the wizard pressed X at him again after every dialog until the run was stopped."""
         zone = await self.client.zone_name()
         here = await self.client.body.position()
+        action = prompt_action(await or_default(interact_prompt_text(self.client), ""))
         await tap(self.client, Keycode.X, TALK_KEY_SECONDS)
-        self.events.emit("door", "the interact prompt showed near a door into another zone; pressed X to enter")
+        self.events.emit("door", f"the interact prompt showed near a door into another zone (\"to {action}\"); "
+                                 "pressed X to enter")
         deadline = time.monotonic() + DOOR_WAIT_SECONDS
         while time.monotonic() < deadline and not self.settings.stop_requested():
             if await self.zone_changing(zone):

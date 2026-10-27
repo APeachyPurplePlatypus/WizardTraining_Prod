@@ -1,7 +1,8 @@
 import asyncio
 import unittest
 
-from wizardtraining.screen import is_friend_request, plain_text, visible_named, visible_names_under, window_saying
+from wizardtraining.screen import (is_friend_request, plain_text, prompt_action, prompt_offers_talk, visible_named,
+                                   visible_names_under, window_saying)
 
 
 class StandIn:
@@ -72,6 +73,18 @@ class ScreenTest(unittest.TestCase):
         self.assertEqual(names, ["messageBoxBG", "messageBoxBG/messageBoxLayout",
                                  "messageBoxBG/messageBoxLayout/TextArea",
                                  "messageBoxBG/messageBoxLayout/AdjustmentWindow"])
+
+    def test_a_prompt_to_talk_is_a_persons_and_one_to_enter_is_a_door(self):
+        talk = ("<center>Press <image;Art/Art_Keyboard_L.dds;16;32;0xFFFFFFFF;t><image;Art/Art_Keyboard_Mid.dds;-1;32;"
+                "0xFFFFFFFF;bt><scale;0.700000><Xoffset;-5><Yoffset;-5>X<Yoffset;5></scale><Xoffset;-5>"
+                "<image;Art/Art_Keyboard_R.dds;16;32;0xFFFFFFFF;t> or <image;GUI/Art/Art_Mouse_Left_Click.dds> "
+                "to Talk</center>")
+        self.assertTrue(prompt_offers_talk(talk))
+        self.assertEqual(prompt_action(talk), "Talk")
+        for door in ("<center>Press X to Enter</center>", "Press X to Teleport", "Press X to Use", "Press X to Open", ""):
+            self.assertFalse(prompt_offers_talk(door))
+        self.assertEqual(prompt_action("<center>Press X to Enter</center>"), "Enter")
+        self.assertEqual(prompt_action(""), "")
 
 
 if __name__ == "__main__":

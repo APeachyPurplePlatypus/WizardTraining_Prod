@@ -26,6 +26,7 @@ KNOWN_POPUPS = {
 }
 
 
+INTERACT_PROMPT_TEXT = ["WorldView", "NPCRangeWin", "imgBackground", "NPCRangeTxtMessage"]
 MESSAGE_BOX = "MessageBoxModalWindow"
 MESSAGE_BOX_SEARCH_DEPTH = 4
 BOX_LAYOUT = ["messageBoxBG", "messageBoxLayout"]
@@ -75,6 +76,11 @@ async def text_under(parent, path: list[str]) -> str:
         return await window.maybe_text() or ""
     except Exception:
         return ""
+
+
+async def interact_prompt_text(client) -> str:
+    """What the interact prompt says, such as "Press X or to Talk", without markup; "" when it is not showing."""
+    return plain_text(await text_of(client, INTERACT_PROMPT_TEXT))
 
 
 async def enable_clicks(client) -> None:
