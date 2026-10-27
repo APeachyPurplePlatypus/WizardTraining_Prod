@@ -2,7 +2,9 @@
 
 Every change, enhancement or addition is listed with its rationale, so later contributors know why the framework is the way it is. Say what was verified in the game and what was not.
 
-## Unreleased
+## 0.2.0 (2026-10-27)
+
+What one character's unattended play from level 5 to 10 taught the framework: 71 runs and 139 battles (122 won, 13 lost, 1 fled, 3 left for the operator) over the evening of 2026-10-26 and the day after. Main quests first, side quests as offered, natural walking only, nothing bought. The biggest changes: combat decisions from the game's own spell and enemy data (stuns, pips, healing before a big hit), mana and health refills that do not walk into fights, fleeing that works, other players' fights and message boxes noticed and handled, and routes that keep to the sidewalks.
 
 ### Added
 
