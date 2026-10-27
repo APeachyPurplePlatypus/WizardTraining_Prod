@@ -27,6 +27,8 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Changed
 
+- **Cards are weighed by their accuracy too.** The default policy now ranks attacks by the share of damage that lands after wards, traps and resistances, times the card's accuracy (`card.accuracy()`, 70% for Storm's Thunder Snake, for example). On a Lumbering Troll, Thunder Snake fizzled twice in a row; a slightly weaker school that hits more often is the better play unless the enemy's weakness makes up for it.
+
 - **Rerouting while walking.**
   - **What:** when an enemy's predicted course will come near the next stretch of the path, the watcher no longer ends the trip. It plans the next 2,500 units again from where the wizard is, around where enemies are going, within a quarter of a second, and joins the rest of the route. The wizard keeps walking: W stays held and the new legs replace the old ones. The trip ends, and the next turn plans everything again, only when no such way is found, or when a reroute less than 0.3 s earlier did not clear the threat. A duel near the path still ends the trip. The walk log counts reroutes ("collision: arrived after 3 reroutes").
   - **Why:** the operator wanted pathing that tracks enemies live, "aim bot" precise. Before, every threat on the path stopped the wizard: release W, end the trip, read the state and quest again, and plan the whole route anew. That takes a second or more each time, standing still, while the enemy keeps coming.

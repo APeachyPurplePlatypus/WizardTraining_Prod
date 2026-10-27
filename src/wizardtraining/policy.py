@@ -29,6 +29,11 @@ class Card:
     castable: bool
     school: str | None = None
     pips: int | None = None
+    accuracy: int | None = None
+
+    def hit_chance(self) -> float:
+        """The card's accuracy as a fraction; 1 when it could not be read."""
+        return self.accuracy / 100 if self.accuracy else 1.0
 
 
 @dataclass(frozen=True)
@@ -111,8 +116,9 @@ class CombatPolicy(Protocol):
 
 class SpellTypePolicy:
     """Below LOW_HEALTH_FRACTION, heal; with a heal in hand that needs more pips than the wizard has, pass to
-    save pips for it. Otherwise attack the first living enemy, with the affordable attack whose school its
-    shields, wards, traps and resistances let through best: the first in hand on a tie. It knows nothing of
+    save pips for it. Otherwise attack the first living enemy, with the affordable attack expected to land best:
+    the share its shields, wards, traps and resistances let through, times the card's accuracy. The first in hand
+    on a tie. It knows nothing of
     blades or of saving pips for attacks."""
 
     def choose(self, view: RoundView) -> Cast | Pass | None:
@@ -129,7 +135,8 @@ class SpellTypePolicy:
         if not attacks:
             return None
         target = view.enemies[0]
-        attack = max(attacks, key=lambda index: target.damage_factor(view.cards[index].school))
+        attack = max(attacks, key=lambda index: target.damage_factor(view.cards[index].school)
+                     * view.cards[index].hit_chance())
         return Cast(attack, ATTACK_TARGETS[view.cards[attack].spell_type])
 
 

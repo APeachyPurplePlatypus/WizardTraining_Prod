@@ -173,7 +173,8 @@ async def read_round(combat):
         pips=await number(me.normal_pips()),
         power_pips=await number(me.power_pips()),
         cards=tuple([Card(name=await attempt(card.name()), spell_type=await attempt(card.type_name()),
-                          castable=await attempt(card.is_castable()) is True, school=school, pips=pips)
+                          castable=await attempt(card.is_castable()) is True, school=school, pips=pips,
+                          accuracy=await number(card.accuracy()))
                      for card, (school, pips) in zip(cards, schools_and_pips)]),
         enemies=tuple([Combatant(name=await attempt(enemy.name()), health=await number(enemy.health()),
                                  incoming=await incoming_modifiers(enemy), resistances=await resistances(enemy))

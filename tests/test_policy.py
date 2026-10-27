@@ -57,6 +57,13 @@ class SpellTypePolicyTest(unittest.TestCase):
         self.assertAlmostEqual(enemy.damage_factor("Ice"), 0.8)
         self.assertAlmostEqual(enemy.damage_factor(None), 0.8)
 
+    def test_prefers_the_card_more_likely_to_hit(self):
+        storm = Card("Thunder Snake", "Damage", True, "Storm", accuracy=70)
+        fire = Card("Fire Cat", "Damage", True, "Fire", accuracy=75)
+        self.assertEqual(self.policy.choose(view([storm, fire])), Cast(1, "enemy"))
+        weak_to_storm = (Combatant("Troll", 135, resistances={"Storm": -0.15}),)
+        self.assertEqual(self.policy.choose(view([storm, fire], enemies=weak_to_storm)), Cast(0, "enemy"))
+
     def test_plays_the_school_the_enemy_is_weak_to(self):
         resists_myth = (Combatant("Ghost", 200, resistances={"Myth": 0.3, "Ice": -0.15}),)
         self.assertEqual(self.policy.choose(view([MYTH_BOLT, ICE_BOLT], enemies=resists_myth)), Cast(1, "enemy"))
