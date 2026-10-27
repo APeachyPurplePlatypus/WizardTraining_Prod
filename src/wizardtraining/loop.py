@@ -275,7 +275,8 @@ class QuestLoop:
         start = await self.client.body.position()
         planner = await self.planner()
         hazards = Hazards.of(enemies=[enemy["position"] for enemy in enemies], duel_circles=circles,
-                             obstacles=self.record.obstacles.get(state["zone"], []), patrols=planner.patrols)
+                             obstacles=self.record.obstacles.get(state["zone"], []), patrols=planner.patrols,
+                             keep_out=planner.teleports_to_keep_out_of(start, wisp["position"], WISP_ARRIVE_RADIUS))
         trip = await travel(self.client, planner, wisp["position"], arrive_radius=WISP_ARRIVE_RADIUS,
                             watch=self.watcher(), hazards=hazards)
         await asyncio.sleep(WISP_SETTLE_SECONDS)
@@ -579,7 +580,8 @@ class QuestLoop:
             return await self.teleport_turn(crossing, zone, planner)
         _, duel_circles = await surroundings(self.client)
         hazards = Hazards.of(enemies=[enemy["position"] for enemy in avoid], duel_circles=duel_circles,
-                             obstacles=self.record.obstacles.get(zone, []), patrols=planner.patrols)
+                             obstacles=self.record.obstacles.get(zone, []), patrols=planner.patrols,
+                             keep_out=planner.teleports_to_keep_out_of(start, destination, arrive_radius))
         trip = await travel(self.client, planner, destination, arrive_radius=arrive_radius,
                             watch=self.watcher(also=also, ignore=ignore), hazards=hazards)
         moved = flat_distance(start, await self.client.body.position())

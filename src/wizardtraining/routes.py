@@ -42,20 +42,24 @@ MAX_MERGE_LOOKAHEAD = 40
 MAX_GRID_NODES = 60_000
 PLANNING_SECONDS = 4.0
 GOAL_PIECE_REACH = 600.0
+TELEPORT_CLEARANCE = 60.0
 
 
 @dataclass(frozen=True)
 class Hazards:
-    """Enemies to keep away from, and duel circles and obstacles never to enter, as (x, y) points."""
+    """Enemies to keep away from, and duel circles and obstacles never to enter, as (x, y) points. `keep_out` are
+    other no-go circles as ((x, y), radius): teleport volumes the walk is not going to."""
     enemies: tuple[Point, ...] = ()
     duel_circles: tuple[Point, ...] = ()
     obstacles: tuple[Point, ...] = ()
     patrols: object = field(default=None, compare=False)
+    keep_out: tuple[tuple[Point, float], ...] = ()
 
     @classmethod
-    def of(cls, enemies=(), duel_circles=(), obstacles=(), patrols=None) -> "Hazards":
+    def of(cls, enemies=(), duel_circles=(), obstacles=(), patrols=None, keep_out=()) -> "Hazards":
         return cls(tuple(xy(enemy) for enemy in enemies), tuple(xy(circle) for circle in duel_circles),
-                   tuple(xy(obstacle) for obstacle in obstacles), patrols)
+                   tuple(xy(obstacle) for obstacle in obstacles), patrols,
+                   tuple((xy(centre), radius) for centre, radius in keep_out))
 
     def with_obstacles(self, obstacles) -> "Hazards":
         return replace(self, obstacles=self.obstacles + tuple(xy(obstacle) for obstacle in obstacles))
@@ -86,12 +90,14 @@ class Hazards:
 
     def forbids(self, point: Point) -> bool:
         return (any(math.dist(point, circle) < DUEL_CIRCLE_NO_GO for circle in self.duel_circles)
-                or any(math.dist(point, obstacle) < OBSTACLE_RADIUS for obstacle in self.obstacles))
+                or any(math.dist(point, obstacle) < OBSTACLE_RADIUS for obstacle in self.obstacles)
+                or any(math.dist(point, centre) < radius for centre, radius in self.keep_out))
 
     def line_is_open(self, a: Point, b: Point) -> bool:
-        """The line enters no duel circle and no obstacle."""
+        """The line enters no duel circle, obstacle or keep-out circle."""
         return (all(distance_to_segment(circle, a, b) >= DUEL_CIRCLE_NO_GO for circle in self.duel_circles)
-                and all(distance_to_segment(obstacle, a, b) >= OBSTACLE_RADIUS for obstacle in self.obstacles))
+                and all(distance_to_segment(obstacle, a, b) >= OBSTACLE_RADIUS for obstacle in self.obstacles)
+                and all(distance_to_segment(centre, a, b) >= radius for centre, radius in self.keep_out))
 
     def line_is_safe(self, a: Point, b: Point) -> bool:
         return (self.line_is_open(a, b)
@@ -238,6 +244,23 @@ class RoutePlanner:
             return None
         return choose_crossing(self.teleports, start_piece=start_piece, goal_piece=goal_piece, outcomes=outcomes,
                                goal=goal)
+
+    def teleports_to_keep_out_of(self, start, destination, arrive_radius: float) -> list[tuple[Point, float]]:
+        """The teleport volumes a walk from `start` to `destination` must not cross, as circles TELEPORT_CLEARANCE
+        wider than the volume: walking through one changes the zone. Left out: a volume at the destination,
+        which may be the door the walk is for; one the wizard stands at, as it does after coming through it;
+        and volumes on another walkable piece, such as another level, which the walk cannot reach."""
+        here, goal = xy(start), xy(destination)
+        start_piece = self.piece_of(here) if self.piece_of is not None else None
+        circles = []
+        for volume, piece in self.teleports:
+            centre, keep_out = (volume.x, volume.y), volume.radius + TELEPORT_CLEARANCE
+            if math.dist(centre, goal) <= keep_out + arrive_radius or math.dist(centre, here) <= keep_out:
+                continue
+            if start_piece is not None and piece is not None and piece != start_piece:
+                continue
+            circles.append((centre, keep_out))
+        return circles
 
     def methods(self) -> list[str]:
         usable = []

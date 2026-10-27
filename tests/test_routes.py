@@ -193,6 +193,29 @@ class RoutePlannerTest(unittest.TestCase):
         self.assertEqual(with_walk_data.route(STRAIGHT, (0, 0), (1000, 0), hazards), [(1000, 0)])
         self.assertEqual(RoutePlanner("zone").route(STRAIGHT, (0, 0), (5000, 0), hazards), [(5000, 0)])
 
+    def test_routes_keep_out_of_teleport_volumes(self):
+        planner = RoutePlanner("zone", walk_grid=SquareWalkGrid(20), grid_line_walkable=lambda a, b: True)
+        jeweler = TeleportVolume("WC_Shop Jewelry", 1000, 0, 0, 100)
+        planner.teleports = [(jeweler, 0)]
+        keep_out = planner.teleports_to_keep_out_of((0, 0), (1900, 0), 40)
+        self.assertEqual(keep_out, [((1000, 0), 160)])
+        legs = planner.route(COLLISION, (0, 0), (1900, 0), Hazards.of(keep_out=keep_out))
+        path = [(0, 0), *legs]
+        self.assertTrue(all(Hazards.of(keep_out=keep_out).line_is_open(a, b) for a, b in zip(path, path[1:])))
+
+    def test_the_volume_walked_to_or_from_is_not_kept_out(self):
+        planner = RoutePlanner("zone")
+        door = TeleportVolume("Tower Exit", 1000, 0, 0, 100)
+        planner.teleports = [(door, 0)]
+        self.assertEqual(planner.teleports_to_keep_out_of((0, 0), (1000, 50), 40), [])
+        self.assertEqual(planner.teleports_to_keep_out_of((1050, 0), (5000, 0), 40), [])
+
+    def test_volumes_on_another_level_are_not_kept_out(self):
+        planner = RoutePlanner("zone")
+        planner.piece_of = lambda point, reach=150: 0
+        planner.teleports = [(TeleportVolume("Tele Down", 1000, 0, 0, 100), 1)]
+        self.assertEqual(planner.teleports_to_keep_out_of((0, 0), (5000, 0), 40), [])
+
     def test_unknown_method_is_an_error(self):
         with self.assertRaises(ValueError):
             RoutePlanner("zone").route("teleport", (0, 0), (1, 1))

@@ -43,6 +43,10 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **Walks keep out of teleport volumes they are not going to.**
+  - **What:** every route now treats the zone's teleport volumes as no-go circles 60 units wider than the volume. Each shop and building door in a street is one. Left out are a volume at the destination, which may be the door the walk is for; one the wizard stands at, as it does after coming through it; and volumes on another walkable piece, such as another level.
+  - **Why:** in one run the wizard walked into the Jeweler's shop on its way across the Shopping District. Later it walked out of The Harvest Lord's tower on its way to a health wisp, while its next goal was to talk to someone inside. Both doors were in the zone's `volumes.xml` all along.
+
 - **No straight-line walks across patrol paths.**
   - **What:** the straight-line route, the last method tried, is now refused if it passes within 450 units of an enemy. Where the zone's walk data loaded, it is also refused if it is more dangerous than its two ends, the rule merged legs already follow. When no route method is left, the trip ends and the next turn plans again, around the obstacles found so far.
   - **Why:** the operator saw the wizard walk "right off the side walk into the mobs". The walk-data route to the door of "The Enemy Revealed" was blocked partway. The fallback was a straight line to the door, which checked only duel circles and obstacles. It cut across the Scarlet Screamers' street and started a fight. The walk-data routes keep to the sidewalks. A straight line has nothing to keep it there, so it may only go where it stays as safe as its ends.
