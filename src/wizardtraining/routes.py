@@ -21,6 +21,7 @@ from dataclasses import dataclass, field, replace
 from typing import Callable
 
 from .geometry import Point, distance_to_segment, xy
+from .teleports import TeleportVolume, choose_crossing
 
 COLLISION, NAV, STRAIGHT = "collision", "nav", "straight"
 ENEMY_AVOID_RADIUS = 900.0
@@ -188,6 +189,19 @@ class RoutePlanner:
         self.grid_line_walkable = grid_line_walkable
         self.nav_graph = nav_graph
         self.status = status or {}
+        self.piece_of: Callable[[Point], int | None] | None = None
+        self.teleports: list[tuple[TeleportVolume, int | None]] = []
+
+    def crossing(self, start, goal, outcomes: dict[str, object]) -> TeleportVolume | None:
+        """A teleport volume to walk into when `goal` lies in another walkable piece than `start`, or None
+        when they are in the same piece, the pieces are unknown, or no volume is left to try."""
+        if self.piece_of is None:
+            return None
+        start_piece, goal_piece = self.piece_of(xy(start)), self.piece_of(xy(goal))
+        if start_piece is None or goal_piece is None or start_piece == goal_piece:
+            return None
+        return choose_crossing(self.teleports, start_piece=start_piece, goal_piece=goal_piece, outcomes=outcomes,
+                               goal=goal)
 
     def methods(self) -> list[str]:
         usable = []

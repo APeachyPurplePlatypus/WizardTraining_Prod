@@ -13,7 +13,7 @@ The framework acts in a live online game, on a real account, among real players.
 ## How the character moves
 
 - **Keyboard only:** W, A, S and D for walking and turning, X to interact, Space for dialogs (`keys.ALLOWED_KEYS`). Any other key raises `RefusedKey`.
-- **No teleport and no speed changes.** No writes to position, facing or speed. WizWalker's `goto` writes the facing, so it is not used. The movement-teleport hook is never installed.
+- **No teleport and no speed changes.** No writes to position, facing or speed. The game's own teleporters (doors, zone gates, in-zone teleport volumes such as Triton Avenue's "Tele Up") are walked into like a player would; that is not a teleport the framework performs. WizWalker's `goto` writes the facing, so it is not used. The movement-teleport hook is never installed.
 - **Clicks** use WizWalker's mouseless cursor, only for card, dialog and NPC-menu buttons, and for the HUD's potion button when potions are allowed. The real mouse does not move.
 - **No detection evasion.** The framework does not try to look human. It is honest automation within the limits above.
 

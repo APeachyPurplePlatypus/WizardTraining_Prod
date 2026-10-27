@@ -43,6 +43,7 @@ from .routes import DUEL_CIRCLE_NO_GO, Hazards, RoutePlanner
 from .session import NoClient, attached, hooks_ready
 from .state import attempt, battle_showing, free_to_move, health_fraction, snapshot
 from .targets import bystanders, others, quest_targets, summary, too_close
+from .teleports import LEFT_ZONE, NO_EFFECT, TeleportVolume, describe_outcome
 from .ui import POTION_BUTTON, click, visible_children
 
 TARGET_REACH = 1200.0
@@ -61,6 +62,10 @@ REST_POLL_SECONDS = 10.0
 REST_TURN_SECONDS = 60.0
 NOT_FREE_TO_MOVE_WAIT_SECONDS = 3.0
 POTION_SETTLE_SECONDS = 3.0
+TELEPORT_WAIT_SECONDS = 8.0
+TELEPORT_POLL_SECONDS = 0.25
+JUMP_DISTANCE = 500.0
+TELEPORTED = "teleported"
 KEYS_IGNORED = ("the game ignored a turn key while free to move; a popup (such as the Endorse Wizard window) "
                 "may be holding the keyboard; left for the operator")
 
@@ -412,10 +417,14 @@ class QuestLoop:
                           **details) -> dict:
         start = await self.client.body.position()
         zone = await self.client.zone_name()
+        planner = await self.planner()
+        crossing = planner.crossing(start, destination, self.record.teleport_outcomes.get(zone, {}))
+        if crossing is not None:
+            return await self.teleport_turn(crossing, zone, planner)
         _, duel_circles = await surroundings(self.client)
         hazards = Hazards.of(enemies=[enemy["position"] for enemy in avoid], duel_circles=duel_circles,
                              obstacles=self.record.obstacles.get(zone, []))
-        trip = await travel(self.client, await self.planner(), destination, arrive_radius=arrive_radius,
+        trip = await travel(self.client, planner, destination, arrive_radius=arrive_radius,
                             watch=self.watcher(also=also, ignore=ignore), hazards=hazards)
         moved = flat_distance(start, await self.client.body.position())
         if trip["reason"] in PATH_THREATS and moved < BARELY_MOVED_DISTANCE:
@@ -433,6 +442,53 @@ class QuestLoop:
                                  f"{f'; {new_obstacles} new obstacles' if new_obstacles else ''}")
         return travel_outcome(did, trip["reason"], moved, self.record, new_obstacles=new_obstacles,
                               trip=trip_summary, **details)
+
+    async def teleport_turn(self, volume: TeleportVolume, zone: str, planner: RoutePlanner) -> dict:
+        """Walk into a teleport volume, wait for the jump, and remember where it led: another piece of this
+        zone, another zone, or nowhere. A volume that left the zone or did nothing is not tried again."""
+        self.events.emit("teleporter", f"the target is in another walkable area of {zone}; walking into "
+                                       f"{volume.name} at ({volume.x:.0f}, {volume.y:.0f})")
+        before = await self.client.body.position()
+        trip = await travel(self.client, planner, volume.point, arrive_radius=volume.radius / 3,
+                            watch=self.watcher(also=self.jump_check()))
+        if trip["result"] == "interrupted" and trip["reason"] not in (TELEPORTED, "loading"):
+            moved = flat_distance(before, await self.client.body.position())
+            return travel_outcome("walk to a teleporter", trip["reason"], moved, self.record)
+        outcome = await self.teleport_outcome(zone, planner, already_jumped=trip["reason"] == TELEPORTED)
+        self.record.teleport_outcomes.setdefault(zone, {})[volume.name] = outcome
+        where = await self.client.body.position()
+        self.events.emit("teleporter", f"{volume.name}: {describe_outcome(outcome)}, now at "
+                                       f"({where.x:.0f}, {where.y:.0f})")
+        return (stalled if outcome == NO_EFFECT else progressed)("walked into a teleporter", volume=volume.name,
+                                                                  outcome=outcome)
+
+    def jump_check(self):
+        """For the walking watcher: report a teleport when the position jumps between two ticks."""
+        last = [None]
+
+        async def jumped():
+            here = await self.client.body.position()
+            moved_far = last[0] is not None and flat_distance(last[0], here) > JUMP_DISTANCE
+            last[0] = here
+            return TELEPORTED if moved_far else None
+        return jumped
+
+    async def teleport_outcome(self, zone: str, planner: RoutePlanner, *, already_jumped: bool):
+        if already_jumped:
+            return await self.piece_here(planner)
+        start = await self.client.body.position()
+        deadline = time.monotonic() + TELEPORT_WAIT_SECONDS
+        while time.monotonic() < deadline:
+            if await attempt(self.client.is_loading()) is True or await attempt(self.client.zone_name()) != zone:
+                return LEFT_ZONE
+            if flat_distance(start, await self.client.body.position()) > JUMP_DISTANCE:
+                return await self.piece_here(planner)
+            await asyncio.sleep(TELEPORT_POLL_SECONDS)
+        return NO_EFFECT
+
+    async def piece_here(self, planner: RoutePlanner) -> int | None:
+        here = await self.client.body.position()
+        return planner.piece_of((here.x, here.y))
 
     def watcher(self, *, also=None, ignore=()):
         """Runs on every walking tick: stop for the STOP file, a battle, loading, a dialog or `also()`; step

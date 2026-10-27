@@ -24,9 +24,11 @@ from wizwalker.utils import pharse_nav_data
 
 from .config import DEIMOS_VARIABLE
 from .routes import NavGraph, RoutePlanner
+from .teleports import parse_teleport_volumes
 
 WALL_CLEARANCE = 30.0
 MAX_CELLS_SEARCHED_FOR_A_FREE_ONE = 2000
+PIECE_REACH = 150.0
 
 
 async def load_planner(zone: str, deimos_root: Path | None) -> RoutePlanner:
@@ -35,10 +37,16 @@ async def load_planner(zone: str, deimos_root: Path | None) -> RoutePlanner:
     except Exception as exc:
         reason = f"no zone file: {type(exc).__name__}"
         return RoutePlanner(zone, status={"collision": reason, "nav": reason})
-    walk_grid, line_walkable, collision_status = await _collision_grid(wad, zone, deimos_root)
+    walk_grid, free, collision_status = await _collision_grid(wad, zone, deimos_root)
     nav_graph, nav_status = await _nav_graph(wad)
-    return RoutePlanner(zone, walk_grid=walk_grid, grid_line_walkable=line_walkable, nav_graph=nav_graph,
-                        status={"collision": collision_status, "nav": nav_status})
+    volumes, teleport_status = await _teleport_volumes(wad)
+    planner = RoutePlanner(zone, walk_grid=walk_grid, grid_line_walkable=free.contains_line if free else None,
+                           nav_graph=nav_graph,
+                           status={"collision": collision_status, "nav": nav_status, "teleports": teleport_status})
+    if free is not None:
+        planner.piece_of = free.piece_of
+        planner.teleports = [(volume, free.piece_of(volume.point, volume.radius + PIECE_REACH)) for volume in volumes]
+    return planner
 
 
 async def _collision_grid(wad, zone: str, deimos_root: Path | None):
@@ -55,16 +63,29 @@ async def _collision_grid(wad, zone: str, deimos_root: Path | None):
     except Exception as exc:
         return None, None, f"unavailable: {type(exc).__name__}"
     free = FreeArea(free_area)
-    return WallAwareGrid(grid, free), free.contains_line, f"{len(world.objects)} objects, walls avoided"
+    return WallAwareGrid(grid, free), free, f"{len(world.objects)} objects, walls avoided, {free.piece_count} pieces"
 
 
 class FreeArea:
-    """Where the wizard's body fits: the navmesh minus the padded collision walls."""
+    """Where the wizard's body fits: the navmesh minus the padded collision walls. It can come in separate
+    pieces with no walkable path between them, such as the two levels of Triton Avenue."""
 
     def __init__(self, area):
         from shapely.geometry import LineString, Point
         from shapely.prepared import prep
         self._area, self._line, self._point = prep(area), LineString, Point
+        self._pieces = list(getattr(area, "geoms", [area]))
+
+    @property
+    def piece_count(self) -> int:
+        return len(self._pieces)
+
+    def piece_of(self, point, reach: float = PIECE_REACH) -> int | None:
+        """The index of the piece within `reach` of `point`, the nearest one if several, or None."""
+        where = self._point(*point)
+        distances = [piece.distance(where) for piece in self._pieces]
+        nearest = min(range(len(distances)), key=distances.__getitem__, default=None)
+        return nearest if nearest is not None and distances[nearest] <= reach else None
 
     def contains_point(self, x: float, y: float) -> bool:
         return self._area.contains(self._point(x, y))
@@ -121,6 +142,14 @@ def _deimos_collision(deimos_root: Path) -> _DeimosCollision:
     if str(deimos_root) not in sys.path:
         sys.path.insert(0, str(deimos_root))
     return _DeimosCollision()
+
+
+async def _teleport_volumes(wad):
+    try:
+        volumes = parse_teleport_volumes(await wad.get_file("volumes.xml"))
+    except Exception as exc:
+        return [], f"unavailable: {type(exc).__name__}"
+    return volumes, f"{len(volumes)} teleport volumes"
 
 
 async def _nav_graph(wad):

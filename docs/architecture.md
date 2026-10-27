@@ -46,6 +46,8 @@ Each turn returns `progressed(...)` or `stalled(...)`. Several stalled turns in 
 
 An interrupted trip returns to the loop, which re-plans on the next turn with fresh enemy positions.
 
+Some zones' walkable areas come in separate pieces, such as Triton Avenue's lower street and upper level. When the target is in another piece, `QuestLoop.teleport_turn` walks into one of the zone's teleport volumes (`teleports.py`, read from the zone's `volumes.xml`) and remembers where it led.
+
 ## Route planning
 
 `routes.RoutePlanner.route(method, start, goal, hazards)`:
