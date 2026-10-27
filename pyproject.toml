@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wizardtraining"
+version = "0.1.0"
+description = "A starting framework for Wizard101 agents, built on WizWalker and Deimos"
+readme = "README.md"
+license = "GPL-3.0-or-later"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+game = ["numpy", "shapely"]
+
+[project.scripts]
+wizardtraining = "wizardtraining.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
