@@ -88,7 +88,18 @@ def describe_round(entry: dict) -> str:
                         for enemy in view["enemies"]) or "none"
     mana = f", {view['mana']} mana" if view.get("mana") is not None else ""
     return (f"round {view['round_number']}: me {view['health']}/{view['max_health']} with {view['pips']} pips{mana}; "
-            f"{entry['action']}; enemies left: {enemies}")
+            f"{entry['action']}; enemies left: {enemies}{hand_text(view.get('cards'))}")
+
+
+def hand_text(cards) -> str:
+    """"; hand: Frost Beetle x2, Snow Serpent (2 pips)" listing the cards in hand once each, with pip costs, or ""."""
+    if not cards:
+        return ""
+    counts = Counter(card.get("name") for card in cards)
+    costs = {card.get("name"): card.get("pips") for card in cards}
+    parts = [f"{name}{f' x{count}' if count > 1 else ''}{f' ({costs[name]} pips)' if costs[name] else ''}"
+             for name, count in counts.items()]
+    return "; hand: " + ", ".join(parts)
 
 
 def modifier_text(modifiers, resistances=None) -> str:

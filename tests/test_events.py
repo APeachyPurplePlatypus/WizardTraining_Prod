@@ -47,6 +47,12 @@ class DescriptionTest(unittest.TestCase):
         self.assertEqual(text, "round 2: me 450/624 with 3 pips; cast Frost Beetle on enemy; "
                                "enemies left: Haunted Minion 35")
 
+    def test_describe_round_lists_the_hand(self):
+        entry = round_entry(1, 600, "cast Snow Serpent (Ice) on enemy", [("Warhorn", 285)])
+        entry["view"]["cards"] = [{"name": "Frost Beetle", "pips": 1}, {"name": "Snow Serpent", "pips": 2},
+                                  {"name": "Frost Beetle", "pips": 1}]
+        self.assertTrue(describe_round(entry).endswith("; hand: Frost Beetle x2 (1 pips), Snow Serpent (2 pips)"))
+
     def test_describe_round_shows_mana_when_known(self):
         entry = round_entry(2, 450, "pass: the hand read empty", [("Warhorn", 285)])
         entry["view"]["mana"] = 3
