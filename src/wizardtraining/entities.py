@@ -19,12 +19,13 @@ from wizwalker.constants import Primitive
 from .geometry import flat_distance
 from .keys import tap
 from .movement import bearing_to
-from .targets import back_away, is_duel_circle, measured, threat_centre
+from .targets import back_away, is_duel_circle, is_dungeon_entrance, measured, threat_centre
 
 NPC_BEHAVIOR_ENEMY_FLAG_OFFSET = 288
 ENTITY_LIST_REFRESH_SECONDS = 0.5
 STEP_AWAY_SECONDS = 0.8
 ENEMY, NPC, DUEL_CIRCLE, OTHER = "enemy", "npc", "duel circle", "other"
+DUNGEON_ENTRANCE = "dungeon entrance"
 HEALTH_WISP, MANA_WISP = "health wisp", "mana wisp"
 WISP_NAME_PARTS = {"wisphealth": HEALTH_WISP, "wispmana": MANA_WISP}
 
@@ -43,6 +44,8 @@ async def npc_enemy_flag(entity) -> bool | None:
 async def classify(entity, name: str) -> str:
     if is_duel_circle(name):
         return DUEL_CIRCLE
+    if is_dungeon_entrance(name):
+        return DUNGEON_ENTRANCE
     for part, kind in WISP_NAME_PARTS.items():
         if part in name.lower():
             return kind
@@ -114,6 +117,9 @@ class EntityTracker:
                                 "display_code": self._display_codes.get((entity.base_address, name))})
         return enemies, circles
 
+    async def dungeon_entrances(self) -> list:
+        return [where for _, _, _, where in await self._located({DUNGEON_ENTRANCE})]
+
     async def npc_positions(self) -> list:
         return [where for _, _, _, where in await self._located({NPC})]
 
@@ -143,6 +149,13 @@ async def nearby_enemies(client) -> list[dict]:
 
 async def wisps(client, kind: str) -> list[dict]:
     return await tracker_for(client).wisps(kind)
+
+
+async def dungeon_entrance_near(client, point, reach: float):
+    """The loaded tower or dungeon entrance nearest `point` within `reach` of it, or None."""
+    entrances = [where for where in await tracker_for(client).dungeon_entrances()
+                 if flat_distance(where, point) <= reach]
+    return min(entrances, key=lambda where: flat_distance(where, point), default=None)
 
 
 async def nearest_npc(client):

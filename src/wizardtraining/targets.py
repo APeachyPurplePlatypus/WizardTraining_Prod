@@ -25,6 +25,16 @@ DODGES_BEFORE_WAITING = 3
 DODGE_MEMORY_SECONDS = 60.0
 
 
+DUNGEON_ENTRANCE_NAME = "Teleport Semi Circle"
+
+
+def is_dungeon_entrance(name: str) -> bool:
+    """The semicircle in front of a tower or dungeon where its interact prompt shows and X enters, such as
+    "Teleport Semi Circle 4 Player Generic" outside Sapphyra's Tower in Olde Town, whose quest arrow points at a
+    door volume inside a fenced courtyard."""
+    return DUNGEON_ENTRANCE_NAME in name
+
+
 def is_duel_circle(name: str) -> bool:
     """A fight in progress shows as a "Duel Circle" entity at its centre, the name Deimos looks for
     (`nearest_duel_circle_distance_and_xyz` in Deimos.py), with its fighters seated about 600 units round it:

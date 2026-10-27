@@ -4,7 +4,8 @@ import unittest
 from wizardtraining.routes import ENEMY_KEEP_OUT
 from wizardtraining.targets import (AFTER_BATTLE_GRACE_SECONDS, ENEMY_CLEARANCE, WISP_DETOUR, WISP_REACH,
                                     back_away, bystanders, detour, enemies_to_route_around, in_grace_after_battle,
-                                    is_duel_circle, keeps_blocking, measured, next_area_to_explore, others, quest_targets,
+                                    is_duel_circle, is_dungeon_entrance, keeps_blocking, measured,
+                                    next_area_to_explore, others, quest_targets,
                                     refill_reach, safe_wisps, threat_centre, too_close)
 
 
@@ -26,6 +27,11 @@ class TargetsTest(unittest.TestCase):
         self.assertFalse(is_duel_circle("Ghost-Blue-L02-B"))
         seated = measured([enemy(1, "Ghost", 600, 0)], me=(3000, 3000), duel_circles=[(0, 0)])
         self.assertTrue(seated[0]["in_a_duel"])
+
+    def test_a_tower_or_dungeon_entrance_is_its_semicircle(self):
+        self.assertTrue(is_dungeon_entrance("Teleport Semi Circle 4 Player Generic"))
+        self.assertFalse(is_dungeon_entrance("TeleportVol_Teleport-Foulgaze"))
+        self.assertFalse(is_dungeon_entrance("Duel Circle"))
 
     def test_quest_targets_are_near_the_arrow_and_not_in_a_duel(self):
         self.assertEqual([e["id"] for e in quest_targets(self.enemies, arrow=(900, 0))], [2, 1])

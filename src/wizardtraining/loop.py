@@ -28,7 +28,8 @@ from .config import Settings
 from .dialog import (DIALOG_FINISHED, FOLLOW_UP_WAIT_SECONDS, NPC_ARRIVE_DISTANCE, OFFER_LEFT_FOR_OPERATOR,
                      TALK_KEY_SECONDS, choose_service, close_enough, dialog_open, leave_services, near_npc, read_conversation, service_options,
                      services_open, talk, use_object, wait_for_dialog)
-from .entities import HEALTH_WISP, MANA_WISP, nearby_enemies, nearest_npc, step_away, surroundings, wisps
+from .entities import (HEALTH_WISP, MANA_WISP, dungeon_entrance_near, nearby_enemies, nearest_npc, step_away,
+                       surroundings, wisps)
 from .equipment import count_items, equip, read_items, read_wizard
 from .events import (EventLog, describe_battle, describe_changes, describe_round, dialog_text, enemy_names, health_text,
                      threat_text)
@@ -67,6 +68,7 @@ ARROW_ARRIVE_RADIUS = 250.0
 WAYPOINT_ARRIVE_RADIUS = 150.0
 PROMPT_DOOR_REACH = 2500.0
 NPC_PROMPT_RANGE = 400.0
+ENTRANCE_ARRIVE_RADIUS = 80.0
 INTERACT_PROMPT = "interact prompt"
 LOADING_WAIT_SECONDS = 3.0
 DOOR_PUSH_SECONDS = 0.8
@@ -859,14 +861,28 @@ class QuestLoop:
         short of the arrow, so within PROMPT_DOOR_REACH of it the prompt is answered with X, and the walk stops as
         soon as it shows. Sapphyra's Tower's door stands in a fenced courtyard the wizard cannot walk into; its
         prompt showed at the fence all the while the run stood there, until it stopped for turns without
-        progress (the operator: "the prompt to press X has been open since you got stuck")."""
+        progress (the operator: "the prompt to press X has been open since you got stuck"). The way in was the
+        tower's entrance semicircle ("Teleport Semi Circle 4 Player Generic"), outside the fence: when one is loaded
+        within PROMPT_DOOR_REACH of the arrow, the wizard walks to it, then steps in and presses X."""
         if await self.door_prompt_near(arrow):
             return await self.enter_with_x_turn()
-        if flat_distance(await self.client.body.position(), arrow) <= WAYPOINT_ARRIVE_RADIUS:
+        here = await self.client.body.position()
+        if flat_distance(here, arrow) <= WAYPOINT_ARRIVE_RADIUS:
             return await self.zone_door_turn(arrow)
 
         async def prompt_shows():
             return INTERACT_PROMPT if await self.door_prompt_near(arrow) else None
+
+        entrance = await or_default(dungeon_entrance_near(self.client, arrow, PROMPT_DOOR_REACH), None)
+        if entrance is not None and flat_distance(here, entrance) <= ENTRANCE_ARRIVE_RADIUS:
+            return await self.zone_door_turn(entrance)
+        if entrance is not None:
+            self.events.emit("door", f"the way into {goal.get('destination_zone')} is an entrance semicircle at "
+                                     f"({entrance.x:.0f}, {entrance.y:.0f}), {flat_distance(entrance, arrow):.0f} from the "
+                                     "arrow; walking to it")
+            return await self.travel_turn("walk to a tower or dungeon entrance", entrance,
+                                          arrive_radius=ENTRANCE_ARRIVE_RADIUS, also=prompt_shows,
+                                          avoid=await nearby_enemies(self.client))
 
         return await self.travel_turn("travel to waypoint", arrow, arrive_radius=WAYPOINT_ARRIVE_RADIUS,
                                       also=prompt_shows, avoid=await nearby_enemies(self.client))
