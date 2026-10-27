@@ -25,6 +25,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **A teleporter known to reach the goal's piece is taken even where the nav graph links the pieces.**
+  - **What:** when the zone's nav graph links the wizard's walkable piece to the goal's, the planner still walks in a teleport volume already seen to land in the goal's piece, or the first of a chain of them (`RoutePlanner.crossing`, `teleports.known_crossing`). With no such volume known it walks the nav graph's way, as before.
+  - **Why:** the Haunted Cave's door is on Triton Avenue's upper level. The nav graph links the lower street to it, apparently through the teleporter between them, so the planner walked the link instead of taking "Tele Up", which earlier runs had seen land on the upper level. The walk stuck at a wall, then waited on an enemy beside it every 4 seconds until the run was stopped. Ravenwood's gate to the Commons, the case the nav graph check was added for, has no such volume and walks as before. On the zone's data, from where the wizard stopped, the planner now chooses "Tele Up".
+  - **Not verified yet:** the crossing, in the game.
+
 - **No keys once a zone change has begun.**
   - **What:** a door turn first waits up to 0.6 s for a zone change the walk may already have begun, and then presses nothing (`doors.change_begins`). It pushes into the door with 0.1 s taps of W and a check after each, 0.8 s in all, stopping the moment the change begins (`doors.push_through`). Turning stops once a loading screen shows (`movement.turn_toward`).
   - **Why:** keys sent while a zone change begins are played again in the new zone, on the old heading. The walk to Olde Town's gate into Triton Avenue stops within 150 units of the gate, and its last steps ended inside the gate's volume. The door turn then faced the gate, tapping A and D for seconds while the facing did not answer, and pushed W for 0.8 s. In Triton Avenue those keys ran the wizard about 400 units back into the gate to Olde Town, and the game sent it there as soon as the 3.3 s arrival grace ended. The run crossed four times in 40 seconds and was sent back after three. The game's client log showed each transfer starting in the second the walk ended, and each transfer back at the end of the grace.

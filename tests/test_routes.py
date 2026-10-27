@@ -245,6 +245,17 @@ class RoutePlannerTest(unittest.TestCase):
         self.assertIsNone(planner.crossing((0, 0), (960, 960), {}))
         self.assertEqual(planner.crossing((0, 0), (960, 5000), {}).name, "to IceSchool")
 
+    def test_a_teleporter_known_to_reach_the_goals_piece_beats_a_nav_graph_link(self):
+        """Triton Avenue: the nav graph links the lower street to the Haunted Cave's level through the teleporter,
+        and walking that link stuck at a wall."""
+        planner = RoutePlanner("zone", nav_graph=square_nav_graph(3))
+        planner.piece_of = lambda point, reach=150: 1 if point[1] > 800 else 0
+        tele_up = TeleportVolume("Tele Up", 900, 0, 0, 177)
+        planner.teleports = [(tele_up, 0)]
+        self.assertEqual(planner.crossing((0, 0), (960, 960), {"Tele Up": 1}), tele_up)
+        self.assertIsNone(planner.crossing((0, 0), (960, 960), {"Tele Up": 0}))
+        self.assertIsNone(planner.crossing((0, 0), (960, 960), {"Tele Up": "left the zone"}))
+
     def test_routes_keep_out_of_teleport_volumes(self):
         planner = RoutePlanner("zone", walk_grid=SquareWalkGrid(20), grid_line_walkable=lambda a, b: True)
         jeweler = TeleportVolume("WC_Shop Jewelry", 1000, 0, 0, 100)

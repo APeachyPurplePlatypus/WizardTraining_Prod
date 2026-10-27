@@ -29,7 +29,7 @@ from typing import Callable
 
 from .geometry import Point, distance_to_segment, path_beyond, xy
 from .motion import WALK_UNITS_PER_SECOND
-from .teleports import TeleportVolume, choose_crossing
+from .teleports import TeleportVolume, choose_crossing, known_crossing
 
 COLLISION, NAV, STRAIGHT = "collision", "nav", "straight"
 ENEMY_AVOID_RADIUS = 900.0
@@ -362,7 +362,11 @@ class RoutePlanner:
         goal belongs to the nearest piece within GOAL_PIECE_REACH. But when the wizard's own piece also comes
         within GOAL_PIECE_REACH of the goal, or the zone's nav graph links the two, it walks there. Ravenwood's
         walkway to the Commons is missing from its collision mesh, so its gate lay in a sliver of walkable
-        ground of its own, and a crossing toward that sliver walked into the school doors instead."""
+        ground of its own, and a crossing toward that sliver walked into the school doors instead.
+
+        A nav graph link gives way to a volume already seen to land in the goal's piece: Triton Avenue's nav graph
+        links the lower street to the upper level, where the Haunted Cave's door is, through the teleporter
+        between them, and walking that link stuck at a wall while "Tele Up" was known to lead there."""
         if self.piece_of is None:
             return None
         start_piece, goal_piece = self.piece_of(xy(start)), self.piece_of(xy(goal), GOAL_PIECE_REACH)
@@ -371,7 +375,7 @@ class RoutePlanner:
         if self.piece_reaches is not None and self.piece_reaches(start_piece, xy(goal), GOAL_PIECE_REACH):
             return None
         if self.nav_links(start, goal):
-            return None
+            return known_crossing(self.teleports, start_piece=start_piece, goal_piece=goal_piece, outcomes=outcomes)
         return choose_crossing(self.teleports, start_piece=start_piece, goal_piece=goal_piece, outcomes=outcomes,
                                goal=goal)
 

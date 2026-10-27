@@ -95,14 +95,20 @@ def choose_crossing(volumes: list[tuple[TeleportVolume, int | None]], *, start_p
     2. the untried volume in the wizard's piece nearest the goal;
     3. the first volume of the shortest known chain to a piece that still has an untried volume.
     Volumes that left the zone or did nothing are not tried again."""
-    chain = known_chain(volumes, outcomes, start_piece, lambda piece: piece == goal_piece)
-    if chain:
-        return chain[0]
+    if known := known_crossing(volumes, start_piece=start_piece, goal_piece=goal_piece, outcomes=outcomes):
+        return known
     untried_here = [volume for volume, piece in volumes if piece == start_piece and volume.name not in outcomes]
     if untried_here:
         return min(untried_here, key=lambda volume: math.dist(volume.point, xy(goal)))
     has_untried = {piece for volume, piece in volumes if volume.name not in outcomes}
     chain = known_chain(volumes, outcomes, start_piece, lambda piece: piece in has_untried)
+    return chain[0] if chain else None
+
+
+def known_crossing(volumes: list[tuple[TeleportVolume, int | None]], *, start_piece: int, goal_piece: int,
+                   outcomes: dict[str, object]) -> TeleportVolume | None:
+    """The first volume of the shortest chain already seen to lead from `start_piece` to `goal_piece`, or None."""
+    chain = known_chain(volumes, outcomes, start_piece, lambda piece: piece == goal_piece)
     return chain[0] if chain else None
 
 
