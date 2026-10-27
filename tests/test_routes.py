@@ -5,6 +5,7 @@ from wizardtraining.patrols import PatrolMap
 from wizardtraining.routes import (COLLISION, DUEL_CIRCLE_NO_GO, GOAL_PIECE_REACH, LEG_ENEMY_CLEARANCE, NAV,
                                    OBSTACLE_RADIUS, STRAIGHT, Hazards, NavGraph, RoutePlanner, grid_path,
                                    no_more_dangerous, string_pull)
+from wizardtraining.motion import Track
 from wizardtraining.teleports import TeleportVolume
 
 SPACING = 100.0
@@ -215,6 +216,19 @@ class RoutePlannerTest(unittest.TestCase):
         planner.piece_of = lambda point, reach=150: 0
         planner.teleports = [(TeleportVolume("Tele Down", 1000, 0, 0, 100), 1)]
         self.assertEqual(planner.teleports_to_keep_out_of((0, 0), (5000, 0), 40), [])
+
+    def test_reroute_plans_the_way_ahead_again_and_keeps_the_rest(self):
+        planner = RoutePlanner("zone", walk_grid=SquareWalkGrid(40), grid_line_walkable=lambda a, b: True)
+        path_ahead = [(0, 0), (3900, 0), (3900, 3900)]
+        legs = planner.reroute(path_ahead, Hazards.of(tracks=[Track((1200, 0))]))
+        self.assertEqual(legs[-2:], [(3900, 0), (3900, 3900)])
+        walked = [(0, 0), *legs]
+        joint = walked.index((2500.0, 0.0))
+        self.assertTrue(all(Hazards.of(tracks=[Track((1200, 0))]).line_is_open(a, b)
+                            for a, b in zip(walked[:joint], walked[1:joint + 1])))
+
+    def test_no_reroute_without_walk_data(self):
+        self.assertIsNone(RoutePlanner("zone").reroute([(0, 0), (3000, 0)], Hazards()))
 
     def test_unknown_method_is_an_error(self):
         with self.assertRaises(ValueError):

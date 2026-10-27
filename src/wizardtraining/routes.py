@@ -25,7 +25,7 @@ import time
 from dataclasses import dataclass, field, replace
 from typing import Callable
 
-from .geometry import Point, distance_to_segment, xy
+from .geometry import Point, distance_to_segment, path_beyond, xy
 from .motion import WALK_UNITS_PER_SECOND
 from .teleports import TeleportVolume, choose_crossing
 
@@ -44,6 +44,8 @@ LINE_SAMPLE_SPACING = 60.0
 MAX_MERGE_LOOKAHEAD = 40
 MAX_GRID_NODES = 60_000
 PLANNING_SECONDS = 4.0
+REROUTE_DISTANCE = 2500.0
+REROUTE_SECONDS = 0.25
 GOAL_PIECE_REACH = 600.0
 TELEPORT_CLEARANCE = 60.0
 ENEMY_KEEP_OUT = 520.0
@@ -171,9 +173,9 @@ class NavGraph:
         return None
 
 
-def grid_path(grid, start: Point, goal: Point, hazards: Hazards) -> list[Point] | None:
-    """A* over the walk grid's cells. Gives up after MAX_GRID_NODES cells or PLANNING_SECONDS, because
-    an unbounded search in a large interior stalled a walk for minutes.
+def grid_path(grid, start: Point, goal: Point, hazards: Hazards, seconds: float = PLANNING_SECONDS) -> list[Point] | None:
+    """A* over the walk grid's cells. Gives up after MAX_GRID_NODES cells or `seconds`, because an unbounded
+    search in a large interior stalled a walk for minutes.
 
     `grid` follows Deimos's walk grid: to_hex, to_world, neighbours, walk_z, _nearest_walk_node, spacing."""
     source, target = walkable_cell_near(grid, start), walkable_cell_near(grid, goal)
@@ -181,7 +183,7 @@ def grid_path(grid, start: Point, goal: Point, hazards: Hazards) -> list[Point] 
         return None
     target_xy = grid.to_world(*target)
     frontier, came_from, cost, settled = [(0.0, 0.0, source)], {source: None}, {source: 0.0}, set()
-    give_up_at = time.monotonic() + PLANNING_SECONDS
+    give_up_at = time.monotonic() + seconds
     while frontier and len(settled) < MAX_GRID_NODES and time.monotonic() < give_up_at:
         _, spent, current = heapq.heappop(frontier)
         if current in settled:
@@ -323,11 +325,25 @@ class RoutePlanner:
     def walls_allow(self, a: Point, b: Point) -> bool:
         return self.grid_line_walkable is None or self.grid_line_walkable(a, b)
 
-    def route(self, method: str, start, goal, hazards: Hazards = Hazards()) -> list[Point] | None:
+    def reroute(self, path_ahead, hazards: Hazards) -> list[Point] | None:
+        """A new way from the wizard, the first point of `path_ahead`: the next REROUTE_DISTANCE planned again
+        around `hazards`, within REROUTE_SECONDS, then the rest of the old route. It runs while the wizard
+        keeps walking, so it uses the walk data only, never a straight line. None when no way is found."""
+        joint, *rest = path_beyond(path_ahead, REROUTE_DISTANCE)
+        for method in self.methods():
+            if method == STRAIGHT:
+                continue
+            legs = self.route(method, path_ahead[0], joint, hazards, seconds=REROUTE_SECONDS)
+            if legs:
+                return [*legs, *rest]
+        return None
+
+    def route(self, method: str, start, goal, hazards: Hazards = Hazards(),
+              seconds: float = PLANNING_SECONDS) -> list[Point] | None:
         """Waypoints after the start, the goal last, or None when this method finds no route."""
         start, goal = xy(start), xy(goal)
         if method == COLLISION:
-            cells = grid_path(self.walk_grid, start, goal, hazards)
+            cells = grid_path(self.walk_grid, start, goal, hazards, seconds)
             if cells is None:
                 return None
             points = [start, *cells, goal]

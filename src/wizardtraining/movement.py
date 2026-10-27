@@ -153,16 +153,25 @@ def failed(log: dict, reason: str) -> dict:
     return dict(log, result="failed", reason=reason)
 
 
+@dataclass(frozen=True)
+class Reroute:
+    """A watcher's answer: walk these legs instead, from where the wizard is, without stopping."""
+    legs: list
+
+
 async def follow_route(client, legs, *, final_radius: float, watch=None) -> dict:
     """Walk the legs holding W, steering on the move. `watch(path_ahead)` runs every WATCH_SECONDS with the
-    wizard's position followed by the remaining legs, and may return a reason to stop."""
-    log = {"legs": len(legs), "turns_in_place": 0, "steer_taps": 0, "sidesteps": 0, "blocked_at": [], "trail": []}
+    wizard's position followed by the remaining legs. It may return a reason to stop, or a `Reroute` to walk
+    on along new legs without stopping."""
+    log = {"legs": len(legs), "turns_in_place": 0, "steer_taps": 0, "sidesteps": 0, "reroutes": 0,
+           "blocked_at": [], "trail": []}
     started = trail_at = time.monotonic()
     calibration = calibration_for(client)
+    remaining = list(legs)
     async with HeldKey(client, Keycode.W) as forward:
-        for index, leg in enumerate(legs):
-            radius = final_radius if index == len(legs) - 1 else WAYPOINT_RADIUS
-            target = as_xyz(leg)
+        while remaining:
+            radius = final_radius if len(remaining) == 1 else WAYPOINT_RADIUS
+            target = as_xyz(remaining[0])
             sidesteps = 0
             blocked_check = (time.monotonic(), await client.body.position())
             while True:
@@ -172,11 +181,16 @@ async def follow_route(client, legs, *, final_radius: float, watch=None) -> dict
                 if time.monotonic() >= trail_at and len(log["trail"]) < MAX_TRAIL_POINTS:
                     log["trail"].append((round(me.x), round(me.y)))
                     trail_at = time.monotonic() + TRAIL_SECONDS
-                path_ahead = [xy(me), *(xy(remaining) for remaining in legs[index:])]
-                if watch is not None and (reason := await watch(path_ahead)):
+                path_ahead = [xy(me), *(xy(leg) for leg in remaining)]
+                if watch is not None and (verdict := await watch(path_ahead)):
+                    if isinstance(verdict, Reroute):
+                        remaining = list(verdict.legs)
+                        log["reroutes"] += 1
+                        break
                     await forward.release()
-                    return interrupted(log, reason)
+                    return interrupted(log, verdict)
                 if flat_distance(me, target) <= radius:
+                    remaining.pop(0)
                     break
                 bearing = calculate_perfect_yaw(me, target)
                 off_course = angle_between(bearing, await client.body.yaw())

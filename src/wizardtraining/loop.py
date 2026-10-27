@@ -19,6 +19,7 @@ import asyncio
 import logging
 import time
 import traceback
+from dataclasses import replace
 
 from wizwalker import XYZ, Keycode
 
@@ -29,11 +30,11 @@ from .dialog import (DIALOG_FINISHED, FOLLOW_UP_WAIT_SECONDS, NPC_ARRIVE_DISTANC
                      services_open, talk, use_object, wait_for_dialog)
 from .entities import HEALTH_WISP, MANA_WISP, nearby_enemies, step_away, surroundings, wisps
 from .events import EventLog, describe_battle, describe_changes, describe_round, enemy_names, health_text
-from .geometry import distance_to_path, flat_distance, path_within
+from .geometry import distance_to_path, flat_distance, path_within, xy
 from .keys import tap
 from .knowledge import Knowledge
 from .motion import MotionTracker, closest_approach
-from .movement import KeysIgnored, face, travel
+from .movement import KeysIgnored, Reroute, face, travel
 from .navigation import load_planner
 from .policy import LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, SpellTypePolicy
 from .progress import (DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY, ENEMY_NEAR_PATH, Limits, PATH_THREATS, PlannedRoute,
@@ -58,6 +59,7 @@ DOOR_PUSH_SECONDS = 0.8
 DOOR_WAIT_SECONDS = 15.0
 DOOR_POLL_SECONDS = 0.5
 WATCHED_PATH_LENGTH = 2000.0
+MIN_SECONDS_BETWEEN_REROUTES = 0.3
 BARELY_MOVED_DISTANCE = 100.0
 ENEMY_PASS_WAIT_SECONDS = 1.5
 ENEMIES_IN_THE_WAY_WAIT_SECONDS = 4.0
@@ -284,7 +286,8 @@ class QuestLoop:
         hazards, _ = self.hazards_for(planner, state["zone"], start, wisp["position"], WISP_ARRIVE_RADIUS,
                                       avoid=enemies, duel_circles=circles)
         trip = await travel(self.client, planner, wisp["position"], arrive_radius=WISP_ARRIVE_RADIUS,
-                            watch=self.watcher(), hazards=hazards)
+                            watch=self.watcher(reroute=self.rerouter(planner, hazards, wisp["position"])),
+                            hazards=hazards)
         await asyncio.sleep(WISP_SETTLE_SECONDS)
         after = await snapshot(self.client)
         stat = "health" if wanted == "health" else "mana"
@@ -588,7 +591,9 @@ class QuestLoop:
         hazards, around = self.hazards_for(planner, zone, start, destination, arrive_radius, avoid=avoid,
                                            duel_circles=duel_circles)
         trip = await travel(self.client, planner, destination, arrive_radius=arrive_radius,
-                            watch=self.watcher(also=also, ignore=ignore), hazards=hazards)
+                            watch=self.watcher(also=also, ignore=ignore,
+                                               reroute=self.rerouter(planner, hazards, destination)),
+                            hazards=hazards)
         moved = flat_distance(start, await self.client.body.position())
         if trip["reason"] == "every route method failed" and around and moved < BARELY_MOVED_DISTANCE:
             trip["reason"] = ENEMIES_IN_THE_WAY
@@ -605,7 +610,8 @@ class QuestLoop:
                         "methods": [(tried["method"], tried.get("result"), tried.get("reason"),
                                      tried.get("sidesteps"), tried.get("seconds")) for tried in trip["attempts"]]}
         new_obstacles = remember_obstacles(self.record, zone, trip["blocked_at"])
-        methods = ", ".join(f"{tried['method']}: {tried.get('result')}" for tried in trip["attempts"])
+        methods = ", ".join(f"{tried['method']}: {tried.get('result')}{reroute_text(tried)}"
+                            for tried in trip["attempts"])
         self.events.emit("walk", f"{did}: moved {moved:.0f}, {trip['result']}"
                                  f"{' (' + trip['reason'] + ')' if trip['reason'] else ''}; {methods}"
                                  f"{f'; {new_obstacles} new obstacles' if new_obstacles else ''}")
@@ -622,7 +628,9 @@ class QuestLoop:
         hazards, _ = self.hazards_for(planner, zone, before, volume.point, volume.radius / 3,
                                       avoid=await nearby_enemies(self.client), duel_circles=duel_circles)
         trip = await travel(self.client, planner, volume.point, arrive_radius=volume.radius / 3,
-                            watch=self.watcher(also=self.jump_check()), hazards=hazards)
+                            watch=self.watcher(also=self.jump_check(),
+                                               reroute=self.rerouter(planner, hazards, volume.point)),
+                            hazards=hazards)
         reached = trip["result"] == "arrived" or trip["reason"] in (TELEPORTED, "loading")
         if not reached:
             moved = flat_distance(before, await self.client.body.position())
@@ -680,11 +688,22 @@ class QuestLoop:
                              tracks=[self.motion.track(enemy, now) for enemy in around])
         return hazards, around
 
-    def watcher(self, *, also=None, ignore=()):
+    def rerouter(self, planner: RoutePlanner, hazards: Hazards, destination):
+        """Plans the way ahead again around where enemies are going, from where the wizard is, while it walks."""
+        def reroute(path_ahead, threats: list[dict], now: float):
+            around = enemies_to_route_around(threats, me=path_ahead[0], destination=destination)
+            live = replace(hazards, enemies=tuple(xy(enemy["position"]) for enemy in threats),
+                           tracks=tuple(self.motion.track(enemy, now) for enemy in around))
+            return planner.reroute(path_ahead, live)
+        return reroute
+
+    def watcher(self, *, also=None, ignore=(), reroute=None):
         """Runs on every walking tick: stop for the STOP file, a battle, loading, a dialog or `also()`; step
-        away from a close enemy; and end the trip when an enemy or a duel is near the next stretch of the
-        path, so the next turn plans around it."""
+        away from a close enemy; and when an enemy's course will come near the next stretch of the path, plan
+        the way ahead again without stopping (`reroute`). Only when that finds no way, or did not help, the trip
+        ends and the next turn plans again. A duel near the path always ends the trip."""
         route = PlannedRoute()
+        last_reroute = [0.0]
 
         async def watch(path_ahead):
             if self.settings.stop_requested():
@@ -715,6 +734,10 @@ class QuestLoop:
                                            for enemy in threats}, path_ahead)
             if any(route.threatens(enemy["id"], closest_approach(self.motion.track(enemy, now), stretch))
                    for enemy in threats):
+                if reroute is not None and now - last_reroute[0] >= MIN_SECONDS_BETWEEN_REROUTES:
+                    last_reroute[0] = now
+                    if legs := reroute(path_ahead, threats, now):
+                        return Reroute(legs)
                 return ENEMY_NEAR_PATH
             return None
 
@@ -758,6 +781,10 @@ class QuestLoop:
                                      "journal": [(entry["name_key"], entry["mainline"]) for entry in quests["journal"]]}
         except Exception as exc:
             self.record.end = f"<unavailable: {type(exc).__name__}>"
+
+
+def reroute_text(attempt: dict) -> str:
+    return f" after {attempt['reroutes']} reroutes" if attempt.get("reroutes") else ""
 
 
 async def play(settings: Settings, limits: Limits, *, combat_policy: CombatPolicy | None = None,
