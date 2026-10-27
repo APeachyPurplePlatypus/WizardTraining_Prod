@@ -17,9 +17,8 @@ QUEST_TARGET_ARROW_RADIUS = 700.0
 ENEMY_CLEARANCE = 450.0
 WISP_REACH = 2500.0
 WISP_ENEMY_CLEARANCE = 600.0
-DODGES_BEFORE_FACING = 3
+DODGES_BEFORE_WAITING = 3
 DODGE_MEMORY_SECONDS = 60.0
-FACE_ABOVE_HEALTH = 0.5
 
 
 def measured(enemies: list[dict], me, duel_circles) -> list[dict]:
@@ -75,13 +74,10 @@ def next_area_to_explore(points: list, *, me, explored=(), prefer=()) -> tuple |
     return min(preferred or left, key=lambda point: flat_distance(me, point[0]), default=None)
 
 
-def still_worth_dodging(dodge_times: list[float], *, now: float, health: float | None) -> bool:
-    """False once the wizard has stepped away DODGES_BEFORE_FACING times in DODGE_MEMORY_SECONDS while its health
-    is at least FACE_ABOVE_HEALTH: enemies keep blocking the way, and dodging again only loops. The wizard
-    then walks on, and passes them or fights."""
-    recent = [moment for moment in dodge_times if now - moment <= DODGE_MEMORY_SECONDS]
-    healthy = health is not None and health >= FACE_ABOVE_HEALTH
-    return not (healthy and len(recent) >= DODGES_BEFORE_FACING)
+def keeps_blocking(dodge_times: list[float], *, now: float) -> bool:
+    """True once the wizard has stepped away DODGES_BEFORE_WAITING times in DODGE_MEMORY_SECONDS: enemies patrol
+    the way ahead, and walking on as soon as they are out of reach only leads back into them."""
+    return sum(1 for moment in dodge_times if now - moment <= DODGE_MEMORY_SECONDS) >= DODGES_BEFORE_WAITING
 
 
 def threat_centre(close: list[dict]) -> Point:

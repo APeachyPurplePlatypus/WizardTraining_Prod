@@ -1,8 +1,9 @@
 import math
 import unittest
 
-from wizardtraining.targets import (ENEMY_CLEARANCE, WISP_REACH, back_away, bystanders, measured, next_area_to_explore,
-                                    others, quest_targets, safe_wisps, still_worth_dodging, threat_centre, too_close)
+from wizardtraining.targets import (ENEMY_CLEARANCE, WISP_REACH, back_away, bystanders, keeps_blocking, measured,
+                                    next_area_to_explore, others, quest_targets, safe_wisps, threat_centre,
+                                    too_close)
 
 
 def enemy(id_, name, x, y):
@@ -52,12 +53,10 @@ class TargetsTest(unittest.TestCase):
         self.assertEqual(next_area_to_explore(points, me=(0, 0), prefer={1}), ((0, 3000), 1))
         self.assertEqual(next_area_to_explore(points, me=(0, 0), explored=[(0, 3000)], prefer={1}), ((0, 1000), 0))
 
-    def test_an_enemy_dodged_often_is_faced_when_healthy(self):
-        self.assertTrue(still_worth_dodging([10, 20], now=30, health=0.9))
-        self.assertFalse(still_worth_dodging([10, 20, 25], now=30, health=0.9))
-        self.assertTrue(still_worth_dodging([10, 20, 25], now=30, health=0.3))
-        self.assertTrue(still_worth_dodging([10, 20, 25], now=200, health=0.9))
-        self.assertTrue(still_worth_dodging([10, 20, 25], now=30, health=None))
+    def test_enemies_keep_blocking_after_three_recent_step_aways(self):
+        self.assertFalse(keeps_blocking([10, 20], now=30))
+        self.assertTrue(keeps_blocking([10, 20, 25], now=30))
+        self.assertFalse(keeps_blocking([10, 20, 25], now=200))
 
     def test_threat_centre_is_the_average_position(self):
         self.assertEqual(threat_centre([enemy(1, "a", 0, 0), enemy(2, "b", 100, 50)]), (50.0, 25.0))

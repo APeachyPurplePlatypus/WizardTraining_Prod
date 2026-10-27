@@ -4,6 +4,13 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ## Unreleased
 
+### Changed
+
+- **Enemies are always avoided.**
+  - **What:** the wizard steps away from every enemy that comes within 450 units, every time, unless the quest needs the fight: the targets of a defeat goal are still walked into. The dodge limit, which made the wizard walk on past enemies after three step-aways in a minute, is gone. When enemies keep blocking the way (three step-aways in a minute), the wizard now stands back for up to eight seconds and lets them walk on along their patrol, stepping away again if one comes close, and then plans again. The run's step-away limit (40) stops a wait that never ends and leaves it for the operator.
+  - **Why:** the operator's rule is to avoid enemies always, unless the quest or dungeon requires the fight to move forward. With the dodge limit, the level-6 wizard walked on past two level-12 Red Banshees on Triton's upper level. Enemies patrol, so a blocked way usually clears if the wizard waits.
+  - **Not handled yet:** a dungeon whose way forward is blocked by enemies the quest does not name. The wizard waits there, and the run stops at the step-away limit.
+
 ### Fixed
 
 - **No straight-line walks across patrol paths.**
@@ -19,6 +26,7 @@ Every change, enhancement or addition is listed with its rationale, so later con
 - **The dodge limit counts all step-aways, not each enemy's.**
   - **What:** after three step-aways of any kind within a minute, at half health or more, the wizard walks on. The exception is a group of three or more enemies, which it still steps away from.
   - **Why:** on the way to Triton's Tele Up, several Ghost-Blue-L02 stood around the path. The per-enemy count let the wizard walk past one, then step away from the next, and the run stopped on turns without progress again.
+  - **Replaced before release** by "Enemies are always avoided": the wizard no longer walks on past enemies.
 
 - **A potion before distant wisps when health is low.**
   - **What:** below the potion threshold (40%), with potions allowed, the wizard drinks before looking for wisps. Wisps are now only sought within 2,500 units, down from 4,000.
@@ -27,6 +35,7 @@ Every change, enhancement or addition is listed with its rationale, so later con
 - **No endless dodging of an enemy that blocks the way.**
   - **What:** once the wizard has stepped away from the same enemy three times within a minute, and health is at least half, it stops stepping away from that enemy. It walks on, and passes it or fights it. The event log records the decision.
   - **Why:** a `Minion-Myth-00` stood about 371 units from the wizard, on the way to Triton's Tele Up. Every turn the route led toward it, the wizard stepped away, and it planned again: seven times in six seconds, until the run stopped on turns without progress. At 70% health, one minion is a fight worth taking. Below half health the wizard still dodges, as before.
+  - **Replaced before release** by "Enemies are always avoided": the wizard no longer walks on past enemies.
 
 - **Stepping away from enemies without turning first.**
   - **What:** a step-away now moves backward with S when the close enemies are within 90 degrees of where the wizard faces, and forward with W when they're behind. It never turns first, lasts 0.8 s, and the event log says which way it went.
