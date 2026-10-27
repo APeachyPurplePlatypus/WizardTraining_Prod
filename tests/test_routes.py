@@ -329,6 +329,36 @@ class GapStepTest(unittest.TestCase):
         self.assertIsNone(RoutePlanner("zone").gap_step((0, 0), (1, 1)))
 
 
+class WayAcrossTest(unittest.TestCase):
+    """Triton Avenue: the Haunted Cave's door is on the upper level, 198 units across a gap from the street, and
+    "Tele Up" lands there."""
+
+    def planner(self, tele_up_standing_in=18):
+        planner = RoutePlanner("WizardCity/WC_Streets/WC_Triton")
+        planner.piece_of = lambda point, reach=150.0: 0 if point[1] > 5000 else 18
+        planner.piece_gap = lambda first, second: ((-16100.0, 140.0), (-16300.0, 140.0), 198.0)
+        planner.teleports = [(TeleportVolume("Tele Up", -16336.0, 1176.0, 0.0, 300.0), tele_up_standing_in)]
+        return planner
+
+    cave_door = (-37005.0, 6000.0)
+    street = (-15000.0, 0.0)
+
+    def test_a_teleporter_seen_to_land_in_the_goals_piece_comes_before_a_gap_step(self):
+        way = self.planner().way_across(self.street, self.cave_door, {"Tele Up": 0})
+        self.assertEqual(way.name, "Tele Up")
+
+    def test_a_short_gap_is_stepped_across_when_no_teleporter_is_known_to_lead_there(self):
+        way = self.planner().way_across(self.street, self.cave_door, {})
+        self.assertEqual(way, GapStep((-16100.0, 140.0), (-16300.0, 140.0), (18, 0)))
+
+    def test_after_a_failed_step_an_untried_teleporter_is_chosen(self):
+        way = self.planner().way_across(self.street, self.cave_door, {}, failed_gaps=[(18, 0)])
+        self.assertEqual(way.name, "Tele Up")
+
+    def test_nothing_to_cross_within_one_piece(self):
+        self.assertIsNone(self.planner().way_across(self.street, (-15000.0, 100.0), {"Tele Up": 0}))
+
+
 def nav_file(waypoints, links) -> bytes:
     data = bytearray(b"\x00\x00") + struct.pack("<i", len(waypoints))
     for (x, y, z), number in waypoints:

@@ -1144,11 +1144,12 @@ class QuestLoop:
         start = await self.client.body.position()
         zone = await self.client.zone_name()
         planner = await self.planner()
-        if (step := planner.gap_step(start, destination, self.record.failed_gaps.get(zone, []))) is not None:
-            return await self.gap_turn(step, zone, planner)
-        crossing = planner.crossing(start, destination, self.record.teleport_outcomes.get(zone, {}))
-        if crossing is not None:
-            return await self.teleport_turn(crossing, zone, planner)
+        way = planner.way_across(start, destination, self.record.teleport_outcomes.get(zone, {}),
+                                 self.record.failed_gaps.get(zone, []))
+        if isinstance(way, GapStep):
+            return await self.gap_turn(way, zone, planner)
+        if way is not None:
+            return await self.teleport_turn(way, zone, planner)
         _, duel_circles = await surroundings(self.client)
         hazards, around = self.hazards_for(planner, zone, start, destination, arrive_radius, avoid=avoid,
                                            duel_circles=duel_circles)
