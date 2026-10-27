@@ -47,6 +47,11 @@ class TargetsTest(unittest.TestCase):
         self.assertEqual(next_area_to_explore(points, me=(0, 0), explored=[(0, 1000)]), ((0, 3000), 1))
         self.assertIsNone(next_area_to_explore(points, me=(0, 0), explored=[(0, 1000), (0, 3000), (0, 5000)]))
 
+    def test_preferred_pieces_are_explored_first(self):
+        points = [((0, 5000), 0), ((0, 1000), 0), ((0, 3000), 1)]
+        self.assertEqual(next_area_to_explore(points, me=(0, 0), prefer={1}), ((0, 3000), 1))
+        self.assertEqual(next_area_to_explore(points, me=(0, 0), explored=[(0, 3000)], prefer={1}), ((0, 1000), 0))
+
     def test_threat_centre_is_the_average_position(self):
         self.assertEqual(threat_centre([enemy(1, "a", 0, 0), enemy(2, "b", 100, 50)]), (50.0, 25.0))
 

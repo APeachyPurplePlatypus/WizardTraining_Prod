@@ -15,6 +15,7 @@ Every change, enhancement or addition is listed with its rationale, so later con
 - **Exploring for a defeat goal's enemies.**
   - **What:** when a defeat goal has no quest arrow and none of the enemies it names are in sight, the loop walks to the nearest unexplored part of the zone and stops as soon as one shows up. The zone's walkable area is split into points about 2,500 units apart on every level (`FreeArea.exploration_points`), and the loop uses teleporters where needed. Once every point has been seen, it stops for the operator. The event log says where it is looking and how many areas are left.
   - **Why:** "Clear as Crystal" asks for Scarlet Screamers on Triton Avenue, and the goal has no quest helper. Enemies only load when the wizard is fairly close, and the zone's spawn data names "Spawn point 10_Screamer" and "11_Screamer" without positions that could be read. Looking around is what a player would do.
+  - **Order:** with no arrow, the loop first works on any open goal whose target it can locate, such as the Cog, before searching for another goal's enemies. The search starts in the walkable pieces that hold the quest's other placed targets: a quest's targets tend to be near each other. The operator confirmed that the Scarlet Screamers are on Triton's upper level, where the quest's Cogs are. Searching nearest-first had sent the wizard through the eel-filled lower street.
   - **Not verified:** how long a full search takes in large zones. The run's time and turn limits still bound it.
 
 - **Closing the Endorse a Wizard window.**

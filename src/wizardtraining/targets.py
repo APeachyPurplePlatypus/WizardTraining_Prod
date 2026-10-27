@@ -63,10 +63,13 @@ def safe_wisps(wisps: list[dict], *, me, enemies: list[dict], duel_circles, trie
     return sorted((wisp for wisp in wisps if safe(wisp)), key=lambda wisp: flat_distance(me, wisp["position"]))
 
 
-def next_area_to_explore(points: list, *, me, explored=()) -> tuple | None:
-    """The nearest exploration point not explored yet, as ((x, y), piece), or None when all are done."""
+def next_area_to_explore(points: list, *, me, explored=(), prefer=()) -> tuple | None:
+    """The nearest exploration point not explored yet, as ((x, y), piece), or None when all are done. Points
+    in the `prefer` pieces come first: a quest's targets tend to be near each other, so the pieces holding
+    its other goals' objects are the likeliest places for the enemies it asks for."""
     left = [point for point in points if (round(point[0][0]), round(point[0][1])) not in explored]
-    return min(left, key=lambda point: flat_distance(me, point[0]), default=None)
+    preferred = [point for point in left if point[1] in set(prefer)]
+    return min(preferred or left, key=lambda point: flat_distance(me, point[0]), default=None)
 
 
 def threat_centre(close: list[dict]) -> Point:

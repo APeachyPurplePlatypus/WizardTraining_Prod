@@ -347,9 +347,9 @@ class QuestLoop:
         goal = goals[0] if goals else {"type": "persona", "destination_zone": ""}
         arrow = await read_quest_arrow(self.client)
         if arrow_shows_no_target(arrow):
-            arrow = await self.target_without_arrow(goal)
+            arrow, goal = await self.goal_with_a_target(goals, goal)
             if arrow is None and goal["type"] in ("bounty", "bountycollect") and goal.get("target_code"):
-                return await self.explore_turn(goal)
+                return await self.explore_turn(goal, goals)
             if arrow is None:
                 raise StopRun(f"the quest arrow shows no target for the {goal['type']} goal of "
                               f"{quest.get('title') or quest['name_key']}, and neither its tags {goal.get('tags')} "
@@ -394,7 +394,16 @@ class QuestLoop:
             return matching[0]["position"]
         return None
 
-    async def explore_turn(self, goal: dict) -> dict:
+    async def goal_with_a_target(self, goals: list[dict], first: dict):
+        """With no quest arrow, work on the first open goal whose target can be found, by its tags or by its
+        enemies in sight, rather than searching for the first goal's while another's is known."""
+        for goal in goals:
+            arrow = await self.target_without_arrow(goal)
+            if arrow is not None:
+                return arrow, goal
+        return None, first
+
+    async def explore_turn(self, goal: dict, goals: list[dict] = ()) -> dict:
         """Look for a goal's enemies when none is in sight: walk to the nearest part of the zone not explored
         yet, stopping as soon as one shows up. Stops the run once every part has been seen."""
         code = goal["target_code"]
@@ -402,7 +411,10 @@ class QuestLoop:
         planner = await self.planner()
         explored = self.record.explored.setdefault(f"{zone}|{code}", [])
         me = await self.client.body.position()
-        area = next_area_to_explore(planner.exploration_points, me=(me.x, me.y), explored=explored)
+        quest_objects = [thing for other in goals for thing in objects_for_goal(planner.placed_objects,
+                                                                                 other.get("tags") or [], me=(me.x, me.y))]
+        prefer = {planner.piece_of(thing.point) for thing in quest_objects} - {None} if planner.piece_of else set()
+        area = next_area_to_explore(planner.exploration_points, me=(me.x, me.y), explored=explored, prefer=prefer)
         if area is None:
             raise StopRun(f"explored all of {zone} without seeing the enemy {code}; left for the operator")
         (x, y), _ = area
