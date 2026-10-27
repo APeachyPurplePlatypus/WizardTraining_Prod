@@ -29,7 +29,7 @@ from .patrols import PatrolMap, parse_nodes, parse_paths
 from .placed import parse_placed_objects
 from .teleports import parse_teleport_volumes
 
-WALL_CLEARANCE = 30.0
+WALL_CLEARANCE = 45.0
 EXPLORE_SPACING = 2500.0
 MAX_CELLS_SEARCHED_FOR_A_FREE_ONE = 2000
 PIECE_REACH = 150.0

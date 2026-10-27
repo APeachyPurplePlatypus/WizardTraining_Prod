@@ -29,7 +29,7 @@ from .dialog import (DIALOG_FINISHED, FOLLOW_UP_WAIT_SECONDS, NPC_ARRIVE_DISTANC
                      TALK_KEY_SECONDS, choose_service, close_enough, dialog_open, leave_services, near_npc, read_conversation, service_options,
                      services_open, talk, use_object, wait_for_dialog)
 from .entities import HEALTH_WISP, MANA_WISP, nearby_enemies, step_away, surroundings, wisps
-from .events import EventLog, describe_battle, describe_changes, describe_round, enemy_names, health_text
+from .events import EventLog, describe_battle, describe_changes, describe_round, dialog_text, enemy_names, health_text
 from .geometry import distance_to_path, flat_distance, path_within, xy
 from .keys import tap
 from .knowledge import Knowledge
@@ -255,9 +255,11 @@ class QuestLoop:
         return progressed("dialog", result=result, pages=len(record["pages"]))
 
     def note_dialog(self, record: dict, result: str) -> None:
+        """Log a conversation with its text. The text goes to the event log only: the report keeps page lengths."""
         offers = [page["offer"] for page in record.get("pages", []) if "offer" in page]
         self.events.emit("dialog", f"{len(record.get('pages', []))} pages, {record.get('follow_ups', 0)} follow-ups"
-                                   f"{', offers: ' + ', '.join(offers) if offers else ''}; {result}")
+                                   f"{', offers: ' + ', '.join(offers) if offers else ''}; {result}",
+                         text=dialog_text(record.pop("texts", [])))
 
     async def services_turn(self) -> dict:
         """Pick an option of an NPC's services menu, as the offer policy decides."""

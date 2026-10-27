@@ -3,7 +3,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from wizardtraining.events import EventLog, change, describe_battle, describe_changes, describe_round, enemy_names
+from wizardtraining.events import (EventLog, change, describe_battle, describe_changes, describe_round, dialog_text,
+                                   enemy_names)
 
 
 def round_entry(number, health, action, enemies):
@@ -36,6 +37,10 @@ class DescriptionTest(unittest.TestCase):
         self.assertEqual(change(10, 4), "-6")
         self.assertEqual(change(10, 10), "no change")
         self.assertEqual(change(None, 3), "no change")
+
+    def test_dialog_text_drops_markup(self):
+        pages = ["<center>Welcome, young Wizard!</center>", "", "Go see <b>Professor Drake</b> in the Myth School."]
+        self.assertEqual(dialog_text(pages), "Welcome, young Wizard!\nGo see Professor Drake in the Myth School.")
 
     def test_describe_round(self):
         text = describe_round(round_entry(2, 450, "cast Frost Beetle on enemy", [("Haunted Minion", 35)]))

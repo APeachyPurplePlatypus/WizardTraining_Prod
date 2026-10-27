@@ -12,6 +12,7 @@ from __future__ import annotations
 import datetime
 import json
 import logging
+import re
 from collections import Counter
 from pathlib import Path
 
@@ -67,6 +68,17 @@ def enemies_at_once(rounds: list[dict]) -> tuple[int, Counter]:
         most = max(most, len(enemies))
         by_name |= Counter(enemy.get("name") or "unknown" for enemy in enemies)
     return most, by_name
+
+
+MARKUP = re.compile(r"<[^>]*>")
+DIALOG_TEXT_LIMIT = 4000
+
+
+def dialog_text(pages: list[str]) -> str:
+    """The pages of a conversation as plain text, one per line: the game's markup tags removed, and cut at
+    DIALOG_TEXT_LIMIT characters."""
+    lines = [" ".join(MARKUP.sub(" ", page).split()) for page in pages]
+    return "\n".join(line for line in lines if line)[:DIALOG_TEXT_LIMIT]
 
 
 def describe_round(entry: dict) -> str:

@@ -6,6 +6,8 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Added
 
+- **Dialog text in the event log.** Each "dialog" event now carries the conversation's text, one page per line, with the game's markup removed (up to 4,000 characters). The report still keeps page lengths only. The operator suggested reading the dialog for context: it says where the quest goes next ("Go see Professor Drake in the Myth School"), which neither the goal data nor the quest arrow always does. The text can include the wizard's own name; the event log stays in the ignored `runtime/` folder.
+
 - **Side quests, opt-in (`--side-quests`).**
   - **What:** `policy.TakeAllQuests` accepts every quest offer, side quests included, and the loop plays whichever quest the game has active instead of stopping at a side quest. In an NPC's services menu with no quest active, it takes the approved titles first, then the first quest listed. The event log marks side quests ("(side quest)"). Before the main quest leaves the world, the run still stops, and now lists the open side quests from the journal. The default stays main quests only.
   - **Why:** the operator's rules during the level-10 runs: "you can take all side quests as you see them now", and "main quests are priority, but side quests need to be completed before moving on to the next world if possible". The run had just stopped in the Headmaster's house at a quest offer the main-quests-only policy could not classify.
@@ -63,6 +65,8 @@ Every change, enhancement or addition is listed with its rationale, so later con
   - **Not handled yet:** a dungeon whose way forward is blocked by enemies the quest does not name. The wizard waits there, and the run stops at the step-away limit.
 
 ### Fixed
+
+- **Wall clearance matches the wizard's body.** The walkable area now keeps 45 units from collision walls, not 30, which is the body radius Deimos's walk grid uses. With 30, a gap of about 77 units between two boxes in the Myth school stayed walkable, though the wizard cannot fit through it. Routes on Triton Avenue, Cyclops Lane, in Ravenwood and in the Shopping District were checked and still found. The operator noticed the wizard "always" walks into props in the Myth school. Some of those props seem not to be box colliders at all: no collision route reaches the quest NPC there, and the nav and straight-line fallbacks still bump into them.
 
 - **A zone read during loading no longer breaks the report.** The zone reads as empty for a moment during some loading screens. The loop recorded an "arrival" in that empty zone, and saving the report then failed, because JSON keys could not be sorted with an empty one among zone names; the report of that run was lost. Arrivals now need a zone name, and reports turn every key into text before sorting.
 

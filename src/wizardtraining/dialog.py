@@ -167,7 +167,7 @@ async def read_conversation(client, record: dict, offers: OfferPolicy) -> str:
     """Read the open dialog, then any follow-up dialogs that open within FOLLOW_UP_WAIT_SECONDS."""
     record.setdefault("pages", [])
     record["follow_ups"] = 0
-    texts = []
+    texts = record.setdefault("texts", [])
     while True:
         result = await read_pages(client, record, texts, offers)
         if result != DIALOG_FINISHED or record["follow_ups"] >= MAX_FOLLOW_UPS:
