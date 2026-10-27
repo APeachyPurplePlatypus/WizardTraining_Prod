@@ -1,7 +1,7 @@
 """Command line.
 
     python -m wizardtraining probe
-    python -m wizardtraining play --level 7 --minutes 25 --battles 20 [--approve-quest TITLE ...] [--use-potions] [--wear-gear]
+    python -m wizardtraining play --level 7 --minutes 25 --battles 20 [--max-defeats N] [--approve-quest TITLE ...] [--use-potions] [--wear-gear]
     python -m wizardtraining stop
 
 Start the game and log in yourself first. Stop a running `play` with `stop` from a second terminal,
@@ -29,6 +29,9 @@ def main(argv=None) -> int:
     play.add_argument("--level", type=int, default=Limits.target_level, help="stop on reaching this level")
     play.add_argument("--minutes", type=float, default=Limits.minutes, help="stop after this long")
     play.add_argument("--battles", type=int, default=Limits.max_battles, help="stop after this many battles")
+    play.add_argument("--max-defeats", type=int, default=Limits.max_defeats,
+                      help="defeats to play on through; the run stops at the next one. By default none: the first "
+                           "defeat stops it for you")
     play.add_argument("--approve-quest", action="append", default=[], metavar="TITLE",
                       help="a quest title an NPC's menu may offer that you have checked is a main quest; repeatable, "
                            "earlier titles are preferred")
@@ -60,6 +63,7 @@ def main(argv=None) -> int:
 
     from .loop import play as play_quests
     limits = Limits(target_level=args.level, minutes=args.minutes, max_battles=args.battles,
+                    max_defeats=args.max_defeats,
                     stay_in_world=not args.leave_world)
     offers = (TakeAllQuests if args.side_quests else MainQuestsOnly)(approved_titles=args.approve_quest)
     report, path = asyncio.run(play_quests(settings, limits, offer_policy=offers, use_potions=args.use_potions,
