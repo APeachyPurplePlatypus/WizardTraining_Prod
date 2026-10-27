@@ -42,7 +42,8 @@ EMPTY_HAND_READS = 6
 PAUSE_BETWEEN_CAST_CLICKS_SECONDS = 0.5
 CAST_TAKES_WITHIN_SECONDS = 3.0
 FLEE_CONFIRM_WAIT_SECONDS = 1.0
-PLANNING = ["WorldView", "PlanningPhase", "Alignment", "PlanningPhaseSubWindow"]
+PLANNING_PHASE = ["WorldView", "PlanningPhase"]
+PLANNING = [*PLANNING_PHASE, "Alignment", "PlanningPhaseSubWindow"]
 ACTION_BUTTONS = [*PLANNING, "SpellSelection", "ActionButtons"]
 WAITING_FOR_OTHERS = [*PLANNING, "WaitingForOthers"]
 CHANGE_CHOICE = [*WAITING_FOR_OTHERS, "Change"]
@@ -328,7 +329,9 @@ async def flee(combat) -> str:
     await click(client, FLEE_BUTTON)
     await asyncio.sleep(FLEE_CONFIRM_WAIT_SECONDS)
     if not await showing(client, MESSAGE_BOX):
-        return f"no confirmation box; showing {await visible_tree(client, PLANNING)}"
+        return (f"no confirmation box; the planning window shows {await visible_tree(client, PLANNING)}; the planning "
+                f"phase shows {await visible_tree(client, PLANNING_PHASE, depth=4)}; on top: "
+                f"{await visible_tree(client, [], depth=1)}")
     caption = (await text_of(client, MESSAGE_BOX_CAPTION)).replace("<center>", "").replace("</center>", "").strip()
     if "flee" not in caption.lower():
         return f"a message box that does not mention fleeing was left alone: {caption!r}"
