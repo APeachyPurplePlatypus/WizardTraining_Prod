@@ -35,6 +35,7 @@ FLOOR_TOLERANCE = 8.0
 EXPLORE_SPACING = 2500.0
 MAX_CELLS_SEARCHED_FOR_A_FREE_ONE = 2000
 PIECE_REACH = 150.0
+NO_PATROLS = "no enemy patrols"
 
 
 async def load_planner(zone: str, deimos_root: Path | None) -> RoutePlanner:
@@ -224,7 +225,7 @@ async def _patrols(wad):
                                        parse_paths(await wad.get_file("pathData.xml")))
     except Exception as exc:
         return None, f"unavailable: {type(exc).__name__}"
-    return (patrols, f"{len(patrols.segments)} enemy patrol segments") if patrols else (None, "no enemy patrols")
+    return (patrols, f"{len(patrols.segments)} enemy patrol segments") if patrols else (None, NO_PATROLS)
 
 
 async def _placed_objects(wad):

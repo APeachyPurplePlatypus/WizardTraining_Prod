@@ -6,6 +6,13 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Added
 
+- **Wearing the best gear, opt-in (`--wear-gear`).**
+  - **What:** `equipment.py` reads the worn and backpack items from memory, with each one's slot, equip effects and equip requirements, plus the wizard's school and real level. `gear.py` turns each canonical stat effect into a stat, scores it, and picks for each slot (hat, robe, shoes, athame, amulet, ring) the best item the wizard surely may wear. The loop equips upgrades through the spellbook's Inventory page, only in a zone whose files show no enemy patrols and with no enemy nearby. It checks again after a level-up or new loot. Each item equipped is logged with its stats, then the change in max health and mana. Wands, decks, pets and mounts are left alone, and a requirement it does not understand counts as unmet.
+  - **What counts as best:** max health first, the buffer that saves heal rounds and defeats; max mana at half weight, since every school spell costs it; then resistance to every school; resistance to one school at a quarter weight; then the wizard's own school's damage and accuracy. Stats of other schools count for nothing.
+  - **Why:** the operator noticed the wizard had loot it could wear and said to choose the stats to maximise. At level 8 it wore only the Starter Deck and the Wand of the Seven Schools, with 16 wearable items in the backpack. Equipped by hand with the same rules, max health went from 717 to 801. The operator then asked for the choice and the equipping to be automatic, in safe zones only.
+  - **How values are known:** the stat tables were not found in the installed files, so values come from each effect's lookup index as measured in the game: a flat stat gives index + 1, a percentage index - 99. Only health (three items) and resistance (one) were measured.
+  - **Not verified yet:** an equip by the loop itself. The reads and the clicks were checked by hand at level 8.
+
 - **Fleeing a battle when out of mana.**
   - **What:** with less than 2 mana (`policy.FLEE_BELOW_MANA`), `SpellTypePolicy` returns the new `Flee` choice, and the battle code clicks the battle's Flee button (WizWalker's `CombatHandler.flee_button`). The battle event says "fled", which counts as neither a win nor a defeat. A mana wisp then counts in any direction, not only on the way.
   - **Why:** the operator's rule, "if no mana you have to flee". Below 2 mana the wizard cannot cast its 2-pip attack and has at most one 1-pip spell left. With 0 mana and no free wand spell in hand, it passed four rounds and was defeated by a Cyclops Legionnaire it could not hurt.

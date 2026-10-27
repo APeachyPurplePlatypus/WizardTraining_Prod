@@ -29,13 +29,15 @@ from .dialog import (DIALOG_FINISHED, FOLLOW_UP_WAIT_SECONDS, NPC_ARRIVE_DISTANC
                      TALK_KEY_SECONDS, choose_service, close_enough, dialog_open, leave_services, near_npc, read_conversation, service_options,
                      services_open, talk, use_object, wait_for_dialog)
 from .entities import HEALTH_WISP, MANA_WISP, nearby_enemies, step_away, surroundings, wisps
+from .equipment import count_items, equip, read_items, read_wizard
 from .events import EventLog, describe_battle, describe_changes, describe_round, dialog_text, enemy_names, health_text
+from .gear import describe_stats, upgrades
 from .geometry import distance_to_path, flat_distance, path_within, xy
 from .keys import tap
 from .knowledge import Knowledge
 from .motion import MotionTracker, closest_approach
 from .movement import KeysIgnored, Reroute, face, travel
-from .navigation import load_planner
+from .navigation import NO_PATROLS, load_planner
 from .policy import FLEE_BELOW_MANA, LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, SpellTypePolicy
 from .progress import (DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY, ENEMY_NEAR_PATH, Limits, PATH_THREATS, PlannedRoute,
                        RunRecord, StopRun, check_limits, leaves_world, nav_did_better, progressed, remember_obstacles,
@@ -85,9 +87,11 @@ log = logging.getLogger(__name__)
 class QuestLoop:
     def __init__(self, client, settings: Settings, record: RunRecord, *,
                  combat_policy: CombatPolicy, offer_policy: OfferPolicy, events: EventLog | None = None,
-                 use_potions: bool = False):
+                 use_potions: bool = False, wear_gear: bool = False):
         self.client = client
         self.use_potions = use_potions
+        self.wear_gear = wear_gear
+        self._gear_checked: tuple | None = None
         self._potion_failed = False
         self._object_in_use = None
         self._dodges: list[float] = []
@@ -204,7 +208,38 @@ class QuestLoop:
             await asyncio.sleep(NOT_FREE_TO_MOVE_WAIT_SECONDS)
             return stalled("waited: not free to move", state=state,
                            windows=await visible_children(self.client, ["WorldView"]))
+        if self.wear_gear and (turn := await self.gear_turn()) is not None:
+            return turn
         return await self.quest_turn(state)
+
+    async def gear_turn(self) -> dict | None:
+        """Wear the best gear the wizard has (`gear.upgrades`). Checked again after a level-up or new loot, and only
+        where it is safe: in a zone whose files show no enemy patrols, with no enemy nearby, since the spellbook
+        stays open a few seconds per item. None when there is nothing to do here, so the turn goes on."""
+        planner = await self.planner()
+        if planner.status.get("patrols") != NO_PATROLS or await nearby_enemies(self.client):
+            return None
+        wizard = await read_wizard(self.client)
+        count = await attempt(count_items(self.client))
+        if wizard is None or not isinstance(count, int) or (wizard.level, count) == self._gear_checked:
+            return None
+        self._gear_checked = (wizard.level, count)
+        items = await read_items(self.client)
+        chosen = upgrades(items, wizard)
+        if not chosen:
+            self.events.emit("gear", f"level {wizard.level}, {len(items)} items: the best wearable gear is on")
+            return None
+        before = await snapshot(self.client)
+        worn = []
+        for item in chosen:
+            problem = await equip(self.client, item)
+            self.events.emit("gear", f"{item.slot}: {item.name} ({describe_stats(item)}): {problem or 'equipped'}")
+            if problem is None:
+                worn.append(item.name)
+        after = await snapshot(self.client)
+        self.events.emit("gear", f"max health {before['max_health']} -> {after['max_health']}, max mana "
+                                 f"{before['max_mana']} -> {after['max_mana']}")
+        return progressed("equipped gear", items=worn) if worn else stalled("could not equip gear")
 
     async def settle(self) -> None:
         """Wait ARRIVAL_SETTLE_SECONDS after a loading screen or a zone change, until two zone readings a moment
@@ -818,7 +853,7 @@ def reroute_text(attempt: dict) -> str:
 
 async def play(settings: Settings, limits: Limits, *, combat_policy: CombatPolicy | None = None,
                offer_policy: OfferPolicy | None = None, loop_class: type[QuestLoop] = QuestLoop,
-               use_potions: bool = False):
+               use_potions: bool = False, wear_gear: bool = False):
     """Attach to the game, play, remove the hooks, and always save the report, even when interrupted.
     Returns the report and the path it was saved to."""
     record = RunRecord(limits=limits)
@@ -835,7 +870,7 @@ async def play(settings: Settings, limits: Limits, *, combat_policy: CombatPolic
             loop = loop_class(attachment.client, settings, record,
                               combat_policy=combat_policy or SpellTypePolicy(),
                               offer_policy=offer_policy or MainQuestsOnly(), events=events,
-                              use_potions=use_potions)
+                              use_potions=use_potions, wear_gear=wear_gear)
             await loop.play()
     except NoClient as exc:
         record.stopped = str(exc)
