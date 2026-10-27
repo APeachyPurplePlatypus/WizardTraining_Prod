@@ -43,7 +43,7 @@ These come from one character's first unattended play, level 1 to level 5 in Wiz
 
 ## Health
 
-- **Health regenerates outdoors** (about 1.6 HP/s in the Commons) **but not in every interior.** Resting in one froze the run. Zones where a full rest gains nothing are remembered, and the loop keeps questing above 35% health there.
+- **Health regenerates outdoors** (about 1.6 HP/s in the Commons) **but not in every interior**, nor on Triton Avenue or Cyclops Lane. Resting in one froze the run. Resting was later dropped altogether as too slow: health comes from potions, wisps, in-battle heals and level-ups.
 
 ## Popups
 

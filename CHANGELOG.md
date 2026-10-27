@@ -38,6 +38,8 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Changed
 
+- **No resting.** The wizard no longer stands still to regain health, and no longer stops the run when health is low in a zone where it does not regenerate. Health comes from potions (if allowed), health wisps (sought below 65%), heals in battle and level-ups. `runtime/knowledge.json` no longer keeps zones without regeneration. The operator: "never use "resting" as a way to gain hp, it is not time efficient". A rest gains about 1.6 HP a second where health regenerates at all, and nothing on Triton Avenue, on Cyclops Lane or in most interiors; the last one cost 30 seconds for nothing before a battle interrupted it.
+
 - **Cards are weighed by their accuracy too.** The default policy now ranks attacks by the share of damage that lands after wards, traps and resistances, times the card's accuracy (`card.accuracy()`, 70% for Storm's Thunder Snake, for example). On a Lumbering Troll, Thunder Snake fizzled twice in a row; a slightly weaker school that hits more often is the better play unless the enemy's weakness makes up for it.
 
 - **Rerouting while walking.**

@@ -21,7 +21,7 @@ STATE_CHANGING_INTERRUPTS = {"battle", "dialog", "loading", "target in reach", "
 MEANINGFUL_TRAVEL_DISTANCE = 300.0
 ENEMY_PATH_CLEARANCE = 500.0
 APPROACH_MARGIN = 150.0
-REST_BELOW_FRACTION = 0.65
+HEALTH_WISP_BELOW_FRACTION = 0.65
 POTION_BELOW_FRACTION = 0.4
 MANA_BELOW_FRACTION = 0.2
 
@@ -70,7 +70,6 @@ class RunRecord:
     step_aways: list = field(default_factory=list)
     battle_log: list[dict] = field(default_factory=list)
     dialog_log: list[dict] = field(default_factory=list)
-    zones_without_regeneration: list[str] = field(default_factory=list)
     nav_first_zones: list[str] = field(default_factory=list)
     obstacles: dict[str, list] = field(default_factory=dict)
     zone_changes_without_quest_change: int = 0
@@ -148,15 +147,11 @@ def check_limits(record: RunRecord, *, seconds_left: float, stop_requested: bool
         raise StopRun("an NPC's menu kept reopening without the quest changing; left for the operator")
 
 
-def needs_rest(fraction: float | None) -> bool:
-    return fraction is not None and fraction < REST_BELOW_FRACTION
-
-
 def wanted_wisp(health: float | None, mana: float | None) -> str | None:
-    """"health" below REST_BELOW_FRACTION, else "mana" below MANA_BELOW_FRACTION, else None. Low mana leaves
+    """"health" below HEALTH_WISP_BELOW_FRACTION, else "mana" below MANA_BELOW_FRACTION, else None. Low mana leaves
     the wizard only free wand spells, which made each Triton Avenue battle long and costly. But a mana wisp gave
     only +3 of 28, and used-up ones still show as entities, so mana wisps are sought only when mana is low."""
-    if health is not None and health < REST_BELOW_FRACTION:
+    if health is not None and health < HEALTH_WISP_BELOW_FRACTION:
         return "health"
     if mana is not None and mana < MANA_BELOW_FRACTION:
         return "mana"

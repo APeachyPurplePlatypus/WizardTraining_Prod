@@ -7,7 +7,6 @@ from wizardtraining.progress import Limits, RunRecord
 from wizardtraining.teleports import LEFT_ZONE, NO_EFFECT
 
 TRITON = "WizardCity/WC_Streets/WC_Triton"
-TOWER = "WizardCity/WC_Streets/Interiors/WC_Triton_T1"
 
 
 class KnowledgeTest(unittest.TestCase):
@@ -19,7 +18,7 @@ class KnowledgeTest(unittest.TestCase):
             self.assertEqual(Knowledge.load(broken), Knowledge())
 
     def test_saves_and_loads(self):
-        knowledge = Knowledge([TOWER], {TRITON: {"Tele Up": 0}}, ["WizardCity/WC_Streets/WC_Cyclops"])
+        knowledge = Knowledge({TRITON: {"Tele Up": 0}}, ["WizardCity/WC_Streets/WC_Cyclops"])
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "runtime" / "knowledge.json"
             knowledge.save(path)
@@ -27,11 +26,9 @@ class KnowledgeTest(unittest.TestCase):
 
     def test_learns_from_a_run_but_not_no_effect_verdicts(self):
         run = RunRecord(limits=Limits())
-        run.zones_without_regeneration.append(TOWER)
         run.teleport_outcomes[TRITON] = {"Tele Up": 0, "Olde Town exit": LEFT_ZONE, "Tele Down": NO_EFFECT}
-        knowledge = Knowledge([TOWER])
+        knowledge = Knowledge()
         knowledge.learn_from(run)
-        self.assertEqual(knowledge.zones_without_regeneration, [TOWER])
         self.assertEqual(knowledge.teleport_outcomes, {TRITON: {"Tele Up": 0, "Olde Town exit": LEFT_ZONE}})
 
     def test_keeps_zones_routed_by_the_nav_graph_first(self):
@@ -45,8 +42,7 @@ class KnowledgeTest(unittest.TestCase):
 
     def test_a_new_run_starts_with_it(self):
         run = RunRecord(limits=Limits())
-        Knowledge([TOWER], {TRITON: {"Tele Up": 0}}).give_to(run)
-        self.assertEqual(run.zones_without_regeneration, [TOWER])
+        Knowledge({TRITON: {"Tele Up": 0}}).give_to(run)
         self.assertEqual(run.teleport_outcomes, {TRITON: {"Tele Up": 0}})
 
 

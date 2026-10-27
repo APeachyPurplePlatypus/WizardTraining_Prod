@@ -38,7 +38,7 @@ from .movement import KeysIgnored, Reroute, face, travel
 from .navigation import load_planner
 from .policy import LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, SpellTypePolicy
 from .progress import (DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY, ENEMY_NEAR_PATH, Limits, PATH_THREATS, PlannedRoute,
-                       RunRecord, StopRun, check_limits, leaves_world, nav_did_better, needs_rest, progressed, remember_obstacles,
+                       RunRecord, StopRun, check_limits, leaves_world, nav_did_better, progressed, remember_obstacles,
                        should_drink_potion, stalled, travel_outcome, wanted_wisp, world_of)
 from .quests import arrow_shows_no_target, game_language, open_goals, read_quest_arrow, read_quests
 from .reports import plain, save_report
@@ -65,9 +65,6 @@ ENEMY_PASS_WAIT_SECONDS = 1.5
 ARRIVAL_SETTLE_SECONDS = 1.5
 ENEMIES_IN_THE_WAY_WAIT_SECONDS = 4.0
 DEFEATED_HEALTH_FRACTION = 0.05
-LOWEST_HEALTH_FRACTION_TO_KEEP_QUESTING = 0.35
-REST_POLL_SECONDS = 10.0
-REST_TURN_SECONDS = 60.0
 NOT_FREE_TO_MOVE_WAIT_SECONDS = 3.0
 POTION_SETTLE_SECONDS = 3.0
 WISP_ARRIVE_RADIUS = 40.0
@@ -340,28 +337,6 @@ class QuestLoop:
         self._potion_failed = True
         return stalled("clicked the potion button, but health did not rise")
 
-    async def rest_turn(self, state: dict) -> dict:
-        """Wait for health to come back, stepping away if an enemy comes close. A zone where a full rest
-        gains nothing is remembered, and not rested in again."""
-        deadline = time.monotonic() + REST_TURN_SECONDS
-        started = time.monotonic()
-        while time.monotonic() < deadline and not self.settings.stop_requested():
-            if close := too_close(await nearby_enemies(self.client)):
-                await self.step_away_from(close, "while resting")
-                return progressed("stepped away while resting")
-            now = await snapshot(self.client)
-            if battle_showing(now) or not needs_rest(health_fraction(now)):
-                break
-            await asyncio.sleep(REST_POLL_SECONDS)
-        health = await attempt(self.client.stats.current_hitpoints())
-        gained = isinstance(health, int) and isinstance(state["health"], int) and health > state["health"]
-        self.events.emit("rest", f"rested {time.monotonic() - started:.0f} s: health {state['health']} -> {health} "
-                                 f"of {state['max_health']}")
-        if not gained and time.monotonic() >= deadline:
-            self.record.zones_without_regeneration.append(state["zone"])
-            self.events.emit("rest", f"no health came back in {state['zone']}; it will not be rested in again")
-        return (progressed if gained else stalled)("rest", health_before=state["health"], health=health)
-
     async def quest_turn(self, state: dict) -> dict:
         fraction = health_fraction(state)
         if self.use_potions and not self._potion_failed:
@@ -370,11 +345,6 @@ class QuestLoop:
         wanted = wanted_wisp(fraction, mana_fraction(state))
         if wanted is not None and (turn := await self.wisp_turn(wanted, state)) is not None:
             return turn
-        if needs_rest(fraction):
-            if state["zone"] not in self.record.zones_without_regeneration:
-                return await self.rest_turn(state)
-            if fraction < LOWEST_HEALTH_FRACTION_TO_KEEP_QUESTING:
-                raise StopRun("health is low and does not regenerate in this zone; left for the operator")
         quest = await self.active_quest()
         if quest is None:
             if await wait_for_dialog(self.client, FOLLOW_UP_WAIT_SECONDS, poll=0.5):

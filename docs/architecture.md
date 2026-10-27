@@ -26,7 +26,7 @@ The "do" modules talk to the game through WizWalker. The "decide" modules take p
 2. **Battle showing:** `combat.fight` with the combat policy. A defeat stops the run (`Limits.max_defeats` is 0).
 3. **Dialog open:** `dialog.read_conversation`, including follow-ups.
 4. **Not clearly free to move:** a stalled turn.
-5. **Low health:** rest, unless the zone is known not to regenerate.
+5. **Low health:** a potion (if allowed) or a health wisp. The wizard never rests to regain health: it is too slow.
 6. **Otherwise the quest:**
    - read the active quest, and stop if it is not a main quest;
    - take its first open goal and read the arrow;
@@ -62,7 +62,7 @@ Routes and the walking watcher look ahead. `motion.MotionTracker` turns the last
 
 ## Battles
 
-Each run starts with what earlier runs learned (`knowledge.Knowledge`, saved as `runtime/knowledge.json`): zones where health does not come back while resting, and where teleport volumes lead. It adds what it learns when it ends.
+Each run starts with what earlier runs learned (`knowledge.Knowledge`, saved as `runtime/knowledge.json`): where teleport volumes lead, and which zones to route by the nav graph first. It adds what it learns when it ends.
 
 `combat.fight` waits for each planning phase. It builds a `policy.RoundView` (health, pips, cards by spell type and school, living enemies with their shields, wards, traps and resistances) and asks the policy for a `Cast`. It validates the choice, casts through the mouseless cursor or passes, and waits for the next round. The battle code stops on timeouts, a round limit or any error, leaving the battle to the operator.
 

@@ -2,7 +2,7 @@ import unittest
 
 from wizardtraining.progress import (APPROACH_MARGIN, ENEMY_NEAR_PATH, ENEMY_PATH_CLEARANCE, MEANINGFUL_TRAVEL_DISTANCE,
                                      Limits, PlannedRoute, RunRecord, StopRun, check_limits, leaves_world,
-                                     nav_did_better, needs_rest, progressed, remember_obstacles, should_drink_potion,
+                                     nav_did_better, progressed, remember_obstacles, should_drink_potion,
                                      stalled, travel_outcome, wanted_wisp, world_of)
 
 
@@ -170,13 +170,6 @@ class PotionTest(unittest.TestCase):
         self.assertFalse(should_drink_potion(0.1, 0.6))
         self.assertFalse(should_drink_potion(0.1, "<unavailable: ReadingError>"))
         self.assertFalse(should_drink_potion(None, 1.0))
-
-
-class RestTest(unittest.TestCase):
-    def test_rests_below_the_threshold_only(self):
-        self.assertTrue(needs_rest(0.5))
-        self.assertFalse(needs_rest(0.9))
-        self.assertFalse(needs_rest(None))
 
 
 class ReportTest(unittest.TestCase):
