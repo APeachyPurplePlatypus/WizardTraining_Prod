@@ -1,10 +1,10 @@
+import datetime
 import tempfile
 import unittest
 from pathlib import Path
 
-import datetime
-
-from wizardtraining.connection import LOG, client_log_tail, lost_connection, moves_sent_since
+from wizardtraining.connection import (LOG, client_log_tail, log_reaches, lost_connection, moves_by_round,
+                                       moves_sent_between)
 
 DROPPED = """10/27/26 02:06:29 [ERRO] ClientCinematic  HandleAnimationEvent: 'end'
 10/27/26 02:06:35 [DBGM] GameClient      AppCloseConnection() called, connection state is 6
@@ -22,12 +22,24 @@ ROUNDS = """10/27/26 09:28:02 [STAT] ClientDuel      Local Player Sending Move: 
 """
 
 
+def at(seconds_past_9_28):
+    return datetime.datetime(2026, 10, 27, 9, 28) + datetime.timedelta(seconds=seconds_past_9_28)
+
+
 class MovesTest(unittest.TestCase):
-    def test_lists_the_moves_sent_since_a_moment(self):
-        self.assertEqual(moves_sent_since(ROUNDS, datetime.datetime(2026, 10, 27, 9, 28, 4)), ["Cast Spell", "Unready"])
-        self.assertEqual(moves_sent_since(ROUNDS, datetime.datetime(2026, 10, 27, 9, 28, 25)), [])
-        self.assertEqual(moves_sent_since("garbage\n" + ROUNDS, datetime.datetime(2026, 10, 27, 9, 28, 0)),
-                         ["Unready", "Cast Spell", "Unready"])
+    def test_lists_the_moves_sent_in_a_stretch(self):
+        self.assertEqual(moves_sent_between(ROUNDS, at(4)), ["Cast Spell", "Unready"])
+        self.assertEqual(moves_sent_between(ROUNDS, at(0), at(10)), ["Unready", "Cast Spell"])
+        self.assertEqual(moves_sent_between(ROUNDS, at(25)), [])
+        self.assertEqual(moves_sent_between("garbage\n" + ROUNDS, at(0)), ["Unready", "Cast Spell", "Unready"])
+
+    def test_a_buffered_log_may_not_reach_a_moment_yet(self):
+        self.assertTrue(log_reaches(ROUNDS, at(54)))
+        self.assertFalse(log_reaches(ROUNDS, at(55)))
+
+    def test_each_rounds_moves_or_none_where_the_log_does_not_reach(self):
+        self.assertEqual(moves_by_round([at(3), at(24)], ROUNDS), [["Cast Spell"], []])
+        self.assertEqual(moves_by_round([at(3), at(24), at(50)], ROUNDS), [["Cast Spell"], [], None])
 
 
 class ConnectionTest(unittest.TestCase):

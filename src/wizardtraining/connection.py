@@ -18,6 +18,8 @@ CONNECTED = "ConnectComplete"
 TIMESTAMP_LENGTH = 17
 TIMESTAMP_FORMAT = "%m/%d/%y %H:%M:%S"
 MOVE_SENT = "Local Player Sending Move: "
+ROUND_OPENING_MOVE = "Unready"
+MOVE_LOGGED_WITHIN_SECONDS = 5
 
 
 def lost_connection(log_tail: str) -> str | None:
@@ -30,20 +32,44 @@ def lost_connection(log_tail: str) -> str | None:
     return lines[last_close][:TIMESTAMP_LENGTH].strip()
 
 
-def moves_sent_since(log_tail: str, since: datetime.datetime) -> list[str]:
-    """The battle moves the client sent ("Cast Spell", "Pass", "Unready") in lines stamped `since` or later. A round
-    whose card click sent no move did not take: after a click on Flee, rounds went by with no move sent at all."""
+def stamp_of(line: str) -> datetime.datetime | None:
+    try:
+        return datetime.datetime.strptime(line[:TIMESTAMP_LENGTH], TIMESTAMP_FORMAT)
+    except ValueError:
+        return None
+
+
+def moves_sent_between(log_tail: str, start: datetime.datetime, end: datetime.datetime | None = None) -> list[str]:
+    """The battle moves the client sent ("Cast Spell", "Pass", "Unready") in lines stamped from `start` up to, not
+    including, `end`. A round whose card click sent no move did not take: after a click on Flee, rounds went by
+    with no move sent at all."""
     moves = []
     for line in log_tail.splitlines():
-        if MOVE_SENT not in line:
+        if MOVE_SENT not in line or (stamped := stamp_of(line)) is None:
             continue
-        try:
-            stamped = datetime.datetime.strptime(line[:TIMESTAMP_LENGTH], TIMESTAMP_FORMAT)
-        except ValueError:
-            continue
-        if stamped >= since:
+        if stamped >= start and (end is None or stamped < end):
             moves.append(line.split(MOVE_SENT, 1)[1].split("  ", 1)[0].strip())
     return moves
+
+
+def log_reaches(log_tail: str, moment: datetime.datetime) -> bool:
+    """The log has a line stamped at `moment` or later. The client writes its log in buffered blocks, up to a minute
+    behind, so a move not found before then may still be on its way."""
+    return any((stamped := stamp_of(line)) is not None and stamped >= moment
+               for line in reversed(log_tail.splitlines()[-200:]))
+
+
+def moves_by_round(starts: list[datetime.datetime], log_tail: str) -> list[list[str] | None]:
+    """For rounds in which the wizard acted at `starts`, the moves the client logged from each until the next,
+    other than the "Unready" it sends as a round's planning opens: empty when the click did not take, None while
+    the buffered log does not yet reach MOVE_LOGGED_WITHIN_SECONDS past the moment the wizard acted."""
+    found = []
+    for start, end in zip(starts, [*starts[1:], None]):
+        if not log_reaches(log_tail, start + datetime.timedelta(seconds=MOVE_LOGGED_WITHIN_SECONDS)):
+            found.append(None)
+            continue
+        found.append([move for move in moves_sent_between(log_tail, start, end) if move != ROUND_OPENING_MOVE])
+    return found
 
 
 def client_log_tail(game_folder: Path, size: int = LOG_TAIL_BYTES) -> str:

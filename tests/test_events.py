@@ -47,13 +47,6 @@ class DescriptionTest(unittest.TestCase):
         self.assertEqual(text, "round 2: me 450/624 with 3 pips; cast Frost Beetle on enemy; "
                                "enemies left: Haunted Minion 35")
 
-    def test_describe_round_says_whether_the_game_logged_the_move(self):
-        entry = round_entry(5, 257, "cast Fire Cat (Fire) on enemy Cyclops Legionnaire", [("Cyclops Legionnaire", 60)])
-        entry["sent"] = ["Cast Spell"]
-        self.assertIn("on enemy Cyclops Legionnaire (sent Cast Spell); enemies left", describe_round(entry))
-        entry["sent"] = []
-        self.assertIn("(the game logged no move); enemies left", describe_round(entry))
-
     def test_describe_round_lists_the_hand(self):
         entry = round_entry(1, 600, "cast Snow Serpent (Ice) on enemy", [("Warhorn", 285)])
         entry["view"]["cards"] = [{"name": "Frost Beetle", "pips": 1}, {"name": "Snow Serpent", "pips": 2},
@@ -80,6 +73,13 @@ class DescriptionTest(unittest.TestCase):
                                after={"health": 534, "max_health": 624, "gold": 113, "level": 5})
         self.assertEqual(text, "won after 2 rounds in 42 s against up to 1 at once (Haunted Minion); "
                                "health 624/624 -> 534/624, gold +13, level 5")
+
+    def test_describe_battle_names_rounds_whose_move_the_game_never_logged(self):
+        rounds = [round_entry(number, 300, "cast Fire Cat", [("Cyclops Legionnaire", 60)]) for number in (5, 6, 7)]
+        rounds[0]["sent"], rounds[1]["sent"], rounds[2]["sent"] = ["Cast Spell"], [], None
+        text = describe_battle({"rounds": rounds}, seconds=60, outcome="lost",
+                               before={"health": 300, "max_health": 801}, after={"health": 1, "max_health": 801})
+        self.assertTrue(text.endswith("; the game logged no move in rounds 6"))
 
     def test_counts_enemies_that_join_after_the_first_round(self):
         battle = {"rounds": [round_entry(1, 624, "cast", [("Electric Eel", 150)]),

@@ -23,7 +23,7 @@ from wizwalker.memory import DuelPhase
 from wizwalker.memory.memory_objects.enums import WindowFlags
 from wizwalker.utils import get_wiz_install
 
-from .connection import client_log_tail, lost_connection, moves_sent_since
+from .connection import client_log_tail, lost_connection, moves_by_round
 from .geometry import flat_distance
 from .movement import KeysIgnored, face_and_step
 from .policy import UNIVERSAL, Card, Cast, CombatPolicy, Combatant, DamageModifier, Flee, Pass, RoundView, problem_with
@@ -41,7 +41,6 @@ CARDS_DRAW_SECONDS = 0.5
 EMPTY_HAND_READS = 6
 PAUSE_BETWEEN_CAST_CLICKS_SECONDS = 0.5
 FLEE_CONFIRM_WAIT_SECONDS = 1.0
-MOVE_LOG_SECONDS = 1.0
 PLANNING = ["WorldView", "PlanningPhase", "Alignment", "PlanningPhaseSubWindow"]
 ACTION_BUTTONS = [*PLANNING, "SpellSelection", "ActionButtons"]
 WAITING_FOR_OTHERS = [*PLANNING, "WaitingForOthers"]
@@ -256,16 +255,16 @@ async def play_round(combat, policy: CombatPolicy, can_flee: bool = True) -> dic
         card = view.cards[choice.card]
         target = f"{choice.target} {view.enemies[choice.enemy].name}" if choice.target == "enemy" else choice.target
         entry["action"] = f"cast {card.name}{f' ({card.school})' if card.school else ''} on {target}"
-    entry["sent"] = await moves_sent_after(acting_since)
+    entry["acting_since"] = acting_since.isoformat(timespec="seconds")
     return entry
 
 
-async def moves_sent_after(since: datetime.datetime) -> list[str]:
-    """The moves the client logged since `since`, other than the "Unready" it sends as a round's planning opens,
-    read MOVE_LOG_SECONDS after acting. Empty when the click did not take."""
-    await asyncio.sleep(MOVE_LOG_SECONDS)
-    moves = moves_sent_since(client_log_tail(Path(get_wiz_install())), since)
-    return [move for move in moves if move != "Unready"]
+def note_moves_sent(rounds: list[dict]) -> None:
+    """Set each round's "sent" to the moves the client logged for it (`connection.moves_by_round`)."""
+    acted = [entry for entry in rounds if "acting_since" in entry]
+    starts = [datetime.datetime.fromisoformat(entry["acting_since"]) for entry in acted]
+    for entry, sent in zip(acted, moves_by_round(starts, client_log_tail(Path(get_wiz_install())))):
+        entry["sent"] = sent
 
 
 async def pass_round(combat) -> None:
@@ -373,4 +372,5 @@ async def fight(client, policy: CombatPolicy, on_round=None) -> dict:
             result["stopped"] = "round limit reached; left for the operator"
     result["final_phase"] = plain(await duel_phase(client))
     await asyncio.sleep(DUEL_CIRCLE_EXIT_SECONDS)
+    note_moves_sent(result["rounds"])
     return result

@@ -89,11 +89,8 @@ def describe_round(entry: dict) -> str:
                         for enemy in view["enemies"]) or "none"
     mana = f", {view['mana']} mana" if view.get("mana") is not None else ""
     reopened = "reopened the card choice; " if entry.get("reopened card choice") else ""
-    sent = ""
-    if "sent" in entry:
-        sent = f" (sent {', '.join(entry['sent'])})" if entry["sent"] else " (the game logged no move)"
     return (f"round {view['round_number']}: me {view['health']}/{view['max_health']} with {view['pips']} pips{mana}; "
-            f"{reopened}{entry['action']}{sent}; enemies left: {enemies}{hand_text(view.get('cards'))}")
+            f"{reopened}{entry['action']}; enemies left: {enemies}{hand_text(view.get('cards'))}")
 
 
 def hand_text(cards) -> str:
@@ -121,9 +118,11 @@ def modifier_text(modifiers, resistances=None) -> str:
 def describe_battle(battle: dict, *, seconds: float, before: dict, after: dict, outcome: str) -> str:
     rounds = battle["rounds"]
     most, by_name = enemies_at_once(rounds)
+    untaken = [str(entry["view"]["round_number"]) for entry in rounds if entry.get("sent") == []]
+    untaken_text = f"; the game logged no move in rounds {', '.join(untaken)}" if untaken else ""
     return (f"{outcome} after {len(rounds)} rounds in {seconds:.0f} s against up to {most} at once "
             f"({names_with_counts(by_name)}); health {health_text(before)} -> {health_text(after)}, "
-            f"gold {change(before.get('gold'), after.get('gold'))}, level {after.get('level')}")
+            f"gold {change(before.get('gold'), after.get('gold'))}, level {after.get('level')}{untaken_text}")
 
 
 def describe_changes(before: dict | None, after: dict, quest_before: dict | None, quest_after: dict | None) -> list[tuple]:
