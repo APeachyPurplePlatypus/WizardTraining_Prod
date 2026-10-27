@@ -29,7 +29,7 @@ from typing import Callable
 
 from .geometry import Point, distance_to_segment, path_beyond, xy
 from .motion import WALK_UNITS_PER_SECOND
-from .teleports import TeleportVolume, choose_crossing, known_crossing
+from .teleports import TeleportVolume, choose_crossing, known_chain, known_crossing
 
 COLLISION, NAV, STRAIGHT = "collision", "nav", "straight"
 ENEMY_AVOID_RADIUS = 900.0
@@ -402,15 +402,37 @@ class RoutePlanner:
             return None
         return known_crossing(self.teleports, start_piece=pieces[0], goal_piece=pieces[1], outcomes=outcomes)
 
+    def crossing_to_a_step_from_the_goal(self, start, goal, outcomes: dict[str, object],
+                                         failed_gaps=()) -> TeleportVolume | None:
+        """The first volume of the shortest chain already seen to land in a piece from which a step across a short
+        gap (no more than MAX_GAP_STEP, not among `failed_gaps`) leads into the goal's piece, else None. Triton
+        Avenue's "Tele Down" lands in a piece 195 units from the lower street, by the pad of "Tele Up": a hole in
+        the walk data, not a ledge. It was known to land there, yet the planner tried the untried volumes (a house
+        door, the cave's gate at the far end) first, and the run stopped."""
+        pieces = self.pieces_to_cross(start, goal, failed_gaps)
+        if pieces is None or self.piece_gap is None:
+            return None
+        start_piece, goal_piece = pieces
+        failed = set(failed_gaps)
+
+        def a_step_from_the_goal(piece: int) -> bool:
+            return (piece, goal_piece) not in failed and self.piece_gap(piece, goal_piece)[2] <= MAX_GAP_STEP
+
+        chain = known_chain(self.teleports, outcomes, start_piece, a_step_from_the_goal)
+        return chain[0] if chain else None
+
     def way_across(self, start, goal, outcomes: dict[str, object], failed_gaps=()) -> TeleportVolume | GapStep | None:
         """How to get into the goal's walkable piece, in order: a teleport volume already seen to lead there, a step
-        across a short gap, or a volume not tried yet (`crossing`). In Triton Avenue the step across a 198-unit
+        across a short gap, a volume already seen to land one short step from it, or a volume not tried yet
+        (`crossing`). In Triton Avenue the step across a 198-unit
         gap to the upper level, where the Haunted Cave's door is, cost two minutes among 13 enemies and ended where
         it began, while "Tele Up", seen to land there, took 9 seconds."""
         if (volume := self.seen_crossing(start, goal, outcomes, failed_gaps)) is not None:
             return volume
         if (step := self.gap_step(start, goal, failed_gaps)) is not None:
             return step
+        if (volume := self.crossing_to_a_step_from_the_goal(start, goal, outcomes, failed_gaps)) is not None:
+            return volume
         return self.crossing(start, goal, outcomes, failed_gaps)
 
     def gap_step(self, start, goal, failed=()) -> GapStep | None:

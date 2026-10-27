@@ -418,6 +418,44 @@ class AfterAFailedStepTest(unittest.TestCase):
         self.assertIsNone(self.planner().crossing(self.start, self.goal, {}, failed_gaps=[(18, 0)]))
 
 
+class NearbyLandingTest(unittest.TestCase):
+    """Triton Avenue: "Tele Down" is known to land in piece 20, 195 units from the lower street's piece 18, where
+    the east gate is; a house door and the cave's gate on the upper level (piece 0) are untried."""
+
+    def planner(self):
+        planner = RoutePlanner("WizardCity/WC_Streets/WC_Triton")
+        planner.piece_of = lambda point, reach=150.0: 0 if point[0] < -17000 else 18 if point[0] > -1000 else 20
+        planner.piece_reaches = lambda piece, point, reach: False
+        gaps = {(0, 18): 198.0, (20, 18): 195.0, (0, 20): 10465.0}
+        planner.piece_gap = lambda first, second: ((0.0, 0.0), (1.0, 1.0), gaps.get((first, second),
+                                                                                 gaps.get((second, first), 99999.0)))
+        planner.teleports = [(TeleportVolume("Tele Down", -17514.0, 1145.0, 0.0, 188.0), 0),
+                             (TeleportVolume("ThiefHouse", -23913.0, -6182.0, 0.0, 100.0), 0),
+                             (TeleportVolume("Cavern", -37005.0, 3289.0, 0.0, 400.0), 0)]
+        return planner
+
+    start, gate = (-17120.0, 880.0), (6.0, 2477.0)
+    seen = {"Tele Down": 20}
+
+    def test_a_volume_seen_to_land_a_short_step_from_the_goal_comes_before_untried_ones(self):
+        way = self.planner().way_across(self.start, self.gate, self.seen, failed_gaps=[(0, 18)])
+        self.assertEqual(way.name, "Tele Down")
+
+    def test_from_there_the_short_step_is_taken(self):
+        landing = (-16500.0, 500.0)
+        way = self.planner().way_across(landing, self.gate, self.seen, failed_gaps=[(0, 18)])
+        self.assertIsInstance(way, GapStep)
+        self.assertEqual(way.pieces, (20, 18))
+
+    def test_a_landing_whose_step_already_failed_is_not_used(self):
+        way = self.planner().way_across(self.start, self.gate, self.seen, failed_gaps=[(0, 18), (20, 18)])
+        self.assertNotEqual(way.name, "Tele Down")
+
+    def test_without_a_known_landing_an_untried_volume_is_chosen(self):
+        way = self.planner().way_across(self.start, self.gate, {}, failed_gaps=[(0, 18)])
+        self.assertEqual(way.name, "Tele Down")
+
+
 def nav_file(waypoints, links) -> bytes:
     data = bytearray(b"\x00\x00") + struct.pack("<i", len(waypoints))
     for (x, y, z), number in waypoints:
