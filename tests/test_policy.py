@@ -1,6 +1,6 @@
 import unittest
 
-from wizardtraining.policy import (DECLINE, GO_BACK, STOP, Card, Cast, Combatant, MainQuestsOnly, RoundView,
+from wizardtraining.policy import (ACCEPT, DECLINE, GO_BACK, STOP, Card, Cast, Combatant, MainQuestsOnly, RoundView,
                                    SpellTypePolicy, problem_with)
 
 HEAL = Card("Fairy", "Heal", True)
@@ -65,6 +65,32 @@ class MainQuestsOnlyTest(unittest.TestCase):
 
     def test_stops_rather_than_guess(self):
         self.assertEqual(self.policy.decide(["Will you help?"], can_go_back=False), STOP)
+
+
+class ServicesMenuTest(unittest.TestCase):
+    menu = ["Trouble on Triton Avenue ", "A Good Day to Cyclops", "Putting Out the Fire!"]
+
+    def test_takes_the_option_for_the_active_quest(self):
+        self.assertEqual(MainQuestsOnly().choose_service(self.menu, active_quest="putting out the fire!"), 2)
+
+    def test_takes_the_first_approved_title_in_the_operators_order(self):
+        policy = MainQuestsOnly(approved_titles=["Putting Out the Fire!", "Trouble on Triton Avenue"])
+        self.assertEqual(policy.choose_service(self.menu, active_quest=None), 2)
+
+    def test_leaves_unapproved_menus_to_the_operator(self):
+        self.assertIsNone(MainQuestsOnly().choose_service(self.menu, active_quest=None))
+        self.assertIsNone(MainQuestsOnly(approved_titles=["Other"]).choose_service(self.menu, active_quest="Else"))
+
+    def test_accepts_the_offer_of_an_approved_title_once(self):
+        policy = MainQuestsOnly(approved_titles=["A Good Day to Cyclops"])
+        policy.choose_service(self.menu, active_quest=None)
+        self.assertEqual(policy.decide(["Help the city?"], can_go_back=True), ACCEPT)
+        self.assertEqual(policy.decide(["Help again?"], can_go_back=True), GO_BACK)
+
+    def test_an_approved_title_that_calls_itself_a_side_quest_is_declined(self):
+        policy = MainQuestsOnly(approved_titles=["A Good Day to Cyclops"])
+        policy.choose_service(self.menu, active_quest=None)
+        self.assertEqual(policy.decide(["I am offering you a side quest."], can_go_back=True), DECLINE)
 
 
 if __name__ == "__main__":

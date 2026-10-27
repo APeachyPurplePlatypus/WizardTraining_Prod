@@ -104,13 +104,44 @@ class OfferPolicy(Protocol):
         """What to do on a dialog page showing ACCEPT and DECLINE: ACCEPT, DECLINE, GO_BACK or STOP.
         `pages` is the text of every page of this conversation so far, the offer page last."""
 
+    def choose_service(self, options: list[str], *, active_quest: str | None) -> int | None:
+        """Which option of an NPC's services menu to click, or None to leave the menu to the operator.
+        `options` are the option labels (quest titles); `active_quest` is the active quest's title."""
+
+
+def same_title(a: str | None, b: str | None) -> bool:
+    return a is not None and b is not None and a.strip().casefold() == b.strip().casefold()
+
 
 class MainQuestsOnly:
     """The main-quest dialogs seen so far had no DECLINE button, so a page with one is an optional offer.
     Decline offers the dialog calls a side quest. If the offer's wording was shown before reading began,
-    go back a page once to read it. Otherwise stop for the operator rather than guess."""
+    go back a page once to read it. Otherwise stop for the operator rather than guess.
+
+    An NPC's services menu lists quests by title, and whether a quest is a main quest can be read only
+    once it is accepted. So the menu's option for the active quest is taken, and otherwise only a title
+    the operator approved (`approved_titles`, the CLI's --approve-quest). An approved quest's offer page is
+    accepted unless it calls itself a side quest; the loop stops if it turns out not to be a main quest."""
+
+    def __init__(self, approved_titles=()):
+        self.approved_titles = tuple(approved_titles)
+        self._approved_offer_pending = False
 
     def decide(self, pages: list[str], *, can_go_back: bool) -> str:
         if any(SIDE_QUEST_OFFER_PHRASE in page.lower() for page in pages):
             return DECLINE
+        if self._approved_offer_pending:
+            self._approved_offer_pending = False
+            return ACCEPT
         return GO_BACK if can_go_back else STOP
+
+    def choose_service(self, options: list[str], *, active_quest: str | None) -> int | None:
+        for index, option in enumerate(options):
+            if same_title(option, active_quest):
+                return index
+        for title in self.approved_titles:
+            for index, option in enumerate(options):
+                if same_title(option, title):
+                    self._approved_offer_pending = True
+                    return index
+        return None

@@ -53,6 +53,19 @@ async def click(client, path: list[str]) -> None:
     window = await window_at(client.root_window, path)
     if window is None:
         raise LookupError(f"no window at {'/'.join(path)}")
+    await click_window(client, window)
+
+
+async def click_window(client, window) -> None:
     await enable_clicks(client)
     async with client.mouse_handler:
         await client.mouse_handler.click_window(window)
+
+
+async def visible_children(client, path: list[str]) -> list[str]:
+    """Names of the visible windows directly under `path`: a quick, machine-readable look at the screen."""
+    try:
+        parent = await window_at(client.root_window, path)
+        return [await child.name() for child in await parent.children() if await child.is_visible()]
+    except Exception:
+        return []

@@ -13,6 +13,7 @@ Never written: position, facing or speed. WizWalker's `goto` is not used, becaus
 from __future__ import annotations
 
 import asyncio
+import logging
 import math
 import time
 from dataclasses import dataclass
@@ -44,7 +45,12 @@ WAYPOINT_RADIUS = 120.0
 MAX_SIDESTEPS_PER_LEG = 4
 SIDESTEP_TURN_RADIANS = math.pi / 3
 SIDESTEP_SECONDS = 0.4
+TRAIL_SECONDS = 2.0
+MAX_TRAIL_POINTS = 90
 OBSTACLE_AHEAD_DISTANCE = 200.0
+
+
+logger = logging.getLogger(__name__)
 
 
 class KeysIgnored(RuntimeError):
@@ -151,8 +157,8 @@ def failed(log: dict, reason: str) -> dict:
 async def follow_route(client, legs, *, final_radius: float, watch=None) -> dict:
     """Walk the legs holding W, steering on the move. `watch(path_ahead)` runs every WATCH_SECONDS with the
     wizard's position followed by the remaining legs, and may return a reason to stop."""
-    log = {"legs": len(legs), "turns_in_place": 0, "steer_taps": 0, "sidesteps": 0, "blocked_at": []}
-    started = time.monotonic()
+    log = {"legs": len(legs), "turns_in_place": 0, "steer_taps": 0, "sidesteps": 0, "blocked_at": [], "trail": []}
+    started = trail_at = time.monotonic()
     calibration = calibration_for(client)
     async with HeldKey(client, Keycode.W) as forward:
         for index, leg in enumerate(legs):
@@ -164,6 +170,9 @@ async def follow_route(client, legs, *, final_radius: float, watch=None) -> dict
                 if time.monotonic() - started > MAX_ROUTE_SECONDS:
                     return failed(log, "route took too long")
                 me = await client.body.position()
+                if time.monotonic() >= trail_at and len(log["trail"]) < MAX_TRAIL_POINTS:
+                    log["trail"].append((round(me.x), round(me.y)))
+                    trail_at = time.monotonic() + TRAIL_SECONDS
                 path_ahead = [xy(me), *(xy(remaining) for remaining in legs[index:])]
                 if watch is not None and (reason := await watch(path_ahead)):
                     await forward.release()
@@ -219,6 +228,7 @@ async def travel(client, planner: RoutePlanner, destination, *, arrive_radius: f
         if legs is None:
             attempt["result"] = "no route"
             continue
+        logger.info("route by %s: %d legs to (%d, %d)", method, len(legs), *map(round, xy(destination)))
         attempt.update(await follow_route(client, legs, final_radius=arrive_radius, watch=watch))
         blocked_at += attempt["blocked_at"]
         if attempt["result"] != "failed":

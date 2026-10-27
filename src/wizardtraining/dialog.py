@@ -21,12 +21,15 @@ from .keys import tap
 from .movement import WALK_UNITS_PER_SECOND, face_and_step
 from .policy import ACCEPT, DECLINE, GO_BACK, OfferPolicy
 from .state import attempt
-from .ui import click, showing, text_of
+from .ui import click, click_window, showing, text_of, window_at
 
 ADVANCE_BUTTON = ["WorldView", "wndDialogMain", "btnRight"]
 DECLINE_BUTTON = ["WorldView", "wndDialogMain", "btnLeft"]
 BACK_BUTTON = ["WorldView", "wndDialogMain", "btnBack"]
 PAGE_TEXT = ["WorldView", "wndDialogMain", "txtArea", "txtMessage"]
+SERVICES_MENU = ["WorldView", "NPCServicesWin"]
+SERVICES_OPTIONS = ["WorldView", "NPCServicesWin", "ControlSprite", "optionsLayout"]
+SERVICES_OPTION_BUTTON = "OptionButton"
 DIALOG_FINISHED = "dialog finished"
 OFFER_LEFT_FOR_OPERATOR = "a quest offer the offer policy would not handle; left for the operator"
 TALK_KEY_SECONDS = 0.1
@@ -50,6 +53,30 @@ SAME_NPC_DISTANCE = 150.0
 
 async def dialog_open(client) -> bool:
     return await showing(client, ADVANCE_BUTTON)
+
+
+async def services_open(client) -> bool:
+    """An NPC with several quests or services opens a menu of options (NPCServicesWin) instead of a dialog."""
+    return await showing(client, SERVICES_MENU)
+
+
+async def service_options(client) -> list[tuple[str, object]]:
+    """The menu's options as (label, button). Quest options are labelled with the quest's title."""
+    options = []
+    layout = await window_at(client.root_window, SERVICES_OPTIONS)
+    if layout is None:
+        return options
+    for option in await layout.children():
+        if not await option.is_visible():
+            continue
+        for part in await option.children():
+            if await part.name() == SERVICES_OPTION_BUTTON and await part.is_visible():
+                options.append(((await part.maybe_text() or "").strip(), part))
+    return options
+
+
+async def choose_service(client, button) -> None:
+    await click_window(client, button)
 
 
 async def wait_for_dialog(client, timeout: float, poll: float = DIALOG_POLL_SECONDS) -> bool:

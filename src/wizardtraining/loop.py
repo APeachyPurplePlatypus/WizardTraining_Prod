@@ -25,7 +25,8 @@ from wizwalker import Keycode
 from .combat import approach, fight
 from .config import Settings
 from .dialog import (DIALOG_FINISHED, FOLLOW_UP_WAIT_SECONDS, NPC_ARRIVE_DISTANCE, OFFER_LEFT_FOR_OPERATOR,
-                     dialog_open, near_npc, read_conversation, talk, use_object, wait_for_dialog)
+                     choose_service, dialog_open, near_npc, read_conversation, service_options, services_open, talk,
+                     use_object, wait_for_dialog)
 from .entities import nearby_enemies, step_away, surroundings
 from .geometry import distance_to_path, flat_distance, path_within
 from .keys import tap
@@ -40,6 +41,7 @@ from .routes import DUEL_CIRCLE_NO_GO, Hazards, RoutePlanner
 from .session import NoClient, attached, hooks_ready
 from .state import attempt, battle_showing, free_to_move, health_fraction, snapshot
 from .targets import bystanders, others, quest_targets, summary, too_close
+from .ui import visible_children
 
 TARGET_REACH = 1200.0
 ARROW_ARRIVE_RADIUS = 250.0
@@ -55,6 +57,7 @@ DEFEATED_HEALTH_FRACTION = 0.05
 LOWEST_HEALTH_FRACTION_TO_KEEP_QUESTING = 0.35
 REST_POLL_SECONDS = 10.0
 REST_TURN_SECONDS = 60.0
+NOT_FREE_TO_MOVE_WAIT_SECONDS = 3.0
 KEYS_IGNORED = ("the game ignored a turn key while free to move; a popup (such as the Endorse Wizard window) "
                 "may be holding the keyboard; left for the operator")
 
@@ -132,8 +135,12 @@ class QuestLoop:
             return await self.battle_turn()
         if await dialog_open(self.client):
             return await self.dialog_turn()
+        if await services_open(self.client):
+            return await self.services_turn()
         if not free_to_move(state):
-            return stalled("waited: state unreadable", state=state)
+            await asyncio.sleep(NOT_FREE_TO_MOVE_WAIT_SECONDS)
+            return stalled("waited: not free to move", state=state,
+                           windows=await visible_children(self.client, ["WorldView"]))
         return await self.quest_turn(state)
 
     async def battle_turn(self) -> dict:
@@ -161,6 +168,18 @@ class QuestLoop:
         if result == OFFER_LEFT_FOR_OPERATOR:
             raise StopRun(result)
         return progressed("dialog", result=result, pages=len(record["pages"]))
+
+    async def services_turn(self) -> dict:
+        """Pick an option of an NPC's services menu, as the offer policy decides."""
+        options = await service_options(self.client)
+        labels = [label for label, _ in options]
+        active = (await read_quests(self.client))["active"]
+        choice = self.offer_policy.choose_service(labels, active_quest=active["title"] if active else None)
+        if choice is None:
+            raise StopRun(f"an NPC's menu offers {labels}, and none is the active quest or an approved title; "
+                          "left for the operator (approve one with --approve-quest)")
+        await choose_service(self.client, options[choice][1])
+        return progressed("chose from an NPC's menu", option=labels[choice])
 
     async def rest_turn(self, state: dict) -> dict:
         """Wait for health to come back, stepping away if an enemy comes close. A zone where a full rest

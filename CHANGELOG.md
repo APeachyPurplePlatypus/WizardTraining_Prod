@@ -6,6 +6,17 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Added
 
+- **NPC services menus, and quest titles from the game's language files.**
+  - **What:** when an NPC opens its services menu (`NPCServicesWin`, a list of quests by title), the offer policy picks an option. `MainQuestsOnly` takes the option for the active quest, or else the first title the operator approved with `--approve-quest`, and otherwise stops and lists the options. The journal now carries each quest's display title, looked up in `Locale/en-US/*.lang` in Root.wad (`language.py`).
+  - **Why:** after "Panic in Three Streets!", Sergeant Muldoon in Olde Town opens a menu of three quests instead of a dialog. The loop didn't recognise it and stalled. A quest's main-quest flag can be read only after accepting it, since the quest definitions are not in the installed files. So the framework never guesses: it needs the active quest's title or the operator's approval. On a non-main-quest offer, the loop still stops once the journal shows it.
+  - **How the titles were checked:** the three options ("Trouble on Triton Avenue", "Putting Out the Fire!", "A Good Day to Cyclops") are listed as Wizard City mainline quests 133 to 135 on [Wizard404](https://wizard404.com/), an automated Wizard101 wiki. The site says its quest data may be incomplete, so the journal check after accepting stays the final word.
+- **Waiting and window names when the wizard isn't free to move.**
+  - **What:** such a turn now waits 3 s, and records the names of the visible windows under `WorldView`.
+  - **Why:** the services menu set the game's dialog flag without the usual dialog window. The loop then used up its four no-progress turns within the same second, with nothing in the report to say why.
+- **Walk trails and route logging.**
+  - **What:** each route attempt records the wizard's position every 2 s (`trail`, up to 90 points) and logs a line when it starts.
+  - **Why:** one walk in the Shopping District kept moving for the full 180 s without arriving or getting blocked. Without positions, its report couldn't show whether the wizard circled, slid along a wall or followed a bad route.
+
 - **Door-loop guard and zones in the turn log.**
   - **What:** each turn's log line now shows the zone and the quest goal. The run stops after `Limits.max_zone_changes_without_quest_change` (10) zone changes in which the quest goal stayed the same.
   - **Why:** walking through a door counts as progress, so a wizard bouncing between two zones would never trip the stall limit. Without zones in the log, a watcher also can't tell a long door chain from a loop. On 2026-10-26 a run going from Ravenwood through the Commons and the Shopping District toward Olde Town was stopped by hand as a suspected loop; the report showed it was a real trip. Ten changes leaves room for chains like that one (about five doors) and still catches a back-and-forth well before the 200-turn limit.
