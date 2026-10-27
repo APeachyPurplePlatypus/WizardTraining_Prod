@@ -29,6 +29,7 @@ from .routes import OBSTACLE_RADIUS, Hazards, RoutePlanner
 SETTLE_SECONDS = 0.2
 MAX_TURN_TAPS = 25
 BATTLE = "battle"
+LOADING = "loading"
 FIRST_TAP_SECONDS = 0.15
 TURN_SETTLE_SECONDS = 0.12
 YAW_TOLERANCE_RADIANS = math.radians(4.6)
@@ -91,6 +92,13 @@ async def in_battle(client) -> bool:
         return False
 
 
+async def loading(client) -> bool:
+    try:
+        return await client.is_loading() is True
+    except Exception:
+        return False
+
+
 def as_xyz(point) -> XYZ:
     return point if isinstance(point, XYZ) else XYZ(*xy(point), 0.0)
 
@@ -102,12 +110,15 @@ async def bearing_to(client, target) -> float:
 async def turn_toward(client, target_yaw: float) -> dict:
     """Tap A or D until the facing is within YAW_TOLERANCE_RADIANS of `target_yaw`. Stops as soon as a battle has
     begun: the taps then turn nothing, and going on through MAX_TURN_TAPS kept the wizard tapping for up to 14
-    seconds of the first round's planning time before the battle was noticed."""
+    seconds of the first round's planning time before the battle was noticed. Stops too once a loading screen
+    shows: taps sent while the zone changes are played again in the new zone (`doors`)."""
     calibration = calibration_for(client)
     taps = []
     for _ in range(MAX_TURN_TAPS):
         if await in_battle(client):
             return {"ok": False, "reason": BATTLE, "taps": taps}
+        if await loading(client):
+            return {"ok": False, "reason": LOADING, "taps": taps}
         yaw = await client.body.yaw()
         remaining = angle_between(target_yaw, yaw)
         if abs(remaining) <= YAW_TOLERANCE_RADIANS:
@@ -217,8 +228,8 @@ async def follow_route(client, legs, *, final_radius: float, watch=None) -> dict
                     await forward.release()
                     turn = await turn_toward(client, bearing)
                     log["turns_in_place"] += 1
-                    if not turn["ok"] and turn["reason"] == BATTLE:
-                        return interrupted(log, BATTLE)
+                    if not turn["ok"] and turn["reason"] in (BATTLE, LOADING):
+                        return interrupted(log, turn["reason"])
                     if not turn["ok"]:
                         return failed(log, f"turn failed: {turn['reason']}")
                     blocked_check = (time.monotonic(), await client.body.position())

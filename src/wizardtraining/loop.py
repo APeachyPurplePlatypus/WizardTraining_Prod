@@ -20,6 +20,7 @@ import logging
 import time
 import traceback
 from dataclasses import replace
+from functools import partial
 
 from wizwalker import XYZ, Keycode
 
@@ -28,6 +29,7 @@ from .config import Settings
 from .dialog import (DIALOG_FINISHED, FOLLOW_UP_WAIT_SECONDS, NPC_ARRIVE_DISTANCE, OFFER_LEFT_FOR_OPERATOR,
                      TALK_KEY_SECONDS, choose_service, close_enough, dialog_open, leave_services, near_npc, read_conversation, service_options,
                      services_open, talk, use_object, wait_for_dialog)
+from .doors import CHANGE_START_SECONDS, change_begins, push_through
 from .entities import (HEALTH_WISP, MANA_WISP, dungeon_entrance_near, nearby_enemies, nearest_npc, step_away,
                        surroundings, wisps)
 from .equipment import count_items, equip, read_items, read_wizard
@@ -38,7 +40,7 @@ from .geometry import distance_to_path, flat_distance, path_within, xy
 from .keys import tap
 from .knowledge import Knowledge
 from .motion import WALK_UNITS_PER_SECOND, ApproachLog, MotionTracker, closest_approach
-from .movement import KeysIgnored, Reroute, face, travel
+from .movement import LOADING, KeysIgnored, Reroute, face, travel
 from .navigation import load_planner
 from .policy import LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, SpellTypePolicy
 from .progress import (DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY, ENEMY_NEAR_PATH, LimitReached, Limits, PATH_THREATS,
@@ -72,7 +74,6 @@ NOT_A_DOOR_RADIUS = 600.0
 ENTRANCE_ARRIVE_RADIUS = 80.0
 INTERACT_PROMPT = "interact prompt"
 LOADING_WAIT_SECONDS = 3.0
-DOOR_PUSH_SECONDS = 0.8
 DOOR_WAIT_SECONDS = 15.0
 DOOR_POLL_SECONDS = 0.5
 WATCHED_PATH_LENGTH = 2000.0
@@ -913,7 +914,7 @@ class QuestLoop:
         self.events.emit("door", "the interact prompt showed near a door into another zone; pressed X to enter")
         deadline = time.monotonic() + DOOR_WAIT_SECONDS
         while time.monotonic() < deadline and not self.settings.stop_requested():
-            if await attempt(self.client.is_loading()) is True or await attempt(self.client.zone_name()) != zone:
+            if await self.zone_changing(zone):
                 return progressed("entered with X at the interact prompt")
             if await dialog_open(self.client):
                 self._not_doors.append((zone, xy(here)))
@@ -951,16 +952,25 @@ class QuestLoop:
 
     async def zone_door_turn(self, door) -> dict:
         """Walk into the door, then give the zone change a few seconds to start. Towers and dungeons open only
-        with X: when the interact prompt shows at the door, press X once."""
+        with X: when the interact prompt shows at the door, press X once. No key goes to the game once the change
+        has begun, since keys sent then are played again in the new zone (`doors`); the walk here may already have
+        begun it."""
         zone = await self.client.zone_name()
+        changing = partial(self.zone_changing, zone)
+        if await change_begins(changing, CHANGE_START_SECONDS):
+            self.events.emit("door", "the walk to the door had begun the zone change; pressed nothing more")
+            return progressed("walked through a zone door", began_while_walking=True)
         turn = await face(self.client, door)
         if not turn["ok"]:
+            if turn["reason"] == LOADING:
+                return progressed("walked through a zone door", began_while_facing=True)
             return stalled("could not face the zone door", reason=turn["reason"])
-        await tap(self.client, Keycode.W, DOOR_PUSH_SECONDS)
+        if await push_through(partial(tap, self.client, Keycode.W), changing):
+            return progressed("walked through a zone door")
         pressed_x = False
         deadline = time.monotonic() + DOOR_WAIT_SECONDS
         while time.monotonic() < deadline and not self.settings.stop_requested():
-            if await attempt(self.client.is_loading()) is True or await attempt(self.client.zone_name()) != zone:
+            if await changing():
                 return progressed("walked through a zone door", pressed_x=pressed_x)
             if not pressed_x and await attempt(self.client.is_in_npc_range()) is True:
                 await tap(self.client, Keycode.X, TALK_KEY_SECONDS)
@@ -968,6 +978,9 @@ class QuestLoop:
                 self.events.emit("door", "the interact prompt showed at the door; pressed X to enter")
             await asyncio.sleep(DOOR_POLL_SECONDS)
         return stalled("walked into a zone door, but the zone did not change", pressed_x=pressed_x)
+
+    async def zone_changing(self, zone) -> bool:
+        return await attempt(self.client.is_loading()) is True or await attempt(self.client.zone_name()) != zone
 
     def arrival_check(self, arrow):
         async def arrived():
