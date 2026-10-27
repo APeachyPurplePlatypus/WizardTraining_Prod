@@ -40,6 +40,19 @@ class KnowledgeTest(unittest.TestCase):
         knowledge.give_to(fresh)
         self.assertEqual(fresh.nav_first_zones, ["WizardCity/WC_Streets/WC_Cyclops"])
 
+    def test_keeps_zones_where_enemies_were_met(self):
+        run = RunRecord(limits=Limits())
+        run.zones_with_enemies.append("WizardCity/WC_Streets/WC_Cyclops")
+        knowledge = Knowledge()
+        knowledge.learn_from(run)
+        knowledge.learn_from(run)
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "knowledge.json"
+            knowledge.save(path)
+            fresh = RunRecord(limits=Limits())
+            Knowledge.load(path).give_to(fresh)
+        self.assertEqual(fresh.zones_with_enemies, ["WizardCity/WC_Streets/WC_Cyclops"])
+
     def test_a_new_run_starts_with_it(self):
         run = RunRecord(limits=Limits())
         Knowledge({TRITON: {"Tele Up": 0}}).give_to(run)

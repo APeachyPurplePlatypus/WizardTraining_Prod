@@ -4,8 +4,8 @@ from wizardtraining.progress import (APPROACH_MARGIN, ENEMY_NEAR_PATH, ENEMY_PAT
                                      ENGAGE_MANA_FRACTION, MEANINGFUL_TRAVEL_DISTANCE, LimitReached, Limits,
                                      PlannedRoute, RunRecord, StopRun, check_limits, health_for_a_fight, leaves_world,
                                      mana_for_a_fight, nav_did_better, progressed, remember_obstacles,
-                                     short_for_a_fight, should_drink_potion, stalled, travel_outcome, wanted_wisp,
-                                     world_of)
+                                     short_for_a_fight, should_drink_potion, stalled, topped_up, travel_outcome,
+                                     wanted_wisp, world_of)
 
 
 def record(**limits) -> RunRecord:
@@ -189,6 +189,12 @@ class WispTest(unittest.TestCase):
         self.assertFalse(health_for_a_fight(ENGAGE_HEALTH_FRACTION - 0.01))
         self.assertTrue(health_for_a_fight(ENGAGE_HEALTH_FRACTION))
         self.assertTrue(health_for_a_fight(None))
+
+    def test_waiting_for_mana_goes_on_until_nearly_full(self):
+        self.assertFalse(topped_up(12 / 30))
+        self.assertFalse(topped_up(26 / 30))
+        self.assertTrue(topped_up(27 / 30))
+        self.assertTrue(topped_up(None))
 
     def test_health_comes_before_mana_for_a_fight(self):
         self.assertEqual(short_for_a_fight(1 / 801, 22 / 30), "health")

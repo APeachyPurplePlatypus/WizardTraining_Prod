@@ -27,6 +27,7 @@ POTION_BELOW_FRACTION = 0.4
 MANA_BELOW_FRACTION = 0.2
 ENGAGE_MANA_FRACTION = 0.4
 ENGAGE_HEALTH_FRACTION = 0.6
+TOP_UP_MANA_FRACTION = 0.9
 
 
 def world_of(zone: str | None) -> str | None:
@@ -180,6 +181,13 @@ def health_for_a_fight(health: float | None) -> bool:
     """At least ENGAGE_HEALTH_FRACTION of max health, or health unknown. Won fights at level 8 cost up to 435
     health of 717, and a wizard logged back in with 1 health was defeated in its first round."""
     return health is None or health >= ENGAGE_HEALTH_FRACTION
+
+
+def topped_up(mana: float | None) -> bool:
+    """Mana is at least TOP_UP_MANA_FRACTION of the pool, or unknown. Waiting for mana goes on until then, not just
+    to ENGAGE_MANA_FRACTION: the zones that give mana back are a walk from the fights, and a Warhorn fight took 6
+    to 10 of 30."""
+    return mana is None or mana >= TOP_UP_MANA_FRACTION
 
 
 def short_for_a_fight(health: float | None, mana: float | None) -> str | None:
