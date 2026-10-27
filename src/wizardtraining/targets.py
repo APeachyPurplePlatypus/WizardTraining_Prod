@@ -69,7 +69,7 @@ def safe_wisps(wisps: list[dict], *, me, enemies: list[dict], duel_circles, trie
     next), only wisps on the way, at most WISP_DETOUR out of it: turning back for any wisp in reach walked the
     wizard back and forth along Cyclops Lane, into fights with enemies the quest did not ask for."""
     def safe(wisp):
-        return (wisp["id"] not in tried
+        return (wisp["id"] not in tried and str(wisp["id"]) not in tried
                 and flat_distance(me, wisp["position"]) <= reach
                 and (heading is None or detour(me, wisp["position"], heading) <= WISP_DETOUR)
                 and all(flat_distance(enemy["position"], wisp["position"]) >= WISP_ENEMY_CLEARANCE for enemy in enemies)

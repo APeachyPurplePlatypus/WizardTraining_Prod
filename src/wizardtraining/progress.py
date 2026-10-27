@@ -95,7 +95,7 @@ class RunRecord:
     events_file: str | None = None
     talks_leaving_goal_open: dict[str, int] = field(default_factory=dict)
     teleport_outcomes: dict[str, dict[str, object]] = field(default_factory=dict)
-    tried_wisps: list = field(default_factory=list)
+    tried_wisps: dict[str, float] = field(default_factory=dict)
     visited_objects: list[str] = field(default_factory=list)
     arrivals: dict[str, dict] = field(default_factory=dict)
     explored: dict[str, list] = field(default_factory=dict)

@@ -67,8 +67,9 @@ MIN_SECONDS_BETWEEN_REROUTES = 0.3
 BARELY_MOVED_DISTANCE = 100.0
 ENEMY_PASS_WAIT_SECONDS = 1.5
 ARRIVAL_SETTLE_SECONDS = 1.5
-MANA_WAIT_SECONDS = 60.0
-MANA_WAIT_SPOT_RADIUS = 300.0
+EXIT_WORD = "exit"
+FIGHT_GOALS = ("bounty", "bountycollect")
+WISP_RESPAWN_SECONDS = 180.0
 FINISH_SAFELY_MINUTES = 15.0
 ENEMIES_IN_THE_WAY_WAIT_SECONDS = 4.0
 DEFEATED_HEALTH_FRACTION = 0.05
@@ -371,6 +372,12 @@ class QuestLoop:
             return None
         return None if arrow_shows_no_target(arrow) else arrow
 
+    def recently_tried_wisps(self) -> set[str]:
+        """Wisps that gave nothing within WISP_RESPAWN_SECONDS: used-up wisps come back, so after that they count
+        again, and the wizard can go round a zone's mana wisps when it has nothing else to fight with."""
+        now = time.time()
+        return {wisp for wisp, tried in self.record.tried_wisps.items() if now - tried < WISP_RESPAWN_SECONDS}
+
     async def wisp_turn(self, wanted: str, state: dict, heading=None, reach: float = WISP_REACH) -> dict | None:
         """Walk to the nearest safe health or mana wisp on the way to `heading` and touch it. None when there is
         no such wisp, so the quest goes on. A wisp trip that gives nothing, whether it arrived or was cut short,
@@ -379,7 +386,7 @@ class QuestLoop:
         kind = HEALTH_WISP if wanted == "health" else MANA_WISP
         enemies, circles = await surroundings(self.client)
         candidates = safe_wisps(await wisps(self.client, kind), me=await self.client.body.position(), enemies=enemies,
-                                duel_circles=circles, tried=self.record.tried_wisps, heading=heading, reach=reach)
+                                duel_circles=circles, tried=self.recently_tried_wisps(), heading=heading, reach=reach)
         if not candidates:
             return None
         wisp = candidates[0]
@@ -395,7 +402,7 @@ class QuestLoop:
         stat = "health" if wanted == "health" else "mana"
         gained = isinstance(after[stat], int) and isinstance(state[stat], int) and after[stat] > state[stat]
         if not gained:
-            self.record.tried_wisps.append(wisp["id"])
+            self.record.tried_wisps[str(wisp["id"])] = time.time()
         self.events.emit("wisp", f"{kind} {flat_distance(start, wisp['position']):.0f} away: {trip['result']}"
                                  f"{' (' + trip['reason'] + ')' if trip['reason'] else ''}; {stat} {state[stat]} -> "
                                  f"{after[stat]}")
@@ -458,6 +465,8 @@ class QuestLoop:
                           f"{world_of(goal['destination_zone'])}; the side quests of {world_of(here)} come first "
                           f"(open: {', '.join(side_quests) or 'none in the journal'}), and the framework cannot "
                           "switch the active quest yet; left for the operator")
+        if goal["type"] in FIGHT_GOALS and not mana_for_a_fight(mana_fraction(state)):
+            return await self.mana_turn(state)
         if goal["destination_zone"] not in ("", await self.client.zone_name()):
             return await self.waypoint_turn(arrow, goal)
         handler = self.goal_handlers().get(goal["type"])
@@ -557,11 +566,7 @@ class QuestLoop:
         return active
 
     async def bounty_turn(self, arrow, goal: dict) -> dict:
-        """Walk toward the arrow around other enemies, then walk into a target enemy near the arrow. Not without
-        mana for the fight: then `mana_turn` first."""
-        state = await snapshot(self.client)
-        if not mana_for_a_fight(mana_fraction(state)):
-            return await self.mana_turn(state)
+        """Walk toward the arrow around other enemies, then walk into a target enemy near the arrow."""
         enemies = await nearby_enemies(self.client)
         targets = quest_targets(enemies, arrow)
         in_reach = [target for target in targets if target["distance"] <= TARGET_REACH]
@@ -580,30 +585,24 @@ class QuestLoop:
 
     async def mana_turn(self, state: dict) -> dict:
         """Too little mana for a fight the quest asks for (`progress.mana_for_a_fight`). Fetch the nearest safe mana
-        wisp in the zone, however far; with none, walk to where the wizard entered this zone, away from where the
-        enemies patrol, and wait there MANA_WAIT_SECONDS for mana to come back. Every spell costs mana, wand spells
-        too, potions are never bought, and with 1 mana the wizard walked into General Akilles and could only pass.
-        Health is never waited for."""
+        wisp in the zone, however far. With none, and in an interior, walk out through its exit volume: the streets
+        have wisps, and General Akilles' tower has none. Mana does not come back by itself (0 stayed 0 for minutes
+        of standing), potions are never bought, and every spell costs mana, wand spells too."""
         turn = await self.wisp_turn("mana", state, reach=math.inf)
         if turn is not None:
             return turn
-        me = await self.client.body.position()
-        arrival = self.record.arrivals.get(state["zone"])
-        if arrival is not None and flat_distance(me, arrival["position"]) > MANA_WAIT_SPOT_RADIUS:
-            target = XYZ(*arrival["position"], me.z)
-            return await self.travel_turn("walk back to the zone's entrance to wait for mana", target,
-                                          arrive_radius=MANA_WAIT_SPOT_RADIUS)
-        waited_until = time.monotonic() + MANA_WAIT_SECONDS
-        while time.monotonic() < waited_until and not self.settings.stop_requested():
-            if battle_showing(await snapshot(self.client)):
-                break
-            await asyncio.sleep(1.0)
-        after = await snapshot(self.client)
-        self.events.emit("mana", f"waited for mana, no mana wisp in this zone: {state['mana']} -> {after['mana']} of "
-                                 f"{after['max_mana']}")
-        if isinstance(after["mana"], int) and isinstance(state["mana"], int) and after["mana"] > state["mana"]:
-            return progressed("waited for mana", before=state["mana"], after=after["mana"])
-        return stalled("waited for mana, but it did not come back")
+        planner = await self.planner()
+        exits = [volume for volume, _ in planner.teleports if EXIT_WORD in volume.name.lower()]
+        if exits:
+            me = await self.client.body.position()
+            door = min(exits, key=lambda volume: flat_distance(me, volume.point))
+            self.events.emit("mana", f"{state['mana']} of {state['max_mana']} mana and no mana wisp here; leaving "
+                                     f"through {door.name} for the street's wisps")
+            if flat_distance(me, door.point) <= WAYPOINT_ARRIVE_RADIUS:
+                return await self.zone_door_turn(XYZ(door.x, door.y, door.z))
+            return await self.travel_turn("walk to the exit for mana wisps", XYZ(door.x, door.y, door.z),
+                                          arrive_radius=door.radius)
+        return stalled("too little mana for the fight, and no mana wisp here to fetch")
 
     async def persona_turn(self, arrow, goal: dict) -> dict:
         """Walk to the arrow's NPC and talk. A talk that leaves the goal open reached the wrong NPC: it is not
