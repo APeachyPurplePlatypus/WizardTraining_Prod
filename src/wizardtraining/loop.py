@@ -70,6 +70,7 @@ BARELY_MOVED_DISTANCE = 100.0
 ENEMY_PASS_WAIT_SECONDS = 1.5
 ARRIVAL_SETTLE_SECONDS = 1.5
 SETTLE_LOOK_SECONDS = 0.25
+NEAREST_ENEMIES_NOTED = 3
 EXIT_WORD = "exit"
 INTERIOR_WORD = "/Interiors/"
 FIGHT_GOALS = ("bounty", "bountycollect")
@@ -104,7 +105,7 @@ class QuestLoop:
         self.wear_gear = wear_gear
         self._gear_checked: tuple | None = None
         self._finishing_since: float | None = None
-        self._nearest_threat: dict | None = None
+        self._nearest_threat: list[dict] | None = None
         self._topping_up_in: str | None = None
         self._potion_failed = False
         self._object_in_use = None
@@ -979,7 +980,7 @@ class QuestLoop:
             now = time.monotonic()
             self.motion.observe(enemies, now)
             threats = [] if self.in_grace_after_battle() else others(enemies, ignore)
-            self.note_nearest_threat(threats, now, path_ahead[0])
+            self.note_nearest_enemies(enemies, threats, now, path_ahead[0])
             if close := too_close(threats):
                 await self.step_away_from(close, "while walking", ignore=ignore)
                 return "stepped away from an enemy"
@@ -1000,16 +1001,17 @@ class QuestLoop:
 
         return watch
 
-    def note_nearest_threat(self, threats: list[dict], now: float, here) -> None:
-        """Keep the nearest threat, its distance and how fast it is closing on `here`, the wizard, to report when
-        a walk ends in a battle: how near enemies come before they engage is not documented, and differs between
-        them."""
-        if not threats:
-            self._nearest_threat = None
-            return
-        nearest = min(threats, key=lambda enemy: enemy["distance"])
-        self._nearest_threat = {"name": nearest["name"], "distance": round(nearest["distance"]),
-                                "closing": round(closing_speed(self.motion.track(nearest, now), here))}
+    def note_nearest_enemies(self, enemies: list[dict], threats: list[dict], now: float, here) -> None:
+        """Keep the NEAREST_ENEMIES_NOTED nearest loaded enemies, with each one's distance, how fast it is closing
+        on `here`, the wizard, and whether it stood in a duel or was not avoided, to report when a walk ends in a
+        battle: how near enemies come before they engage is not documented, and differs between them. The nearest
+        avoided enemy alone once read 881 units away and walking off when a battle began."""
+        avoided = {id(enemy) for enemy in threats}
+        self._nearest_threat = [
+            {"name": enemy["name"], "distance": round(enemy["distance"]),
+             "closing": round(closing_speed(self.motion.track(enemy, now), here)),
+             "in_duel": bool(enemy.get("in_a_duel")), "avoided": id(enemy) in avoided}
+            for enemy in sorted(enemies, key=lambda enemy: enemy["distance"])[:NEAREST_ENEMIES_NOTED]] or None
 
     def in_grace_after_battle(self) -> bool:
         return in_grace_after_battle(self._battle_ended_at, now=time.monotonic())

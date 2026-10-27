@@ -58,12 +58,13 @@ class DescriptionTest(unittest.TestCase):
         self.assertIn("442/624 with 3 pips; answered 'Would you like to return to combat?'; cast Frost Beetle",
                       describe_round(entry))
 
-    def test_threat_text_names_the_nearest_enemy_before_a_battle(self):
-        self.assertEqual(threat_text({"name": "Fire Elf Hunter", "distance": 520, "closing": 310}),
-                         "; nearest enemy last seen: Fire Elf Hunter 520 away, closing at 310/s")
-        self.assertEqual(threat_text({"name": "Fire Elf Hunter", "distance": 520, "closing": None}),
-                         "; nearest enemy last seen: Fire Elf Hunter 520 away")
+    def test_threat_text_names_the_nearest_enemies_before_a_battle(self):
+        nearest = [{"name": "Snowman-Fire-L12", "distance": 500, "closing": 190, "in_duel": False, "avoided": True},
+                   {"name": "FireElf-Red-L02", "distance": 640, "closing": -50, "in_duel": True, "avoided": False}]
+        self.assertEqual(threat_text(nearest), "; nearest enemies last seen: Snowman-Fire-L12 500 away closing at "
+                                               "190/s, FireElf-Red-L02 640 away closing at -50/s (in a duel, not avoided)")
         self.assertEqual(threat_text(None), "")
+        self.assertEqual(threat_text([]), "")
 
     def test_describe_round_lists_the_hand(self):
         entry = round_entry(1, 600, "cast Snow Serpent (Ice) on enemy", [("Warhorn", 285)])

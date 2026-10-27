@@ -100,12 +100,19 @@ def pips_text(enemy: dict) -> str:
     return f" ({enemy['pips']} pips)" if enemy.get("pips") else ""
 
 
-def threat_text(threat: dict | None) -> str:
-    """"; nearest enemy last seen: Fire Elf Hunter 520 away, closing at 310/s" or ""."""
-    if not threat:
+def threat_text(nearest: list[dict] | None) -> str:
+    """"; nearest enemies last seen: Snowman-Fire-L12 500 away closing at 190/s, ..." or "". Enemies in a duel or
+    not avoided (a quest's targets) say so."""
+    if not nearest:
         return ""
-    closing = f", closing at {threat['closing']}/s" if threat.get("closing") is not None else ""
-    return f"; nearest enemy last seen: {threat['name']} {threat['distance']} away{closing}"
+    parts = []
+    for enemy in nearest:
+        notes = [note for note, applies in (("in a duel", enemy.get("in_duel")),
+                                            ("not avoided", enemy.get("avoided") is False)) if applies]
+        closing = f" closing at {enemy['closing']}/s" if enemy.get("closing") is not None else ""
+        noted = f" ({', '.join(notes)})" if notes else ""
+        parts.append(f"{enemy['name']} {enemy['distance']} away{closing}{noted}")
+    return "; nearest enemies last seen: " + ", ".join(parts)
 
 
 def hand_text(cards) -> str:
