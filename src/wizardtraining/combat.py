@@ -21,7 +21,7 @@ from wizwalker.memory import DuelPhase
 
 from .geometry import flat_distance
 from .movement import KeysIgnored, face_and_step
-from .policy import UNIVERSAL, Card, Cast, CombatPolicy, Combatant, DamageModifier, Pass, RoundView, problem_with
+from .policy import UNIVERSAL, Card, Cast, CombatPolicy, Combatant, DamageModifier, Flee, Pass, RoundView, problem_with
 from .reports import plain
 from .state import attempt
 from .ui import enable_clicks
@@ -205,6 +205,10 @@ async def play_round(combat, policy: CombatPolicy) -> dict:
         entry["action"] = "pass: the hand read empty"
         return entry
     choice = policy.choose(view)
+    if isinstance(choice, Flee):
+        await combat.flee_button()
+        entry["action"] = f"flee: {choice.reason}"
+        return entry
     if choice is None or isinstance(choice, Pass):
         await combat.pass_button()
         entry["action"] = "pass" if choice is None else f"pass: {choice.reason}"

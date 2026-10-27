@@ -14,6 +14,7 @@ ATTACK_TARGETS = {"Damage": "enemy", "Steal": "enemy", "AOE": "all enemies"}
 HEAL_SPELL_TYPES = {"Heal"}
 LOW_HEALTH_FRACTION = 0.4
 MOST_PIPS_TO_SAVE_FOR = 7
+FLEE_BELOW_MANA = 2
 SIDE_QUEST_OFFER_PHRASE = "offering you a side quest"
 ACCEPT, DECLINE, GO_BACK, STOP = "accept", "decline", "go back", "stop"
 LEAVE_MENU = "leave menu"
@@ -88,6 +89,12 @@ class Pass:
 
 
 @dataclass(frozen=True)
+class Flee:
+    """Leave the battle with its Flee button, for `reason`."""
+    reason: str
+
+
+@dataclass(frozen=True)
 class Cast:
     """Play `cards[card]` on the wizard ("self"), on `enemies[enemy]` ("enemy"), or on every enemy at once
     ("all enemies", for spells with no single target)."""
@@ -111,18 +118,21 @@ def problem_with(choice: Cast, view: RoundView) -> str | None:
 
 
 class CombatPolicy(Protocol):
-    def choose(self, view: RoundView) -> Cast | Pass | None:
-        """The card to play this round, or a Pass (or None) to play none."""
+    def choose(self, view: RoundView) -> Cast | Pass | Flee | None:
+        """The card to play this round, a Pass (or None) to play none, or Flee to leave the battle."""
 
 
 class SpellTypePolicy:
-    """Below LOW_HEALTH_FRACTION, heal; with a heal in hand that needs more pips than the wizard has, pass to
-    save pips for it. Otherwise attack the first living enemy with the affordable attack expected to do the most:
-    its pip cost (damage grows with pips: Frost Beetle, 1 pip, about 85; Snow Serpent, 2 pips, about 175), times the
-    share the target's shields, wards, traps and resistances let through, times the card's accuracy. The first in
-    hand on a tie. It knows nothing of blades or of saving pips for attacks."""
+    """With less than FLEE_BELOW_MANA mana, flee. Below LOW_HEALTH_FRACTION, heal; with a heal in hand that needs
+    more pips than the wizard has, pass to save pips for it. Otherwise attack the first living enemy with the
+    affordable attack expected to do the most: its pip cost (damage grows with pips: Frost Beetle, 1 pip, about 85;
+    Snow Serpent, 2 pips, about 175), times the share the target's shields, wards, traps and resistances let
+    through, times the card's accuracy. The first in hand on a tie. It knows nothing of blades or of saving pips
+    for attacks."""
 
-    def choose(self, view: RoundView) -> Cast | Pass | None:
+    def choose(self, view: RoundView) -> Cast | Pass | Flee | None:
+        if out_of_mana(view):
+            return Flee(f"out of mana ({view.mana} left)")
         fraction = view.health_fraction()
         if fraction is not None and fraction < LOW_HEALTH_FRACTION:
             heal = first_castable(view.cards, lambda card: card.spell_type in HEAL_SPELL_TYPES)
@@ -138,6 +148,13 @@ class SpellTypePolicy:
         target = view.enemies[0]
         attack = max(attacks, key=lambda index: expected_damage(view.cards[index], target))
         return Cast(attack, ATTACK_TARGETS[view.cards[attack].spell_type])
+
+
+def out_of_mana(view: RoundView) -> bool:
+    """Less than FLEE_BELOW_MANA mana: no 2-pip spell, and at most one 1-pip spell, before only the weak free wand
+    spells are left. The operator's rule: "if no mana you have to flee". With 0 mana and no wand spell in hand, the
+    wizard passed four rounds and was defeated by a Cyclops Legionnaire it could not hurt."""
+    return isinstance(view.mana, int) and view.mana < FLEE_BELOW_MANA
 
 
 def expected_damage(card: Card, target: Combatant) -> float:

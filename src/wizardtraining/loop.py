@@ -36,7 +36,7 @@ from .knowledge import Knowledge
 from .motion import MotionTracker, closest_approach
 from .movement import KeysIgnored, Reroute, face, travel
 from .navigation import load_planner
-from .policy import LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, SpellTypePolicy
+from .policy import FLEE_BELOW_MANA, LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, SpellTypePolicy
 from .progress import (DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY, ENEMY_NEAR_PATH, Limits, PATH_THREATS, PlannedRoute,
                        RunRecord, StopRun, check_limits, leaves_world, nav_did_better, progressed, remember_obstacles,
                        should_drink_potion, stalled, travel_outcome, wanted_wisp, WISP_ANY_DIRECTION_BELOW_FRACTION,
@@ -229,7 +229,9 @@ class QuestLoop:
         after = await snapshot(self.client)
         fraction = health_fraction(after)
         defeated = after["zone"] != before["zone"] or (fraction is not None and fraction <= DEFEATED_HEALTH_FRACTION)
-        outcome = "left for the operator" if "stopped" in battle else ("lost" if defeated else "won")
+        fled = any(battle_round["action"].startswith("flee") for battle_round in battle["rounds"])
+        outcome = ("left for the operator" if "stopped" in battle else "lost" if defeated else "fled" if fled
+                   else "won")
         self.events.emit("battle", describe_battle(battle, seconds=time.monotonic() - started, before=before,
                                                    after=after, outcome=outcome), outcome=outcome)
         if "stopped" in battle:
@@ -290,10 +292,14 @@ class QuestLoop:
         except Exception:
             return False
 
-    async def wisp_heading(self, wanted: str, health) -> XYZ | None:
+    async def wisp_heading(self, wanted: str, state: dict) -> XYZ | None:
         """Where the quest goes next, so that a wisp is fetched only on the way there. None, any direction, when
-        health is below WISP_ANY_DIRECTION_BELOW_FRACTION or the arrow shows no target."""
+        health is below WISP_ANY_DIRECTION_BELOW_FRACTION, when mana is too low to fight (the next battle would be
+        fled), or when the arrow shows no target."""
+        health = health_fraction(state)
         if wanted == "health" and health is not None and health < WISP_ANY_DIRECTION_BELOW_FRACTION:
+            return None
+        if wanted == "mana" and isinstance(state["mana"], int) and state["mana"] < FLEE_BELOW_MANA:
             return None
         try:
             arrow = await read_quest_arrow(self.client)
@@ -358,7 +364,7 @@ class QuestLoop:
                 return await self.potion_turn(state)
         wanted = wanted_wisp(fraction, mana_fraction(state))
         if wanted is not None:
-            turn = await self.wisp_turn(wanted, state, heading=await self.wisp_heading(wanted, fraction))
+            turn = await self.wisp_turn(wanted, state, heading=await self.wisp_heading(wanted, state))
             if turn is not None:
                 return turn
         quest = await self.active_quest()

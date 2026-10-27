@@ -1,7 +1,7 @@
 import unittest
 
 from wizardtraining.policy import (ACCEPT, DECLINE, GO_BACK, LEAVE_MENU, STOP, UNIVERSAL, Card, Cast, Combatant,
-                                   DamageModifier, MainQuestsOnly, Pass, RoundView, SpellTypePolicy, TakeAllQuests,
+                                   DamageModifier, Flee, MainQuestsOnly, Pass, RoundView, SpellTypePolicy, TakeAllQuests,
                                    problem_with)
 
 HEAL = Card("Fairy", "Heal", True)
@@ -14,9 +14,9 @@ ICE_BOLT = Card("Frost Beetle", "Damage", True, "Ice")
 ONE_ENEMY = (Combatant("Ghost", 200),)
 
 
-def view(cards, health=500, max_health=500, enemies=ONE_ENEMY, pips=3):
+def view(cards, health=500, max_health=500, enemies=ONE_ENEMY, pips=3, mana=None):
     return RoundView(round_number=1, health=health, max_health=max_health, pips=pips, power_pips=0, cards=tuple(cards),
-                     enemies=enemies)
+                     enemies=enemies, mana=mana)
 
 
 class SpellTypePolicyTest(unittest.TestCase):
@@ -36,6 +36,14 @@ class SpellTypePolicyTest(unittest.TestCase):
 
     def test_passes_without_an_affordable_attack(self):
         self.assertIsNone(self.policy.choose(view([SHIELD, TOO_DEAR])))
+
+    def test_flees_when_out_of_mana(self):
+        self.assertEqual(self.policy.choose(view([BOLT, HEAL], health=100, mana=1)), Flee("out of mana (1 left)"))
+        self.assertEqual(self.policy.choose(view([BOLT], mana=0)), Flee("out of mana (0 left)"))
+
+    def test_fights_with_enough_mana_or_when_mana_is_unknown(self):
+        self.assertEqual(self.policy.choose(view([BOLT], mana=2)), Cast(0, "enemy"))
+        self.assertEqual(self.policy.choose(view([BOLT])), Cast(0, "enemy"))
 
     def test_passes_with_no_living_enemy(self):
         self.assertIsNone(self.policy.choose(view([BOLT], enemies=())))

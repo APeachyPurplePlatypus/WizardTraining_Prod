@@ -6,6 +6,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Added
 
+- **Fleeing a battle when out of mana.**
+  - **What:** with less than 2 mana (`policy.FLEE_BELOW_MANA`), `SpellTypePolicy` returns the new `Flee` choice, and the battle code clicks the battle's Flee button (WizWalker's `CombatHandler.flee_button`). The battle event says "fled", which counts as neither a win nor a defeat. A mana wisp then counts in any direction, not only on the way.
+  - **Why:** the operator's rule, "if no mana you have to flee". Below 2 mana the wizard cannot cast its 2-pip attack and has at most one 1-pip spell left. With 0 mana and no free wand spell in hand, it passed four rounds and was defeated by a Cyclops Legionnaire it could not hurt.
+  - **Not verified yet:** a flee in the game.
+
 - **The hand in each round's event.** Each round line now ends with the cards in hand and their pip costs ("hand: Frost Beetle x2 (1 pips), Snow Serpent (2 pips)"). After the wizard learned Snow Serpent and Volcanic Shield at the Ice school, the operator wanted to see whether new spells reach the deck by themselves before deck editing is built. The cast alone does not show it, because the policy may hold a card it does not pick.
 
 - **Dialog text in the event log.** Each "dialog" event now carries the conversation's text, one page per line, with the game's markup removed (up to 4,000 characters). The report still keeps page lengths only. The operator suggested reading the dialog for context: it says where the quest goes next ("Go see Professor Drake in the Myth School"), which neither the goal data nor the quest arrow always does. The text can include the wizard's own name; the event log stays in the ignored `runtime/` folder.
