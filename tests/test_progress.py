@@ -21,6 +21,14 @@ class NavDidBetterTest(unittest.TestCase):
                                          {"method": "nav", "result": "arrived"}]))
         self.assertFalse(nav_did_better([{"method": "collision", "result": "arrived"}]))
 
+    def test_a_turn_that_would_not_settle_says_nothing_about_the_walk_data(self):
+        self.assertFalse(nav_did_better([{"method": "collision", "result": "failed",
+                                          "reason": "turn failed: facing did not converge"},
+                                         {"method": "nav", "result": "arrived"}]))
+        self.assertTrue(nav_did_better([{"method": "collision", "result": "failed",
+                                         "reason": "stuck: sidesteps did not clear the obstacle"},
+                                        {"method": "nav", "result": "arrived"}]))
+
 
 class WorldTest(unittest.TestCase):
     def test_the_world_is_the_first_part_of_the_zone(self):

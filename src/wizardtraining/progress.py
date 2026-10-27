@@ -245,11 +245,19 @@ def travel_outcome(did: str, stop_reason: str | None, moved: float, record: RunR
     return stalled(did, new_obstacles=new_obstacles, **details)
 
 
+TURN_FAILED = "turn failed"
+
+
 def nav_did_better(attempts: list[dict]) -> bool:
     """A trip where the collision route got stuck on the way and the nav route then walked on: the collision
-    data misses something there."""
+    data misses something there. A collision walk that failed because a turn would not settle ("turn failed:
+    facing did not converge") says nothing about the data: in the Commons it made the hub a nav-first zone, and
+    the nav route from the Nightside gate's arrival point began with the gate's own waypoint, so the wizard
+    walked back through it, six times, until the run stopped."""
     results = {attempt["method"]: attempt.get("result") for attempt in attempts}
-    return results.get(COLLISION) == "failed" and results.get(NAV) in ("arrived", "interrupted")
+    collision_reason = next((attempt.get("reason") or "" for attempt in attempts if attempt["method"] == COLLISION), "")
+    return (results.get(COLLISION) == "failed" and results.get(NAV) in ("arrived", "interrupted")
+            and not collision_reason.startswith(TURN_FAILED))
 
 
 def remember_obstacles(record: RunRecord, zone: str, found: list) -> int:
