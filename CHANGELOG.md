@@ -2,6 +2,17 @@
 
 Every change, enhancement or addition is listed with its rationale, so later contributors know why the framework is the way it is. Say what was verified in the game and what was not.
 
+## Unreleased
+
+### Added
+
+- **CI for the offline tests.**
+  - **What:** a GitHub Actions workflow runs `python -m unittest discover -s tests` on every pull request and every push to `main`, on Ubuntu and Windows with Python 3.11 and 3.13.
+  - **Why:** changes reach `main` only through reviewed pull requests now. A red check shows a broken decision module before anyone merges or plays with it. Ubuntu proves the decide modules really need neither Windows nor WizWalker.
+- **Pull request template.**
+  - **What:** sections for what changed, why, how it was tested (offline and in the game) and what is not verified, plus a checklist for the changelog entry, personal data and the README's rules.
+  - **Why:** the changelog's rationale and the "verified, and not" notes are what make this project useful to the next contributor. The template asks for them at the point a change is proposed.
+
 ## 0.1.0 (2026-10-26)
 
 First public release: the prototype scripts behind one character's unattended level 1 to 5 run, restructured into a package that other agents can build on.

@@ -89,6 +89,8 @@ python -m unittest discover -s tests
 
 ### Before you call a change done
 
+Work on a branch and open a pull request into `main`. CI runs the offline tests on it, and the pull request template asks for the points below.
+
 1. Run the offline tests.
 2. Run `probe` against the game, to check the reads still work on the current game build.
 3. Run a short, bounded `play` and read its report.
