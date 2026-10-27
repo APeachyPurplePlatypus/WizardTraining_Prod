@@ -185,6 +185,13 @@ def health_for_a_fight(health: float | None) -> bool:
     return health is None or health >= ENGAGE_HEALTH_FRACTION
 
 
+def safe_to_stand(zone, zones_with_enemies, enemies_in_sight: int) -> bool:
+    """Whether the wizard may stand still here: no enemy in sight, in a zone where none has ever been met. A street
+    can have none loaded for a moment: at level 10 the run stopped in Firecat Alley with none in sight, and left
+    the wizard idle where they patrol."""
+    return zone not in zones_with_enemies and enemies_in_sight == 0
+
+
 def mana_to_travel(mana: float | None) -> bool:
     """At least MANA_BELOW_FRACTION of the pool, or unknown. Below it the wizard refills mana before any goal, not
     only before a fight the quest asks for: walking to a Firecat Alley waypoint with 3 of 32, any fight on the way

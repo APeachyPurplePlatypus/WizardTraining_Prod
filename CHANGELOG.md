@@ -132,6 +132,11 @@ What one character's unattended play from level 5 to 10 taught the framework: 71
 
 ### Fixed
 
+- **A run stops only in a zone where no enemy has been met.**
+  - **What:** a place is safe to stand in only when no enemy is in sight and the zone is not one where enemies have been met (`progress.safe_to_stand`). While a run finishes, it walks out of such a zone through its nearest exit, which leads back toward the hub, instead of playing on among the enemies (`QuestLoop.leave_for_safety_turn`).
+  - **Why:** at level 10 the run stopped in Firecat Alley because no enemy happened to be loaded at that moment, and left the wizard standing idle where they patrol; while stopped earlier that day, the wizard was twice pulled into fights.
+  - **Not verified yet:** in the game.
+
 - **Friend requests are declined, and an unknown message box stops the run.**
   - **What:** a friend request from another player (a message box titled "Friend" asking "Accept <player> ... as your friend?", `screen.is_friend_request`) is answered No, its right button (`ui.decline_friend_request`), before each turn and before each battle round. Any other message box still open stops the run, or the battle code, for the operator, naming only the box's title (`ui.message_box`, `combat.BoxInTheWay`): its text can name a player. Message boxes carry their title and caption without the game's markup (`screen.plain_text`).
   - **Why:** from 13:01 on 2026-10-27 no card the wizard played reached a battle, solo or shared, through four restarts and two defeats by Alicane Swiftarrow: the client's log shows no move after 13:00:20. A friend request had been left open under `WorldView`, and a modal box takes every click; walking, done with keys, went on. The operator then set "Allow Friend Requests" to none (the game's settings, Privacy tab, reached from the Spellbook's Preferences tab) and asked that any request that still comes be declined.

@@ -43,7 +43,8 @@ from .policy import LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, Spell
 from .progress import (DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY, ENEMY_NEAR_PATH, LimitReached, Limits, PATH_THREATS,
                        PlannedRoute, RunRecord, StopRun, check_limits, leaves_world, mana_for_a_fight, mana_to_travel,
                        nav_did_better,
-                       progressed, remember_obstacles, short_for_a_fight, should_drink_potion, stalled, topped_up,
+                       progressed, remember_obstacles, safe_to_stand, short_for_a_fight, should_drink_potion, stalled,
+                       topped_up,
                        travel_outcome, wanted_wisp, WISP_ANY_DIRECTION_BELOW_FRACTION, world_of)
 from .quests import arrow_shows_no_target, game_language, open_goals, read_quest_arrow, read_quests
 from .reports import plain, save_report
@@ -234,15 +235,18 @@ class QuestLoop:
                            windows=await visible_children(self.client, ["WorldView"]))
         if self.wear_gear and (turn := await self.gear_turn()) is not None:
             return turn
+        if self._finishing_since is not None and (turn := await self.leave_for_safety_turn(state)) is not None:
+            return turn
         return await self.quest_turn(state)
 
     async def safe_here(self) -> bool:
-        """No enemy among the loaded entities: where the wizard may stand still. Enemies are recognised up to about
-        4,000 units away. A zone's patrol paths do not tell: the Commons, Ravenwood, the Shopping District and
-        Olde Town have them for their friendly NPCs, and General Akilles' tower has none, though he stands in it."""
-        if (await snapshot(self.client))["loading"] is not False:
+        """`progress.safe_to_stand` here, with enemies recognised up to about 4,000 units away. A zone's patrol paths
+        do not tell: the Commons, Ravenwood, the Shopping District and Olde Town have them for their friendly NPCs,
+        and General Akilles' tower has none, though he stands in it."""
+        state = await snapshot(self.client)
+        if state["loading"] is not False:
             return False
-        return not await nearby_enemies(self.client)
+        return safe_to_stand(state["zone"], self.record.zones_with_enemies, len(await nearby_enemies(self.client)))
 
     async def finish_safely(self, reached: LimitReached, state: dict) -> None:
         """Stop for a planned limit only where it is safe; until then, play on for up to FINISH_SAFELY_MINUTES.
@@ -702,6 +706,18 @@ class QuestLoop:
         return (progressed if gained else stalled)("waited for mana", before=state["mana"], after=now["mana"])
 
     async def leave_for_wisps_turn(self, stat: str, state: dict, planner: RoutePlanner) -> dict | None:
+        return await self.exit_turn(planner, stat, f"{state[stat]} of {state['max_' + stat]} {stat} and no {stat} "
+                                                   f"wisp in sight", f"walk to the exit for {stat}")
+
+    async def leave_for_safety_turn(self, state: dict) -> dict | None:
+        """While a run finishes (`finish_safely`), walk out of a zone where enemies were met through its nearest exit,
+        which leads back toward the hub, rather than playing on among them. None when no enemy was met here or the
+        zone has no exit."""
+        if state["zone"] not in self.record.zones_with_enemies:
+            return None
+        return await self.exit_turn(await self.planner(), "run", "finishing among enemies", "walk to the exit to stop")
+
+    async def exit_turn(self, planner: RoutePlanner, kind: str, why: str, did: str) -> dict | None:
         """Walk to the middle of the zone's nearest exit volume, and through it once inside its radius. None when the
         zone has none. Cyclops Lane's exit is 336 units across: a walk that stopped at its edge counted as arrived,
         and with the door step kept for within WAYPOINT_ARRIVE_RADIUS of the middle, the wizard stood at the edge
@@ -711,12 +727,11 @@ class QuestLoop:
             return None
         me = await self.client.body.position()
         door = min(exits, key=lambda volume: flat_distance(me, volume.point))
-        self.events.emit(stat, f"{state[stat]} of {state['max_' + stat]} {stat} and no {stat} wisp in sight; "
-                               f"leaving through {door.name}")
+        self.events.emit(kind, f"{why}; leaving through {door.name}")
         if flat_distance(me, door.point) <= max(WAYPOINT_ARRIVE_RADIUS, door.radius):
             return await self.zone_door_turn(XYZ(door.x, door.y, door.z))
-        return await self.travel_turn(f"walk to the exit for {stat}", XYZ(door.x, door.y, door.z),
-                                      arrive_radius=WAYPOINT_ARRIVE_RADIUS, avoid=await nearby_enemies(self.client))
+        return await self.travel_turn(did, XYZ(door.x, door.y, door.z), arrive_radius=WAYPOINT_ARRIVE_RADIUS,
+                                      avoid=await nearby_enemies(self.client))
 
     async def explore_for_wisps_turn(self, stat: str, state: dict, planner: RoutePlanner, *, reach: float,
                                      again: bool = True) -> dict | None:

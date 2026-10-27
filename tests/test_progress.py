@@ -4,7 +4,8 @@ from wizardtraining.progress import (APPROACH_MARGIN, ENEMY_NEAR_PATH, ENEMY_PAT
                                      ENGAGE_MANA_FRACTION, MEANINGFUL_TRAVEL_DISTANCE, LimitReached, Limits,
                                      PlannedRoute, RunRecord, StopRun, check_limits, health_for_a_fight, leaves_world,
                                      mana_for_a_fight, mana_to_travel, nav_did_better, progressed, remember_obstacles,
-                                     short_for_a_fight, should_drink_potion, stalled, topped_up, travel_outcome,
+                                     safe_to_stand, short_for_a_fight, should_drink_potion, stalled, topped_up,
+                                     travel_outcome,
                                      wanted_wisp, world_of)
 
 
@@ -223,6 +224,15 @@ class ReportTest(unittest.TestCase):
         report = record(target_level=7).as_report()
         self.assertIs(report["simulated"], False)
         self.assertEqual(report["limits"]["target_level"], 7)
+
+
+
+class SafeToStandTest(unittest.TestCase):
+    def test_a_zone_where_enemies_were_met_is_never_safe_to_stand_in(self):
+        firecat = "WizardCity/WC_Streets/WC_Firecat"
+        self.assertFalse(safe_to_stand(firecat, [firecat], enemies_in_sight=0))
+        self.assertTrue(safe_to_stand("WizardCity/WC_Streets/WC_OldeTown", [firecat], enemies_in_sight=0))
+        self.assertFalse(safe_to_stand("WizardCity/WC_Streets/WC_OldeTown", [firecat], enemies_in_sight=1))
 
 
 if __name__ == "__main__":
