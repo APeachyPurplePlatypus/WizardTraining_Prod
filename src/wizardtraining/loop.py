@@ -330,12 +330,12 @@ class QuestLoop:
 
     async def quest_turn(self, state: dict) -> dict:
         fraction = health_fraction(state)
-        wanted = wanted_wisp(fraction, mana_fraction(state))
-        if wanted is not None and (turn := await self.wisp_turn(wanted, state)) is not None:
-            return turn
         if self.use_potions and not self._potion_failed:
             if should_drink_potion(fraction, await attempt(self.client.stats.potion_charge())):
                 return await self.potion_turn(state)
+        wanted = wanted_wisp(fraction, mana_fraction(state))
+        if wanted is not None and (turn := await self.wisp_turn(wanted, state)) is not None:
+            return turn
         if needs_rest(fraction):
             if state["zone"] not in self.record.zones_without_regeneration:
                 return await self.rest_turn(state)

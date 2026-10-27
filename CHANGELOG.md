@@ -6,6 +6,10 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **A potion before distant wisps when health is low.**
+  - **What:** below the potion threshold (40%), with potions allowed, the wizard drinks before looking for wisps. Wisps are now only sought within 2,500 units, down from 4,000.
+  - **Why:** at 31% health on Triton Avenue, the wizard walked to three health wisps 1,500 to 3,700 units away through eel territory. Two had been used up and one trip was interrupted, before a fourth gave +163. Used-up wisps stay among the loaded entities, so a far trip can come back empty, and at low health every extra walk risks a fight.
+
 - **No endless dodging of an enemy that blocks the way.**
   - **What:** once the wizard has stepped away from the same enemy three times within a minute, and health is at least half, it stops stepping away from that enemy. It walks on, and passes it or fights it. The event log records the decision.
   - **Why:** a `Minion-Myth-00` stood about 371 units from the wizard, on the way to Triton's Tele Up. Every turn the route led toward it, the wizard stepped away, and it planned again: seven times in six seconds, until the run stopped on turns without progress. At 70% health, one minion is a fight worth taking. Below half health the wizard still dodges, as before.
