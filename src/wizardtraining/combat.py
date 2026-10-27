@@ -18,13 +18,14 @@ from dataclasses import asdict, replace
 
 from wizwalker.combat import CombatHandler
 from wizwalker.memory import DuelPhase
+from wizwalker.memory.memory_objects.enums import WindowFlags
 
 from .geometry import flat_distance
 from .movement import KeysIgnored, face_and_step
 from .policy import UNIVERSAL, Card, Cast, CombatPolicy, Combatant, DamageModifier, Flee, Pass, RoundView, problem_with
 from .reports import plain
 from .state import attempt
-from .ui import click, enable_clicks, showing, text_of
+from .ui import click, enable_clicks, showing, text_of, window_at
 
 APPROACH_STEP_SECONDS = 0.4
 MAX_APPROACH_STEPS = 15
@@ -206,7 +207,7 @@ async def read_hand(combat):
 
 async def play_round(combat, policy: CombatPolicy, can_flee: bool = True) -> dict:
     view, me, cards, enemies = await read_hand(combat)
-    view = replace(view, can_flee=can_flee)
+    view = replace(view, can_flee=can_flee and await flee_button_enabled(combat.client))
     entry = {"round": view.round_number, "view": asdict(view)}
     if not view.cards:
         await pass_round(combat)
@@ -236,6 +237,16 @@ async def pass_round(combat) -> None:
     is visible, and in this client it always does: no pass or flee click took, and the round timer passed instead.
     After such a flee click, the wizard's casts stopped landing for the rest of the battle."""
     await click(combat.client, PASS_BUTTON)
+
+
+async def flee_button_enabled(client) -> bool:
+    """The Flee action button is there and not disabled (WizWalker's WindowFlags.disabled). Some battles cannot be
+    fled; then the wizard plays its cards instead of losing the round."""
+    try:
+        button = await window_at(client.root_window, FLEE_BUTTON)
+        return button is not None and WindowFlags.disabled not in await button.flags()
+    except Exception:
+        return False
 
 
 async def flee(combat) -> str:
