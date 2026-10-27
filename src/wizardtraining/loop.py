@@ -597,14 +597,20 @@ class QuestLoop:
 
     async def refill_turn(self, stat: str, state: dict) -> dict | None:
         """Too little health or mana for a fight the quest asks for (`progress.short_for_a_fight`), or mana being
-        topped up. Fetch the nearest safe wisp of that kind in sight, however far. Otherwise, in a zone where no
-        enemy has been met, `safe_zone_refill_turn`. In an interior, and for mana in a street, walk out through the
+        topped up. In a zone where no enemy has been met, mana comes first when both are short: health comes back
+        there while the wizard waits for mana, and fetching health first, of which the Commons has no wisps, then
+        searching for mana and stopping at the first mana wisp seen, went round in circles until the run stopped.
+        Fetch the nearest safe wisp of that kind in sight, however far. Otherwise, in a zone where no enemy has been
+        met, `safe_zone_refill_turn`. In an interior, and for mana in a street, walk out through the
         zone's exit volume: General Akilles' tower has no wisps, and in Cyclops Lane fetching mana wisps through
         nine to thirteen enemies lost mana, since the fights it led into cost 5 to 10 each and a wisp gives 3 to 6.
         The exit leads back toward the hub: from Cyclops Lane, to Olde Town. For health in a street, explore it:
         wisps are spawned, not placed, and load only nearby. Potions are never bought."""
         indoors = INTERIOR_WORD in state["zone"]
-        if stat == "mana" and not indoors and state["zone"] not in self.record.zones_with_enemies:
+        safe_zone = not indoors and state["zone"] not in self.record.zones_with_enemies
+        if safe_zone and stat == "health" and not mana_for_a_fight(mana_fraction(state)):
+            stat = "mana"
+        if stat == "mana" and safe_zone:
             self.top_up_in(state["zone"])
         turn = await self.wisp_turn(stat, state, reach=math.inf)
         if turn is not None:
@@ -612,7 +618,7 @@ class QuestLoop:
         planner = await self.planner()
         if await nearby_enemies(self.client):
             self.saw_enemies(state["zone"])
-        if not indoors and state["zone"] not in self.record.zones_with_enemies:
+        if safe_zone:
             return await self.safe_zone_refill_turn(stat, state, planner)
         if indoors or stat == "mana":
             turn = await self.leave_for_wisps_turn(stat, state, planner)
