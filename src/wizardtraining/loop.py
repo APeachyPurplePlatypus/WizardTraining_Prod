@@ -294,7 +294,8 @@ class QuestLoop:
         after = await snapshot(self.client)
         fraction = health_fraction(after)
         defeated = after["zone"] != before["zone"] or (fraction is not None and fraction <= DEFEATED_HEALTH_FRACTION)
-        fled = any(battle_round["action"].startswith("flee") for battle_round in battle["rounds"])
+        fled = any(battle_round["action"].startswith("flee") and battle_round.get("then") == "ended"
+                   for battle_round in battle["rounds"])
         outcome = ("left for the operator" if "stopped" in battle else "lost" if defeated else "fled" if fled
                    else "won")
         self.events.emit("battle", describe_battle(battle, seconds=time.monotonic() - started, before=before,
