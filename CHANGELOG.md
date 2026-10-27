@@ -28,6 +28,7 @@ Every change, enhancement or addition is listed with its rationale, so later con
 - **A tower's door is entered with X wherever its prompt shows.**
   - **What:** on a goal in another zone, when the interact prompt shows within 2,500 units of the quest arrow (`loop.PROMPT_DOOR_REACH`), the wizard presses X and waits for the zone to change (`QuestLoop.enter_with_x_turn`); the walk toward the arrow stops as soon as the prompt shows.
   - **Why:** "A Brief History of the Spiral" sends the wizard into Sapphyra's Tower in Olde Town. The arrow points at the door volume inside a fenced courtyard the wizard cannot walk into; X was taken only at the arrow, so the run tried teleporters and a step over the fence and stopped for turns without progress. The operator: "u have to press X since it is a tower, like a dungion" and "the prompt to press X has been open since you got stuck". Read at the fence: the prompt showing, 1,732 units from the door.
+  - **Not an NPC's prompt.** The prompt counts for a door only with no friendly NPC within 400 units (`loop.NPC_PROMPT_RANGE`): in the Shopping District an NPC's prompt was taken for a door's, X did nothing, and 15 seconds went.
   - **Not verified yet:** the entry itself, in the game.
 
 - **Readings that are lists are no longer turned into text.**

@@ -28,7 +28,7 @@ from .config import Settings
 from .dialog import (DIALOG_FINISHED, FOLLOW_UP_WAIT_SECONDS, NPC_ARRIVE_DISTANCE, OFFER_LEFT_FOR_OPERATOR,
                      TALK_KEY_SECONDS, choose_service, close_enough, dialog_open, leave_services, near_npc, read_conversation, service_options,
                      services_open, talk, use_object, wait_for_dialog)
-from .entities import HEALTH_WISP, MANA_WISP, nearby_enemies, step_away, surroundings, wisps
+from .entities import HEALTH_WISP, MANA_WISP, nearby_enemies, nearest_npc, step_away, surroundings, wisps
 from .equipment import count_items, equip, read_items, read_wizard
 from .events import (EventLog, describe_battle, describe_changes, describe_round, dialog_text, enemy_names, health_text,
                      threat_text)
@@ -66,6 +66,7 @@ TARGET_REACH = 1200.0
 ARROW_ARRIVE_RADIUS = 250.0
 WAYPOINT_ARRIVE_RADIUS = 150.0
 PROMPT_DOOR_REACH = 2500.0
+NPC_PROMPT_RANGE = 400.0
 INTERACT_PROMPT = "interact prompt"
 LOADING_WAIT_SECONDS = 3.0
 DOOR_PUSH_SECONDS = 0.8
@@ -871,9 +872,14 @@ class QuestLoop:
                                       also=prompt_shows, avoid=await nearby_enemies(self.client))
 
     async def door_prompt_near(self, arrow) -> bool:
-        """The interact prompt shows within PROMPT_DOOR_REACH of a door's arrow."""
-        return (flat_distance(await self.client.body.position(), arrow) <= PROMPT_DOOR_REACH
-                and await attempt(self.client.is_in_npc_range()) is True)
+        """The interact prompt shows within PROMPT_DOOR_REACH of a door's arrow, with no friendly NPC within
+        NPC_PROMPT_RANGE, whose prompt it would be: in the Shopping District an NPC's prompt was taken for a door's,
+        X did nothing, and 15 seconds went."""
+        here = await self.client.body.position()
+        if flat_distance(here, arrow) > PROMPT_DOOR_REACH or await attempt(self.client.is_in_npc_range()) is not True:
+            return False
+        npc = await or_default(nearest_npc(self.client), None)
+        return npc is None or flat_distance(here, npc) > NPC_PROMPT_RANGE
 
     async def enter_with_x_turn(self) -> dict:
         """Press X at a door's interact prompt and give the zone change a few seconds to start."""
