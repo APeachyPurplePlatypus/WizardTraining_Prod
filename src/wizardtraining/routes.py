@@ -143,8 +143,10 @@ class NavGraph:
             adjacent[a].append(b)
         return cls([xy(vertex) for vertex in vertices], adjacent)
 
-    def nearest(self, point: Point) -> int:
-        return min(range(len(self.vertices)), key=lambda index: math.dist(point, self.vertices[index]))
+    def nearest(self, point: Point, hazards: Hazards | None = None) -> int | None:
+        """The waypoint nearest `point` that `hazards` allows, or None."""
+        allowed = [index for index, vertex in enumerate(self.vertices) if hazards is None or not hazards.forbids(vertex)]
+        return min(allowed, key=lambda index: math.dist(point, self.vertices[index]), default=None)
 
     def covers_line(self, a: Point, b: Point) -> bool:
         """Every sample along the line lies within one nav cell of a waypoint, so it stays on walkable ground."""
@@ -156,7 +158,9 @@ class NavGraph:
         return True
 
     def path(self, start: Point, goal: Point, hazards: Hazards) -> list[int] | None:
-        source, target = self.nearest(start), self.nearest(goal)
+        source, target = self.nearest(start, hazards), self.nearest(goal, hazards)
+        if source is None or target is None:
+            return None
         frontier, came_from, cost = [(0.0, source)], {source: None}, {source: 0.0}
         while frontier:
             _, current = heapq.heappop(frontier)
@@ -310,18 +314,21 @@ class RoutePlanner:
     def teleports_to_keep_out_of(self, start, destination, arrive_radius: float) -> list[tuple[Point, float]]:
         """The teleport volumes a walk from `start` to `destination` must not cross, as circles TELEPORT_CLEARANCE
         wider than the volume: walking through one changes the zone. Left out: a volume at the destination,
-        which may be the door the walk is for; one the wizard stands at, as it does after coming through it;
-        and volumes on another walkable piece, such as another level, which the walk cannot reach."""
+        which may be the door the walk is for; one the wizard stands in; and volumes on another walkable piece,
+        such as another level, which the walk cannot reach. A door the wizard has just come through, and stands
+        beside, is kept out without the margin: when it was left out entirely, a nav route in the Myth school led
+        straight back out through it, over and over."""
         here, goal = xy(start), xy(destination)
         start_piece = self.piece_of(here) if self.piece_of is not None else None
         circles = []
         for volume, piece in self.teleports:
             centre, keep_out = (volume.x, volume.y), volume.radius + TELEPORT_CLEARANCE
-            if math.dist(centre, goal) <= keep_out + arrive_radius or math.dist(centre, here) <= keep_out:
+            standing_off = math.dist(centre, here)
+            if math.dist(centre, goal) <= keep_out + arrive_radius or standing_off <= volume.radius:
                 continue
             if start_piece is not None and piece is not None and piece != start_piece:
                 continue
-            circles.append((centre, keep_out))
+            circles.append((centre, min(keep_out, standing_off - 1.0)))
         return circles
 
     def methods(self) -> list[str]:

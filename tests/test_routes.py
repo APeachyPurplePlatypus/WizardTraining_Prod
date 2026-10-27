@@ -228,6 +228,17 @@ class RoutePlannerTest(unittest.TestCase):
         self.assertEqual(planner.teleports_to_keep_out_of((0, 0), (1000, 50), 40), [])
         self.assertEqual(planner.teleports_to_keep_out_of((1050, 0), (5000, 0), 40), [])
 
+    def test_a_door_just_come_through_is_kept_out_without_the_margin(self):
+        planner = RoutePlanner("zone")
+        planner.teleports = [(TeleportVolume("Myth School Exit", 1000, 0, 0, 100), 0)]
+        self.assertEqual(planner.teleports_to_keep_out_of((1130, 0), (5000, 0), 40), [((1000, 0), 129.0)])
+
+    def test_nav_routes_never_start_at_a_forbidden_waypoint(self):
+        graph = square_nav_graph(3)
+        hazards = Hazards.of(keep_out=[((0, 0), 100)])
+        self.assertNotEqual(graph.vertices[graph.path((10, 10), (960, 960), hazards)[0]], (0, 0))
+        self.assertIsNone(graph.path((0, 0), (960, 960), Hazards.of(keep_out=[((480, 480), 2000)])))
+
     def test_volumes_on_another_level_are_not_kept_out(self):
         planner = RoutePlanner("zone")
         planner.piece_of = lambda point, reach=150: 0

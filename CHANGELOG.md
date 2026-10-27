@@ -55,6 +55,10 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **A door just come through stays out of routes.**
+  - **What:** a teleport volume the wizard stands beside, as it does after coming through it, is now kept out of routes at its own radius instead of being left out entirely. Only a volume the wizard stands in is left out. Nav routes no longer start or end at a waypoint inside a no-go area.
+  - **Why:** in the Myth school, the collision data had no route to the quest NPC, so the nav route was used. Its nearest waypoint lay past the school's exit, which was not kept out because the wizard had just come through it. Every walk to the NPC led back out to Ravenwood, and the goal led back in, until the door-loop guard stopped the run.
+
 - **The nav graph first where the collision data misses obstacles.**
   - **What:** when a trip's collision route gets stuck on the way and the nav route then walks on, the zone is marked: its routes try the zone's nav graph first from then on, and `runtime/knowledge.json` remembers it for later runs. The event log says so once per zone.
   - **Why:** the operator noticed the wizard "seem[s] to like to walk into the fairground tents" on Cyclops Lane. The tents are placed objects whose footprints are not in the collision walls the framework subtracts. Every collision route there got stuck at a tent, recorded five obstacles and fell back to the nav route, which walks around them because the zone's nav waypoints were laid out on walkable paths. Deimos can build the placed objects' footprints (`entity_collision.build_zone_static_shapes`), but it needs the `katsuba`, `kinif` and `wiztype` packages, which are not installed here; with them, the tents could join the walls instead.
