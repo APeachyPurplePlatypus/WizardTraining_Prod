@@ -62,6 +62,7 @@ WATCHED_PATH_LENGTH = 2000.0
 MIN_SECONDS_BETWEEN_REROUTES = 0.3
 BARELY_MOVED_DISTANCE = 100.0
 ENEMY_PASS_WAIT_SECONDS = 1.5
+ARRIVAL_SETTLE_SECONDS = 1.5
 ENEMIES_IN_THE_WAY_WAIT_SECONDS = 4.0
 DEFEATED_HEALTH_FRACTION = 0.05
 LOWEST_HEALTH_FRACTION_TO_KEEP_QUESTING = 0.35
@@ -93,6 +94,7 @@ class QuestLoop:
         self._object_in_use = None
         self._dodges: list[float] = []
         self._battle_ended_at: float | None = None
+        self._settled_in: str | None = None
         self.motion = MotionTracker()
         self.events = events or EventLog()
         self._last_state = self._last_quest = None
@@ -140,9 +142,10 @@ class QuestLoop:
             if isinstance(state["level"], int) and state["level"] >= self.limits.target_level:
                 raise StopRun(f"reached level {state['level']}")
             turn = await self.checked_turn(state)
-            turn["level"], turn["health"] = state["level"], state["health"]
-            self.record.record_turn(turn)
             quest = self.record.quest or {}
+            turn.update(level=state["level"], health=state["health"], zone=state["zone"], position=plain_xy(state),
+                        goal=(quest.get("goal"), quest.get("goal_zone")), arrow=plain_xy({"position": quest.get("arrow")}))
+            self.record.record_turn(turn)
             self.record.note_place(state["zone"], (quest.get("name"), quest.get("goal_id")))
             log.info("turn %d: %s (progress=%s, level=%s, health=%s, zone=%s, goal=%s %s)", len(self.record.turns),
                      turn["did"], turn["progress"], state["level"], health_text(state), state["zone"], quest.get("goal"),
@@ -188,6 +191,10 @@ class QuestLoop:
                 return stalled("waited for loading")
             return progressed("waited for loading")
         self.record.loading_waits_in_a_row = 0
+        if state["zone"] != self._settled_in:
+            self._settled_in = state["zone"]
+            await asyncio.sleep(ARRIVAL_SETTLE_SECONDS)
+            return progressed("settled after arriving")
         if battle_showing(state):
             return await self.battle_turn()
         if await dialog_open(self.client):
@@ -787,6 +794,12 @@ class QuestLoop:
                                      "journal": [(entry["name_key"], entry["mainline"]) for entry in quests["journal"]]}
         except Exception as exc:
             self.record.end = f"<unavailable: {type(exc).__name__}>"
+
+
+def plain_xy(state: dict) -> tuple | None:
+    """A reading's position as rounded (x, y), or None."""
+    position = state.get("position")
+    return (round(position["x"]), round(position["y"])) if isinstance(position, dict) else None
 
 
 def reroute_text(attempt: dict) -> str:

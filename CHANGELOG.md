@@ -59,6 +59,8 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **A short settle after arriving in a zone.** The loop now waits 1.5 s on its first turn in a zone before acting. Each turn record in the report also holds the zone, position, goal and quest arrow. Twice the wizard entered the Myth school and was back in Ravenwood within three seconds, on a "travel to waypoint" turn, as if the goal were still in another zone. The likeliest cause is a zone or quest-arrow reading that had not caught up after loading; the third entry, a few seconds later, stayed and finished the talk. The new turn fields will show whether that was it.
+
 - **A door just come through stays out of routes.**
   - **What:** a teleport volume the wizard stands beside, as it does after coming through it, is now kept out of routes at its own radius instead of being left out entirely. Only a volume the wizard stands in is left out. Nav routes no longer start or end at a waypoint inside a no-go area.
   - **Why:** in the Myth school, the collision data had no route to the quest NPC, so the nav route was used. Its nearest waypoint lay past the school's exit, which was not kept out because the wizard had just come through it. Every walk to the NPC led back out to Ravenwood, and the goal led back in, until the door-loop guard stopped the run.
