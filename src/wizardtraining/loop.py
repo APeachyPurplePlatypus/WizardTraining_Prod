@@ -186,6 +186,7 @@ class QuestLoop:
 
     async def play_turn(self, state: dict) -> dict:
         if state["loading"] is True:
+            self._settled_in = None
             self.record.loading_waits_in_a_row += 1
             await asyncio.sleep(LOADING_WAIT_SECONDS)
             if self.record.loading_waits_in_a_row > self.limits.max_loading_waits_in_a_row:
@@ -193,8 +194,7 @@ class QuestLoop:
             return progressed("waited for loading")
         self.record.loading_waits_in_a_row = 0
         if state["zone"] != self._settled_in:
-            self._settled_in = state["zone"]
-            await asyncio.sleep(ARRIVAL_SETTLE_SECONDS)
+            await self.settle()
             return progressed("settled after arriving")
         if battle_showing(state):
             return await self.battle_turn()
@@ -207,6 +207,17 @@ class QuestLoop:
             return stalled("waited: not free to move", state=state,
                            windows=await visible_children(self.client, ["WorldView"]))
         return await self.quest_turn(state)
+
+    async def settle(self) -> None:
+        """Wait ARRIVAL_SETTLE_SECONDS after a loading screen or a zone change, until two zone readings a moment
+        apart agree. Right after loading the zone once read as the zone just left: the loop walked toward that
+        zone's door coordinates inside the Myth school, straight back out through its exit."""
+        await asyncio.sleep(ARRIVAL_SETTLE_SECONDS)
+        zone = await self.client.zone_name()
+        while (again := await self.client.zone_name()) != zone and not self.settings.stop_requested():
+            zone = again
+            await asyncio.sleep(ARRIVAL_SETTLE_SECONDS)
+        self._settled_in = zone
 
     async def battle_turn(self) -> dict:
         self.record.battles += 1
