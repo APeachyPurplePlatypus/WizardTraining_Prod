@@ -99,6 +99,8 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **A lost server connection is named as such.** When no planning phase comes in a battle, the battle code reads the end of the game client's own log (`Bin/WizardClient.log` in the game folder, `connection.py`). If the last "AppCloseConnection() called" has no "ConnectComplete" after it, the run stops with "the game lost its connection to the server at <time>; a login is needed". On 2026-10-27 the connection closed at 02:06 in the middle of a battle: the client froze in the execution phase, and two runs stopped with "no planning phase within the timeout" before the log showed why. The framework never logs in; that stays with the operator.
+
 - **The hand is taken back when the planning window is stuck waiting.** At the start of each of the wizard's turns to choose, if the planning window still shows its "waiting for others" panel (`PlanningPhaseSubWindow/WaitingForOthers`), the battle code clicks its Change button to get the hand back, and the round's event says "reopened the card choice". A click on Flee that did not end the battle left that panel up. From then on no card click landed, into the next battle too: a Warhorn stayed at 285 for 13 rounds while the wizard's attacks and Pixie heals did nothing, and the wizard was defeated. A dump of the planning window after that battle showed the panel still flagged visible.
 
 - **A battle is logged as fled only when a flee ended it.** A Warhorn fight in which the flee did not work, and the Warhorn then fell, was logged "fled" with its gold. Now only a battle that ends right after a flee counts as fled.

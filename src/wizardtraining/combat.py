@@ -15,11 +15,14 @@ from __future__ import annotations
 import asyncio
 import time
 from dataclasses import asdict, replace
+from pathlib import Path
 
 from wizwalker.combat import CombatHandler
 from wizwalker.memory import DuelPhase
 from wizwalker.memory.memory_objects.enums import WindowFlags
+from wizwalker.utils import get_wiz_install
 
+from .connection import client_log_tail, lost_connection
 from .geometry import flat_distance
 from .movement import KeysIgnored, face_and_step
 from .policy import UNIVERSAL, Card, Cast, CombatPolicy, Combatant, DamageModifier, Flee, Pass, RoundView, problem_with
@@ -285,6 +288,15 @@ async def flee(combat) -> str:
     return f"confirmed {caption!r}"
 
 
+def no_planning_reason() -> str:
+    """Why no planning phase came: a lost server connection when the client's log shows one, else a timeout."""
+    lost = lost_connection(client_log_tail(Path(get_wiz_install())))
+    if lost:
+        return (f"the game lost its connection to the server at {lost} (WizardClient.log), so the battle stopped; "
+                "a login is needed, left for the operator")
+    return "no planning phase within the timeout; left for the operator"
+
+
 def cast_target(choice: Cast, me, enemies: list):
     if choice.target == "self":
         return me
@@ -308,7 +320,7 @@ async def fight(client, policy: CombatPolicy, on_round=None) -> dict:
                 break
             phase = await wait_for_phase(client, {DuelPhase.planning, DuelPhase.ended}, PHASE_TIMEOUT_SECONDS)
             if phase is None:
-                result["stopped"] = "no planning phase within the timeout; left for the operator"
+                result["stopped"] = no_planning_reason()
                 break
             if phase is DuelPhase.ended:
                 if await battle_over(client):

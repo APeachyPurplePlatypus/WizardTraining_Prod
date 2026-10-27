@@ -45,6 +45,10 @@ Worth reaching for before adding guesswork:
 - **The spellbook's pages:** the HUD's `btnSpellbook` opens `WorldView/DeckConfiguration`, whose tabs are `CharStats`, `Inventory`, `Deck`, `Quest`, `Maps`, `Crafting`, `Preferences` and `Help`. The Quest tab could let the framework choose the active quest without the Q key, which hides the NPC range prompt.
 - **The wizard's own stats:** `client.stats` also holds `potion_max()`, damage, resistance, critical, block and pierce by school.
 
+## The game client's log
+
+The client writes `Bin/WizardClient.log` in the game folder (100 MB and growing; read only its end). It says what memory does not: "AppCloseConnection() called" when the server connection drops, "HandleReconnectTimeout" while it retries, and "GameClient::ConnectComplete destination Zone=..." when a connection is made. `connection.lost_connection` uses these. It also logs combat cinematics with damage and health ("ProcessDamageEffect: OldHP: 235, Delta: -85, NewHP: 150"), which could check what a cast did.
+
 ## Zone files
 
 | File | Reader | Used for |
