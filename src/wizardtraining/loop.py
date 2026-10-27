@@ -38,7 +38,7 @@ from .keys import tap
 from .knowledge import Knowledge
 from .motion import MotionTracker, closest_approach
 from .movement import KeysIgnored, Reroute, face, travel
-from .navigation import NO_PATROLS, load_planner
+from .navigation import load_planner
 from .policy import LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, SpellTypePolicy
 from .progress import (DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY, ENEMY_NEAR_PATH, LimitReached, Limits, PATH_THREATS,
                        PlannedRoute, RunRecord, StopRun, check_limits, leaves_world, mana_for_a_fight, nav_did_better,
@@ -221,11 +221,12 @@ class QuestLoop:
         return await self.quest_turn(state)
 
     async def safe_here(self) -> bool:
-        """In a zone whose files show no enemy patrols, with no enemy nearby: where the wizard may stand still."""
+        """No enemy among the loaded entities: where the wizard may stand still. Enemies are recognised up to about
+        4,000 units away. A zone's patrol paths do not tell: the Commons, Ravenwood, the Shopping District and
+        Olde Town have them for their friendly NPCs, and General Akilles' tower has none, though he stands in it."""
         if (await snapshot(self.client))["loading"] is not False:
             return False
-        planner = await self.planner()
-        return planner.status.get("patrols") == NO_PATROLS and not await nearby_enemies(self.client)
+        return not await nearby_enemies(self.client)
 
     async def finish_safely(self, reached: LimitReached, state: dict) -> None:
         """Stop for a planned limit only where it is safe; until then, play on for up to FINISH_SAFELY_MINUTES.
@@ -244,8 +245,8 @@ class QuestLoop:
 
     async def gear_turn(self) -> dict | None:
         """Wear the best gear the wizard has (`gear.upgrades`). Checked again after a level-up or new loot, and only
-        where it is safe: in a zone whose files show no enemy patrols, with no enemy nearby, since the spellbook
-        stays open a few seconds per item. None when there is nothing to do here, so the turn goes on."""
+        where it is safe, with no enemy loaded (`safe_here`), since the spellbook stays open a few seconds per item.
+        None when there is nothing to do here, so the turn goes on."""
         if not await self.safe_here():
             return None
         wizard = await read_wizard(self.client)
