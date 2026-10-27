@@ -117,10 +117,10 @@ class CombatPolicy(Protocol):
 
 class SpellTypePolicy:
     """Below LOW_HEALTH_FRACTION, heal; with a heal in hand that needs more pips than the wizard has, pass to
-    save pips for it. Otherwise attack the first living enemy, with the affordable attack expected to land best:
-    the share its shields, wards, traps and resistances let through, times the card's accuracy. The first in hand
-    on a tie. It knows nothing of
-    blades or of saving pips for attacks."""
+    save pips for it. Otherwise attack the first living enemy with the affordable attack expected to do the most:
+    its pip cost (damage grows with pips: Frost Beetle, 1 pip, about 85; Snow Serpent, 2 pips, about 175), times the
+    share the target's shields, wards, traps and resistances let through, times the card's accuracy. The first in
+    hand on a tie. It knows nothing of blades or of saving pips for attacks."""
 
     def choose(self, view: RoundView) -> Cast | Pass | None:
         fraction = view.health_fraction()
@@ -136,9 +136,14 @@ class SpellTypePolicy:
         if not attacks:
             return None
         target = view.enemies[0]
-        attack = max(attacks, key=lambda index: target.damage_factor(view.cards[index].school)
-                     * view.cards[index].hit_chance())
+        attack = max(attacks, key=lambda index: expected_damage(view.cards[index], target))
         return Cast(attack, ATTACK_TARGETS[view.cards[attack].spell_type])
+
+
+def expected_damage(card: Card, target: Combatant) -> float:
+    """How much a card should do, in pips of damage: its pip cost (1 when unknown), times what the target lets
+    through of its school, times its accuracy."""
+    return (card.pips or 1) * target.damage_factor(card.school) * card.hit_chance()
 
 
 def heal_worth_saving_for(view: RoundView) -> Card | None:

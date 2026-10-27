@@ -58,6 +58,13 @@ class SpellTypePolicyTest(unittest.TestCase):
         self.assertAlmostEqual(enemy.damage_factor("Ice"), 0.8)
         self.assertAlmostEqual(enemy.damage_factor(None), 0.8)
 
+    def test_prefers_the_stronger_attack_when_affordable(self):
+        wand = Card("Imp - Starter Wand", "Damage", True, "Life", pips=1, accuracy=80)
+        serpent = Card("Snow Serpent", "Damage", True, "Ice", pips=2, accuracy=80)
+        dear_serpent = Card("Snow Serpent", "Damage", False, "Ice", pips=2, accuracy=80)
+        self.assertEqual(self.policy.choose(view([wand, serpent])), Cast(1, "enemy"))
+        self.assertEqual(self.policy.choose(view([wand, dear_serpent])), Cast(0, "enemy"))
+
     def test_prefers_the_card_more_likely_to_hit(self):
         storm = Card("Thunder Snake", "Damage", True, "Storm", accuracy=70)
         fire = Card("Fire Cat", "Damage", True, "Fire", accuracy=75)
