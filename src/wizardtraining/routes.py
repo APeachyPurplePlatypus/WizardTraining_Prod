@@ -197,6 +197,9 @@ class RoutePlanner:
             usable.append(NAV)
         return usable + [STRAIGHT]
 
+    def walls_allow(self, a: Point, b: Point) -> bool:
+        return self.grid_line_walkable is None or self.grid_line_walkable(a, b)
+
     def route(self, method: str, start, goal, hazards: Hazards = Hazards()) -> list[Point] | None:
         """Waypoints after the start, the goal last, or None when this method finds no route."""
         start, goal = xy(start), xy(goal)
@@ -211,7 +214,8 @@ class RoutePlanner:
             if waypoints is None:
                 return None
             points = [start, *(self.nav_graph.vertices[index] for index in waypoints), goal]
-            return string_pull(points, lambda a, b: self.nav_graph.covers_line(a, b) and hazards.line_is_safe(a, b))
+            return string_pull(points, lambda a, b: self.nav_graph.covers_line(a, b) and self.walls_allow(a, b)
+                               and hazards.line_is_safe(a, b))
         if method == STRAIGHT:
             return [goal] if hazards.line_is_open(start, goal) else None
         raise ValueError(f"unknown route method {method!r}")
