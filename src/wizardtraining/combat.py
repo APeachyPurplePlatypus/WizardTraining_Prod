@@ -50,9 +50,12 @@ CHANGE_CHOICE = [*WAITING_FOR_OTHERS, "Change"]
 CHANGE_SETTLE_SECONDS = 0.5
 PASS_BUTTON = [*ACTION_BUTTONS, "Focus"]
 FLEE_BUTTON = [*ACTION_BUTTONS, "Flee"]
-MESSAGE_BOX = ["MessageBoxModalWindow"]
-MESSAGE_BOX_CAPTION = [*MESSAGE_BOX, "messageBoxBG", "messageBoxLayout", "TextArea", "CaptionText"]
-MESSAGE_BOX_YES = [*MESSAGE_BOX, "messageBoxBG", "messageBoxLayout", "AdjustmentWindow", "Layout", "centerButton"]
+MESSAGE_BOXES = ([*PLANNING_PHASE, "MessageBoxModalWindow"], ["MessageBoxModalWindow"])
+BOX_CAPTION = ["messageBoxBG", "messageBoxLayout", "TextArea", "CaptionText"]
+BOX_YES = ["messageBoxBG", "messageBoxLayout", "AdjustmentWindow", "Layout", "centerButton"]
+FLEE_WORD = "flee"
+RETURN_TO_COMBAT = "return to combat"
+CONFIRMED = "confirmed"
 BATTLE_END_CONFIRM_SECONDS = 1.0
 DUEL_CIRCLE_EXIT_SECONDS = 2.0
 SCHOOL_NAMES = {2343174: "Fire", 72777: "Ice", 83375795: "Storm", 2448141: "Myth", 2330892: "Life",
@@ -240,10 +243,13 @@ async def read_hand(combat):
 
 
 async def play_round(combat, policy: CombatPolicy, can_flee: bool = True) -> dict:
+    returned = await return_to_combat(combat.client)
     changed = await reopen_card_choice(combat.client)
     view, me, cards, enemies = await read_hand(combat)
     view = replace(view, can_flee=can_flee and await flee_button_enabled(combat.client))
     entry = {"round": view.round_number, "view": asdict(view), "reopened card choice": changed}
+    if returned:
+        entry["returned to combat"] = returned
     if not view.cards:
         await pass_round(combat)
         entry["action"] = "pass: the hand read empty"
@@ -315,6 +321,28 @@ async def reopen_card_choice(client) -> bool:
     return True
 
 
+async def message_box(client) -> tuple[list[str], str] | None:
+    """The message box showing, in the battle's planning phase or on top, as (its path, its caption), else None.
+    In battle the game shows its boxes under WorldView/PlanningPhase, not on top."""
+    for box in MESSAGE_BOXES:
+        if await showing(client, box):
+            caption = await text_of(client, [*box, *BOX_CAPTION])
+            return box, caption.replace("<center>", "").replace("</center>", "").replace("<br>", " ").strip()
+    return None
+
+
+async def return_to_combat(client) -> str | None:
+    """Answer the game's "You Are Idle. Would you like to return to combat?" box with its button, and say so; None
+    when it is not showing. The game asks after a round in which the wizard's choice did not reach it, then passes
+    for the wizard every round until answered, hiding the hand."""
+    showing_box = await message_box(client)
+    if showing_box is None or RETURN_TO_COMBAT not in showing_box[1].lower():
+        return None
+    await click(client, [*showing_box[0], *BOX_YES])
+    await asyncio.sleep(CHANGE_SETTLE_SECONDS)
+    return f"answered {showing_box[1]!r}"
+
+
 async def flee_button_enabled(client) -> bool:
     """The Flee action button is there and not disabled (WizWalker's WindowFlags.disabled). Some battles cannot be
     fled; then the wizard plays its cards instead of losing the round."""
@@ -326,23 +354,29 @@ async def flee_button_enabled(client) -> bool:
 
 
 async def flee(combat) -> str:
-    """Click the Flee action button, then answer Yes when the game asks to confirm with a message box whose caption
-    mentions fleeing, like its "Are you sure you want to add this spell to your spellbook?" box (centerButton is
-    Yes). Says what followed, with the planning window's visible parts when no box came. No flee has worked yet: the
-    client's log shows the click sent no move, the round ran out its timer, and the planning window stayed in another
-    selection state (0, not 8) in which no card click sent a move for the rest of the battle."""
+    """Click the Flee action button, then answer Yes (the box's centerButton) to the game's "Are you sure you want
+    to flee? You will lose all your Mana..." box. Says what followed. The box shows under WorldView/PlanningPhase;
+    looked for on top only, it was never found and never answered, and while it stayed up it hid the hand: no card
+    click sent a move for the rest of the battle. Confirmed, the battle ends and the wizard is sent to the Commons
+    with no mana."""
     client = combat.client
     await click(client, FLEE_BUTTON)
     await asyncio.sleep(FLEE_CONFIRM_WAIT_SECONDS)
-    if not await showing(client, MESSAGE_BOX):
+    showing_box = await message_box(client)
+    if showing_box is None:
         return (f"no confirmation box; the planning window shows {await visible_tree(client, PLANNING)}; the planning "
                 f"phase shows {await visible_tree(client, PLANNING_PHASE, depth=4)}; on top: "
                 f"{await visible_tree(client, [], depth=1)}")
-    caption = (await text_of(client, MESSAGE_BOX_CAPTION)).replace("<center>", "").replace("</center>", "").strip()
-    if "flee" not in caption.lower():
+    box, caption = showing_box
+    if FLEE_WORD not in caption.lower():
         return f"a message box that does not mention fleeing was left alone: {caption!r}"
-    await click(client, MESSAGE_BOX_YES)
-    return f"confirmed {caption!r}"
+    await click(client, [*box, *BOX_YES])
+    return f"{CONFIRMED} {caption!r}"
+
+
+def fled_in(battle_round: dict) -> bool:
+    """The round's flee was confirmed. A flee sends the wizard to the Commons, which otherwise reads as a defeat."""
+    return battle_round["action"].startswith("flee") and CONFIRMED in battle_round["action"]
 
 
 def no_planning_reason() -> str:

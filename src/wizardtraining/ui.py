@@ -93,24 +93,30 @@ async def visible_tree(client, path: list[str], depth: int = 3, limit: int = 40)
     found = []
 
     async def walk(window, prefix: str, levels: int):
-        for child in await window.children():
+        for child in await or_default(window.children(), []):
             if len(found) >= limit:
                 return
-            if not await child.is_visible():
+            if not await or_default(child.is_visible(), False):
                 continue
-            name = f"{prefix}{await child.name()}"
-            text = (await child.maybe_text() or "").strip()
+            name = f"{prefix}{await or_default(child.name(), '?')}"
+            text = (await or_default(child.maybe_text(), "") or "").strip()
             found.append(f"{name}: {text[:60]}" if text else name)
             if levels > 1:
                 await walk(child, f"{name}/", levels - 1)
 
-    try:
-        parent = await window_at(client.root_window, path)
-        if parent is not None:
-            await walk(parent, "", depth)
-    except Exception:
-        pass
+    parent = await or_default(window_at(client.root_window, path), None)
+    if parent is not None:
+        await walk(parent, "", depth)
     return found
+
+
+async def or_default(coro, default):
+    """`coro`'s result, or `default` when it raises: one window that cannot be read, such as one without text, once
+    ended a whole walk with nothing to show."""
+    try:
+        return await coro
+    except Exception:
+        return default
 
 
 async def visible_children(client, path: list[str]) -> list[str]:

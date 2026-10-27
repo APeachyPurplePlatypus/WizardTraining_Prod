@@ -24,7 +24,7 @@ from dataclasses import replace
 
 from wizwalker import XYZ, Keycode
 
-from .combat import approach, fight
+from .combat import approach, fight, fled_in
 from .config import Settings
 from .dialog import (DIALOG_FINISHED, FOLLOW_UP_WAIT_SECONDS, NPC_ARRIVE_DISTANCE, OFFER_LEFT_FOR_OPERATOR,
                      TALK_KEY_SECONDS, choose_service, close_enough, dialog_open, leave_services, near_npc, read_conversation, service_options,
@@ -300,9 +300,9 @@ class QuestLoop:
         self._battle_ended_at = time.monotonic()
         after = await snapshot(self.client)
         fraction = health_fraction(after)
-        defeated = after["zone"] != before["zone"] or (fraction is not None and fraction <= DEFEATED_HEALTH_FRACTION)
-        fled = any(battle_round["action"].startswith("flee") and battle_round.get("then") == "ended"
-                   for battle_round in battle["rounds"])
+        fled = bool(battle["rounds"]) and fled_in(battle["rounds"][-1])
+        defeated = not fled and (after["zone"] != before["zone"]
+                                 or (fraction is not None and fraction <= DEFEATED_HEALTH_FRACTION))
         outcome = ("left for the operator" if "stopped" in battle else "lost" if defeated else "fled" if fled
                    else "won")
         self.events.emit("battle", describe_battle(battle, seconds=time.monotonic() - started, before=before,

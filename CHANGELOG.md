@@ -54,7 +54,7 @@ Every change, enhancement or addition is listed with its rationale, so later con
 - **Fleeing a battle when out of mana.**
   - **What:** with less than 2 mana (`policy.FLEE_BELOW_MANA`), `SpellTypePolicy` returns the new `Flee` choice, and the battle code clicks the battle's Flee button (WizWalker's `CombatHandler.flee_button`). The battle event says "fled", which counts as neither a win nor a defeat. A mana wisp then counts in any direction, not only on the way.
   - **Why:** the operator's rule, "if no mana you have to flee". Below 2 mana the wizard cannot cast its 2-pip attack and has at most one 1-pip spell left. With 0 mana and no free wand spell in hand, it passed four rounds and was defeated by a Cyclops Legionnaire it could not hurt.
-  - **Not verified yet:** a flee in the game.
+  - **Verified later:** fleeing works once its confirmation box is answered (see "Fleeing works" under Fixed).
 
 - **The hand in each round's event.** Each round line now ends with the cards in hand and their pip costs ("hand: Frost Beetle x2 (1 pips), Snow Serpent (2 pips)"). After the wizard learned Snow Serpent and Volcanic Shield at the Ice school, the operator wanted to see whether new spells reach the deck by themselves before deck editing is built. The cast alone does not show it, because the policy may hold a card it does not pick.
 
@@ -123,6 +123,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
   - **Not handled yet:** a dungeon whose way forward is blocked by enemies the quest does not name. The wizard waits there, and the run stops at the step-away limit.
 
 ### Fixed
+
+- **Fleeing works: the confirmation is answered where the game shows it.**
+  - **What:** after the Flee click, the battle code looks for the game's message box under `WorldView/PlanningPhase` first, then on top (`combat.message_box`), and answers "Are you sure you want to flee? You will lose all your Mana..." with its Yes (`centerButton`). A battle whose last round was a confirmed flee is "fled", not "lost", though the flee sends the wizard to the Commons. Each round also answers the game's "You Are Idle. Would you like to return to combat?" box, if it shows, with its button (`combat.return_to_combat`), and the round event says so. `ui.visible_tree` goes on past a window it cannot read.
+  - **Why:** asked by the operator to try fleeing, the wizard clicked Flee and the operator saw the confirmation; the code looked for the box only on top and never found it. Read from the window tree, the box was at `WorldView/PlanningPhase/MessageBoxModalWindow`, with Yes and No buttons; Yes ended the battle, and the wizard went to the Commons with 0 mana, as the box warns. Every earlier "failed" flee had left this box unanswered, and while it stayed up it hid the hand: that was the "jammed hand" in which no card click reached the game. The operator also saw the idle box after a round in which the wizard's casts did not reach the game; until answered, the game passed for the wizard every round. The window report after a flee click had come back empty because one unreadable window ended the whole walk.
+  - **Not verified yet:** the idle box's button in the game; its name is taken from the flee box's layout.
 
 - **Talking from where the approach is blocked.** When the wizard can get no closer to a quest NPC (its last two steps within 5 units of each other) and the interact prompt shows within 200 units (`dialog.BLOCKED_TALK_DISTANCE`), it presses X there. After General Akilles, the next goal of "Akilles' Deal" was an NPC standing 164 units up, with no walkable ground at that height in the zone's nav data: every step stopped 102 units away with the prompt showing, the rule asked for 80, and the run stopped for turns without progress. If X reaches another NPC, the goal stays open and the existing rule for that applies. Not verified yet in the game, and not unit-tested: `dialog.py` reads the game.
 

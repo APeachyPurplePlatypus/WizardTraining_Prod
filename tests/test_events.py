@@ -52,6 +52,12 @@ class DescriptionTest(unittest.TestCase):
         entry["view"]["enemies"][0]["pips"] = 5
         self.assertTrue(describe_round(entry).endswith("enemies left: General Akilles 145 (5 pips)"))
 
+    def test_describe_round_says_when_the_wizard_returned_to_combat(self):
+        entry = round_entry(3, 442, "cast Frost Beetle (Ice) on enemy Fire Elf Hunter", [("Fire Elf Hunter", 55)])
+        entry["returned to combat"] = "answered 'Would you like to return to combat?'"
+        self.assertIn("442/624 with 3 pips; answered 'Would you like to return to combat?'; cast Frost Beetle",
+                      describe_round(entry))
+
     def test_describe_round_lists_the_hand(self):
         entry = round_entry(1, 600, "cast Snow Serpent (Ice) on enemy", [("Warhorn", 285)])
         entry["view"]["cards"] = [{"name": "Frost Beetle", "pips": 1}, {"name": "Snow Serpent", "pips": 2},
