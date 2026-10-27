@@ -37,7 +37,7 @@ from .policy import LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, Spell
 from .progress import (DUEL_NEAR_PATH, ENEMY_NEAR_PATH, PATH_THREATS, Limits, PlannedRoute, RunRecord, StopRun,
                        check_limits, needs_rest, progressed, remember_obstacles, should_drink_potion, stalled,
                        travel_outcome, wanted_wisp)
-from .quests import arrow_shows_no_target, open_goals, read_quest_arrow, read_quests
+from .quests import arrow_shows_no_target, game_language, open_goals, read_quest_arrow, read_quests
 from .reports import plain, save_report
 from .routes import DUEL_CIRCLE_NO_GO, Hazards, RoutePlanner
 from .session import NoClient, attached, hooks_ready
@@ -397,7 +397,23 @@ class QuestLoop:
             self.events.emit("target", f"no quest arrow; going to {matching[0]['name']} ({code}), "
                                        f"{matching[0]['distance']:.0f} away, {len(matching)} in sight")
             return matching[0]["position"]
-        return None
+        return await self.patrol_of_goal_enemy(goal, planner, me)
+
+    async def patrol_of_goal_enemy(self, goal: dict, planner: RoutePlanner, me):
+        """The nearest point on the patrol path of the enemy a goal names, matched by name: the goal's enemy is
+        "Scarlet Screamer" and the zone has "Path 10_Screamer". Enemies load only nearby; their paths are in
+        the zone's files."""
+        code = goal.get("target_code")
+        if not code or not planner.patrols:
+            return None
+        enemy_name = await game_language().text(code) or ""
+        paths = planner.patrols.paths_named_like(enemy_name, *(goal.get("tags") or []))
+        point = planner.patrols.nearest_point_on(paths, (me.x, me.y))
+        if point is None:
+            return None
+        self.events.emit("target", f"no quest arrow and no {enemy_name or code} in sight; going to its patrol path "
+                                   f"{', '.join(paths)} at ({point[0]:.0f}, {point[1]:.0f})")
+        return XYZ(point[0], point[1], 0.0)
 
     async def goal_with_a_target(self, goals: list[dict], first: dict):
         """With no quest arrow, work on the first open goal whose target can be found, by its tags or by its

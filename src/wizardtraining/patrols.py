@@ -20,7 +20,7 @@ import re
 import struct
 from dataclasses import dataclass, field
 
-from .geometry import Point, distance_to_segment
+from .geometry import Point, distance_to_segment, flat_distance
 
 NODE_RECORD_BYTES = 92
 NODE_X_OFFSET, NODE_ID_OFFSET = 36, 68
@@ -29,6 +29,10 @@ PATH_NAME = re.compile(rb"Path[\x20-\x7e]{1,80}")
 NOT_ENEMY_PATHS = ("wisp", "flax", "mistwood", "cattail", "chest", "reagent")
 SAMPLE_SPACING = 100.0
 BUCKET_SIZE = 1000.0
+MIN_SHARED_PREFIX = 4
+MIN_WORD_LETTERS = 3
+SEASONAL_PATHS = ("event",)
+WORD = re.compile(r"[A-Z]?[a-z]+|[A-Z]+(?![a-z])|\d+")
 
 
 def parse_nodes(data: bytes) -> dict[int, tuple[float, float, float]]:
@@ -75,6 +79,7 @@ def is_enemy_path(name: str) -> bool:
 class PatrolMap:
     """Points every SAMPLE_SPACING units along the enemy patrol paths, bucketed for quick nearest-distance checks."""
     segments: list[tuple[Point, Point]] = field(default_factory=list)
+    paths: dict[str, list[Point]] = field(default_factory=dict)
     _buckets: dict[tuple[int, int], list[Point]] = field(default_factory=dict)
 
     @classmethod
@@ -84,6 +89,8 @@ class PatrolMap:
             if not is_enemy_path(name):
                 continue
             points = [(nodes[i][0], nodes[i][1]) for i in ids if i in nodes]
+            if points:
+                patrols.paths[name] = points
             for a, b in zip(points, points[1:]):
                 patrols.add_segment(a, b)
             if len(points) == 1:
@@ -115,5 +122,38 @@ class PatrolMap:
     def segment_distance(self, point: Point) -> float:
         return min((distance_to_segment(point, a, b) for a, b in self.segments), default=math.inf)
 
+    def paths_named_like(self, *names: str) -> list[str]:
+        """Enemy paths whose name shares a word with any of `names`: a goal's enemy ("Scarlet Screamer") or tags
+        ("Ddl_WC_TA_ScarletScreamer") against path names ("Path 10_Screamer")."""
+        wanted = [word for name in names for word in name_words(name)]
+        return [path for path in self.paths if not is_seasonal(path)
+                and any(similar(word, other) for word in wanted for other in name_words(path))]
+
+    def nearest_point_on(self, path_names: list[str], me) -> Point | None:
+        points = [point for name in path_names for point in self.paths.get(name, ())]
+        return min(points, key=lambda point: flat_distance(me, point), default=None)
+
     def __bool__(self) -> bool:
         return bool(self.segments)
+
+
+def name_words(name: str) -> set[str]:
+    """Words of at least MIN_WORD_LETTERS letters, split at separators and capitals."""
+    return {word.lower() for word in WORD.findall(name)
+            if len(word) >= MIN_WORD_LETTERS and not word.isdigit() and word.lower() not in IGNORED_WORDS}
+
+
+def similar(a: str, b: str) -> bool:
+    """Two words that start alike: "rotting" and "rotter" share four letters, "eel" and "eels" all three of the
+    shorter one's, so a path can be matched to an enemy's name."""
+    letters = min(MIN_SHARED_PREFIX, len(a), len(b))
+    return a[:letters] == b[:letters]
+
+
+def is_seasonal(path_name: str) -> bool:
+    """Paths of seasonal events ("Path RedPageEvent - Spellwrit Screamer"), whose enemies are there only while the
+    event runs. They are still avoided, but never chosen as the place to find a goal's enemies."""
+    return any(word in path_name.lower() for word in SEASONAL_PATHS)
+
+
+IGNORED_WORDS = {"path", "monster", "spawn", "point", "the", "and"}

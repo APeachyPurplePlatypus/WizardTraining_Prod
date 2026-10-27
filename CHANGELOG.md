@@ -24,6 +24,10 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Added
 
+- **Going to the patrol path of a goal's enemy.**
+  - **What:** when a defeat goal has no arrow and none of its enemies are in sight, the loop looks up the enemy's name from the goal (`WizardMobs_00000331` is "Scarlet Screamer") and matches it to the zone's patrol path names ("Path 10_Screamer", "Path 11_Screamer"). It then walks to the nearest point on those paths. Words match when they start with the same four letters, so "Rotting Fodder" finds "Path 06_Rotter". Exploring area by area remains the fallback when no path matches. Paths of seasonal events ("Path RedPageEvent - Spellwrit Screamer") are never chosen, because their enemies are there only while the event runs; they are still avoided.
+  - **Why:** the operator asked to use game data as much as possible to complete goals. Exploring found the Scarlet Screamers only after a long, fight-filled walk through the wrong level. Their paths were in the zone's files all along.
+
 - **Routes keep away from enemy patrol paths.**
   - **What:** each zone's patrol paths are read from its `pathNodeData.bin` (node positions) and `pathData.xml` (path names and their node ids), in `patrols.py`. Paths for wisps, reagents and chests are left out. Route steps within 700 units of an enemy path cost up to 4 more, so routes prefer the parts of a street enemies don't walk. A merged straight leg may not be more dangerous than the steps it replaces.
   - **Why:** the operator saw that the wizard still didn't keep to safe ground, such as sidewalks, and kept ending up in fights. Until now, routes only avoided enemies that were loaded and in sight, and merging routes into straight legs could cut back across a street. Triton's paths are named after what walks them ("Path 01_Eels", "Path 04_Minions", "Path 10_Screamer"). Their nodes lay 1 unit from where Rotting Fodder were met, 41 from the Haunted Minions, and 685 from the Electric Eels, which wander. The Tele Up landing is 2,683 units from any of them.

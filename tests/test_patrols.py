@@ -1,7 +1,7 @@
 import struct
 import unittest
 
-from wizardtraining.patrols import PatrolMap, is_enemy_path, parse_nodes, parse_paths
+from wizardtraining.patrols import PatrolMap, is_enemy_path, name_words, parse_nodes, parse_paths, similar
 
 
 def node_record(node_id: int, x: float, y: float, z: float) -> bytes:
@@ -44,6 +44,35 @@ class PatrolMapTest(unittest.TestCase):
         self.assertLess(patrols.distance((500, 30), 2000), 31)
         self.assertEqual(patrols.distance((5000, 5000), 2000), 2000)
         self.assertEqual(len(patrols.segments), 1)
+
+
+class NameMatchTest(unittest.TestCase):
+    nodes = {1: (0, 0, 0), 2: (100, 0, 0), 3: (5000, 0, 0), 4: (5100, 0, 0), 5: (9000, 0, 0), 6: (9100, 0, 0)}
+    patrols = PatrolMap.from_paths(nodes, {"Path 10_Screamer": [1, 2], "Path 06_Rotter (1)": [3, 4],
+                                           "Path Monster 01_Eels": [5, 6],
+                                           "Path RedPageEvent - Spellwrit Screamer": [1, 2]})
+
+    def test_words_and_similarity(self):
+        self.assertEqual(name_words("Ddl_WC_TA_ScarletScreamer"), {"ddl", "scarlet", "screamer"})
+        self.assertEqual(name_words("Path Monster 01_Eels"), {"eels"})
+        self.assertTrue(similar("rotting", "rotter"))
+        self.assertTrue(similar("eel", "eels"))
+        self.assertFalse(similar("ghost", "ghoul"))
+
+    def test_matches_paths_by_the_enemys_name_or_tags(self):
+        self.assertEqual(self.patrols.paths_named_like("Scarlet Screamer"), ["Path 10_Screamer"])
+        self.assertEqual(self.patrols.paths_named_like("Rotting Fodder"), ["Path 06_Rotter (1)"])
+        self.assertEqual(self.patrols.paths_named_like("Ddl_WC_TA_ScarletScreamer"), ["Path 10_Screamer"])
+        self.assertEqual(self.patrols.paths_named_like("Electric Eel"), ["Path Monster 01_Eels"])
+        self.assertEqual(self.patrols.paths_named_like("Haunted Minion"), [])
+
+    def test_seasonal_paths_are_avoided_but_never_targets(self):
+        self.assertIn("Path RedPageEvent - Spellwrit Screamer", self.patrols.paths)
+        self.assertNotIn("Path RedPageEvent - Spellwrit Screamer", self.patrols.paths_named_like("Scarlet Screamer"))
+
+    def test_nearest_point_on_the_matched_paths(self):
+        self.assertEqual(self.patrols.nearest_point_on(["Path 06_Rotter (1)"], (6000, 0)), (5100, 0))
+        self.assertIsNone(self.patrols.nearest_point_on([], (0, 0)))
 
 
 if __name__ == "__main__":
