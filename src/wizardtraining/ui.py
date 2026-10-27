@@ -12,6 +12,8 @@ from wizwalker import HookAlreadyActivated
 
 from .session import HOOK_TIMEOUT_SECONDS
 
+POTION_BUTTON = ["WorldView", "windowHUD", "btnPotions"]
+
 
 async def window_at(root, path: list[str]):
     if not path:

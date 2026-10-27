@@ -6,6 +6,7 @@ The framework acts in a live online game, on a real account, among real players.
 
 - **No credentials.** The operator logs in and picks an existing character. The framework never reads, stores or types a password, and it stops at any login, CAPTCHA or access challenge.
 - **No spending or trading.** It never opens the Crown Shop (Ctrl+S is not an allowed key) and never trades, buys or sells.
+- **Potions only with permission.** With `--use-potions`, the wizard drinks health potions it already has when out of battle and below 40% health. It never buys potions or refills. Without the flag it never touches them, because consumables stay off by default.
 - **No chat.** The chat hook is never installed and nothing is typed into chat.
 - **Your responsibility.** Automation may break Wizard101's terms of service. The README says so, and so should anything you build on this.
 
@@ -13,7 +14,7 @@ The framework acts in a live online game, on a real account, among real players.
 
 - **Keyboard only:** W, A, S and D for walking and turning, X to interact, Space for dialogs (`keys.ALLOWED_KEYS`). Any other key raises `RefusedKey`.
 - **No teleport and no speed changes.** No writes to position, facing or speed. WizWalker's `goto` writes the facing, so it is not used. The movement-teleport hook is never installed.
-- **Clicks** use WizWalker's mouseless cursor, only for card and dialog buttons. The real mouse does not move.
+- **Clicks** use WizWalker's mouseless cursor, only for card, dialog and NPC-menu buttons, and for the HUD's potion button when potions are allowed. The real mouse does not move.
 - **No detection evasion.** The framework does not try to look human. It is honest automation within the limits above.
 
 ## Other players

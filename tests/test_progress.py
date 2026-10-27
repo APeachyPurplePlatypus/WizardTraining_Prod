@@ -2,7 +2,7 @@ import unittest
 
 from wizardtraining.progress import (APPROACH_MARGIN, ENEMY_NEAR_PATH, ENEMY_PATH_CLEARANCE, MEANINGFUL_TRAVEL_DISTANCE,
                                      Limits, PlannedRoute, RunRecord, StopRun, check_limits, needs_rest, progressed,
-                                     remember_obstacles, stalled, travel_outcome)
+                                     remember_obstacles, should_drink_potion, stalled, travel_outcome)
 
 
 def record(**limits) -> RunRecord:
@@ -131,6 +131,15 @@ class PlannedRouteTest(unittest.TestCase):
         self.assertTrue(route.threatens("known", 300.0 - APPROACH_MARGIN - 1))
         self.assertTrue(route.threatens("new", 300.0))
         self.assertFalse(route.threatens("new", ENEMY_PATH_CLEARANCE))
+
+
+class PotionTest(unittest.TestCase):
+    def test_drinks_only_when_low_with_a_full_charge(self):
+        self.assertTrue(should_drink_potion(99 / 624, 1.0))
+        self.assertFalse(should_drink_potion(0.5, 1.0))
+        self.assertFalse(should_drink_potion(0.1, 0.6))
+        self.assertFalse(should_drink_potion(0.1, "<unavailable: ReadingError>"))
+        self.assertFalse(should_drink_potion(None, 1.0))
 
 
 class RestTest(unittest.TestCase):

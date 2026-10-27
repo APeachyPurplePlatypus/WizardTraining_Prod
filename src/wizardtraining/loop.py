@@ -35,14 +35,15 @@ from .movement import KeysIgnored, face, travel
 from .navigation import load_planner
 from .policy import LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, SpellTypePolicy
 from .progress import (DUEL_NEAR_PATH, ENEMY_NEAR_PATH, PATH_THREATS, Limits, PlannedRoute, RunRecord, StopRun,
-                       check_limits, needs_rest, progressed, remember_obstacles, stalled, travel_outcome)
+                       check_limits, needs_rest, progressed, remember_obstacles, should_drink_potion, stalled,
+                       travel_outcome)
 from .quests import open_goals, read_quest_arrow, read_quests
 from .reports import plain, save_report
 from .routes import DUEL_CIRCLE_NO_GO, Hazards, RoutePlanner
 from .session import NoClient, attached, hooks_ready
 from .state import attempt, battle_showing, free_to_move, health_fraction, snapshot
 from .targets import bystanders, others, quest_targets, summary, too_close
-from .ui import visible_children
+from .ui import POTION_BUTTON, click, visible_children
 
 TARGET_REACH = 1200.0
 ARROW_ARRIVE_RADIUS = 250.0
@@ -59,6 +60,7 @@ LOWEST_HEALTH_FRACTION_TO_KEEP_QUESTING = 0.35
 REST_POLL_SECONDS = 10.0
 REST_TURN_SECONDS = 60.0
 NOT_FREE_TO_MOVE_WAIT_SECONDS = 3.0
+POTION_SETTLE_SECONDS = 3.0
 KEYS_IGNORED = ("the game ignored a turn key while free to move; a popup (such as the Endorse Wizard window) "
                 "may be holding the keyboard; left for the operator")
 
@@ -67,8 +69,11 @@ log = logging.getLogger(__name__)
 
 class QuestLoop:
     def __init__(self, client, settings: Settings, record: RunRecord, *,
-                 combat_policy: CombatPolicy, offer_policy: OfferPolicy, events: EventLog | None = None):
+                 combat_policy: CombatPolicy, offer_policy: OfferPolicy, events: EventLog | None = None,
+                 use_potions: bool = False):
         self.client = client
+        self.use_potions = use_potions
+        self._potion_failed = False
         self.events = events or EventLog()
         self._last_state = self._last_quest = None
         self.settings = settings
@@ -234,6 +239,23 @@ class QuestLoop:
         except Exception:
             return False
 
+    async def potion_turn(self, state: dict) -> dict:
+        """Drink a health potion the wizard already has, with a click on the HUD's potion button. Only with
+        `use_potions` (the operator's permission); potions are never bought. If health does not rise, the
+        button is not tried again this run."""
+        charges_before = await attempt(self.client.stats.potion_charge())
+        await click(self.client, POTION_BUTTON)
+        await asyncio.sleep(POTION_SETTLE_SECONDS)
+        after = await snapshot(self.client)
+        charges_after = await attempt(self.client.stats.potion_charge())
+        self.events.emit("potion", f"drank a health potion: health {state['health']} -> {after['health']} of "
+                                   f"{after['max_health']}, mana {state['mana']} -> {after['mana']}, "
+                                   f"charges {charges_before} -> {charges_after}")
+        if isinstance(after["health"], int) and isinstance(state["health"], int) and after["health"] > state["health"]:
+            return progressed("drank a health potion", health_before=state["health"], health=after["health"])
+        self._potion_failed = True
+        return stalled("clicked the potion button, but health did not rise")
+
     async def rest_turn(self, state: dict) -> dict:
         """Wait for health to come back, stepping away if an enemy comes close. A zone where a full rest
         gains nothing is remembered, and not rested in again."""
@@ -258,6 +280,9 @@ class QuestLoop:
 
     async def quest_turn(self, state: dict) -> dict:
         fraction = health_fraction(state)
+        if self.use_potions and not self._potion_failed:
+            if should_drink_potion(fraction, await attempt(self.client.stats.potion_charge())):
+                return await self.potion_turn(state)
         if needs_rest(fraction):
             if state["zone"] not in self.record.zones_without_regeneration:
                 return await self.rest_turn(state)
@@ -463,7 +488,8 @@ class QuestLoop:
 
 
 async def play(settings: Settings, limits: Limits, *, combat_policy: CombatPolicy | None = None,
-               offer_policy: OfferPolicy | None = None, loop_class: type[QuestLoop] = QuestLoop):
+               offer_policy: OfferPolicy | None = None, loop_class: type[QuestLoop] = QuestLoop,
+               use_potions: bool = False):
     """Attach to the game, play, remove the hooks, and always save the report, even when interrupted.
     Returns the report and the path it was saved to."""
     record = RunRecord(limits=limits)
@@ -476,7 +502,8 @@ async def play(settings: Settings, limits: Limits, *, combat_policy: CombatPolic
             record.hooks = attachment.hooks
             loop = loop_class(attachment.client, settings, record,
                               combat_policy=combat_policy or SpellTypePolicy(),
-                              offer_policy=offer_policy or MainQuestsOnly(), events=events)
+                              offer_policy=offer_policy or MainQuestsOnly(), events=events,
+                              use_potions=use_potions)
             await loop.play()
     except NoClient as exc:
         record.stopped = str(exc)

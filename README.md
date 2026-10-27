@@ -47,6 +47,8 @@ python -m wizardtraining play --level 7 --minutes 25 --battles 20
 
 - `probe` reads once without sending keys. Run it first.
 - `play` plays main quests until the level, the time or the battle limit is reached, or until something needs you.
+- `--approve-quest "<title>"` lets it accept a quest an NPC's menu offers by title, once you have checked it is a main quest.
+- `--use-potions` lets it drink health potions it already has when health is low out of battle. It never buys any.
 
 To stop a run, run this from a second terminal:
 

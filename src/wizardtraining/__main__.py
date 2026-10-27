@@ -1,7 +1,7 @@
 """Command line.
 
     python -m wizardtraining probe
-    python -m wizardtraining play --level 7 --minutes 25 --battles 20 [--approve-quest TITLE ...]
+    python -m wizardtraining play --level 7 --minutes 25 --battles 20 [--approve-quest TITLE ...] [--use-potions]
     python -m wizardtraining stop
 
 Start the game and log in yourself first. Stop a running `play` with `stop` from a second terminal,
@@ -32,6 +32,9 @@ def main(argv=None) -> int:
     play.add_argument("--approve-quest", action="append", default=[], metavar="TITLE",
                       help="a quest title an NPC's menu may offer that you have checked is a main quest; repeatable, "
                            "earlier titles are preferred")
+    play.add_argument("--use-potions", action="store_true",
+                      help="drink health potions the wizard already has when health is low out of battle; "
+                           "potions are never bought")
     commands.add_parser("stop", help="ask a running loop to stop, by creating the STOP file")
     args = parser.parse_args(argv)
     settings = Settings.from_environment()
@@ -50,7 +53,7 @@ def main(argv=None) -> int:
     from .loop import play as play_quests
     limits = Limits(target_level=args.level, minutes=args.minutes, max_battles=args.battles)
     offers = MainQuestsOnly(approved_titles=args.approve_quest)
-    report, path = asyncio.run(play_quests(settings, limits, offer_policy=offers))
+    report, path = asyncio.run(play_quests(settings, limits, offer_policy=offers, use_potions=args.use_potions))
     print(f"stopped: {report['stopped']}\nreport: {path}")
     return 0
 

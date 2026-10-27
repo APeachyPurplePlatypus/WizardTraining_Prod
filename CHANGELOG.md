@@ -4,6 +4,12 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ## Unreleased
 
+### Added
+
+- **Health potions, opt-in (`--use-potions`).**
+  - **What:** out of battle, below 40% health, with a full potion charge, the wizard clicks the HUD's potion button (`WorldView/windowHUD/btnPotions`) and the event log records health, mana and charges before and after. If health doesn't rise, the button isn't tried again that run. Potions are never bought.
+  - **Why:** on Triton Avenue two Electric Eels left the wizard at 99/624. Health doesn't regenerate on that street, and it was too low to quest on safely, so the run stopped. The operator allowed drinking potions the wizard already has, but not buying any. It is off by default, because using consumables is a choice the operator makes. The threshold matches the combat policy's heal threshold, so a merely tired wizard still rests instead of using a scarce charge.
+
 ### Fixed
 
 - **Talking to the quest NPC, not a neighbour.**

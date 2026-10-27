@@ -19,6 +19,7 @@ MEANINGFUL_TRAVEL_DISTANCE = 300.0
 ENEMY_PATH_CLEARANCE = 500.0
 APPROACH_MARGIN = 150.0
 REST_BELOW_FRACTION = 0.65
+POTION_BELOW_FRACTION = 0.4
 
 
 class StopRun(Exception):
@@ -128,6 +129,12 @@ def check_limits(record: RunRecord, *, seconds_left: float, stop_requested: bool
 
 def needs_rest(fraction: float | None) -> bool:
     return fraction is not None and fraction < REST_BELOW_FRACTION
+
+
+def should_drink_potion(fraction: float | None, charges) -> bool:
+    """Below POTION_BELOW_FRACTION with a full charge left. Potions are scarce, so a merely tired wizard rests."""
+    return (fraction is not None and fraction < POTION_BELOW_FRACTION
+            and isinstance(charges, (int, float)) and not isinstance(charges, bool) and charges >= 1)
 
 
 def travel_outcome(did: str, stop_reason: str | None, moved: float, record: RunRecord, *,
