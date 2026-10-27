@@ -26,6 +26,7 @@ async def snapshot(client) -> dict:
         "health": await attempt(client.stats.current_hitpoints()),
         "max_health": await attempt(client.stats.max_hitpoints()),
         "mana": await attempt(client.stats.current_mana()),
+        "max_mana": await attempt(client.stats.max_mana()),
         "gold": await attempt(client.stats.current_gold()),
         "position": await attempt(client.body.position()),
         "yaw": await attempt(client.body.yaw()),
@@ -45,7 +46,14 @@ def free_to_move(state: dict) -> bool:
 
 
 def health_fraction(state: dict) -> float | None:
-    health, max_health = state["health"], state["max_health"]
-    if isinstance(health, int) and isinstance(max_health, int) and max_health > 0:
-        return health / max_health
+    return _fraction(state["health"], state["max_health"])
+
+
+def mana_fraction(state: dict) -> float | None:
+    return _fraction(state.get("mana"), state.get("max_mana"))
+
+
+def _fraction(value, maximum) -> float | None:
+    if isinstance(value, int) and isinstance(maximum, int) and maximum > 0:
+        return value / maximum
     return None

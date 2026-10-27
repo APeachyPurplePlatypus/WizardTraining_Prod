@@ -27,7 +27,7 @@ from .config import Settings
 from .dialog import (DIALOG_FINISHED, FOLLOW_UP_WAIT_SECONDS, NPC_ARRIVE_DISTANCE, OFFER_LEFT_FOR_OPERATOR,
                      choose_service, dialog_open, leave_services, near_npc, read_conversation, service_options,
                      services_open, talk, use_object, wait_for_dialog)
-from .entities import nearby_enemies, step_away, surroundings
+from .entities import HEALTH_WISP, MANA_WISP, nearby_enemies, step_away, surroundings, wisps
 from .events import EventLog, describe_battle, describe_changes, describe_round, enemy_names, health_text
 from .geometry import distance_to_path, flat_distance, path_within
 from .keys import tap
@@ -36,13 +36,13 @@ from .navigation import load_planner
 from .policy import LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, SpellTypePolicy
 from .progress import (DUEL_NEAR_PATH, ENEMY_NEAR_PATH, PATH_THREATS, Limits, PlannedRoute, RunRecord, StopRun,
                        check_limits, needs_rest, progressed, remember_obstacles, should_drink_potion, stalled,
-                       travel_outcome)
+                       travel_outcome, wanted_wisp)
 from .quests import open_goals, read_quest_arrow, read_quests
 from .reports import plain, save_report
 from .routes import DUEL_CIRCLE_NO_GO, Hazards, RoutePlanner
 from .session import NoClient, attached, hooks_ready
-from .state import attempt, battle_showing, free_to_move, health_fraction, snapshot
-from .targets import bystanders, others, quest_targets, summary, too_close
+from .state import attempt, battle_showing, free_to_move, health_fraction, mana_fraction, snapshot
+from .targets import bystanders, others, quest_targets, safe_wisps, summary, too_close
 from .teleports import LEFT_ZONE, NO_EFFECT, TeleportVolume, describe_outcome
 from .ui import POTION_BUTTON, click, visible_children
 
@@ -62,6 +62,8 @@ REST_POLL_SECONDS = 10.0
 REST_TURN_SECONDS = 60.0
 NOT_FREE_TO_MOVE_WAIT_SECONDS = 3.0
 POTION_SETTLE_SECONDS = 3.0
+WISP_ARRIVE_RADIUS = 40.0
+WISP_SETTLE_SECONDS = 1.5
 TELEPORT_WAIT_SECONDS = 8.0
 TELEPORT_POLL_SECONDS = 0.25
 JUMP_DISTANCE = 500.0
@@ -244,6 +246,35 @@ class QuestLoop:
         except Exception:
             return False
 
+    async def wisp_turn(self, wanted: str, state: dict) -> dict | None:
+        """Walk to the nearest safe health or mana wisp and touch it. None when there is no safe one in reach,
+        so the turn falls back to a potion or a rest. A wisp that gives nothing is not tried again."""
+        kind = HEALTH_WISP if wanted == "health" else MANA_WISP
+        enemies, circles = await surroundings(self.client)
+        candidates = safe_wisps(await wisps(self.client, kind), me=await self.client.body.position(), enemies=enemies,
+                                duel_circles=circles, tried=self.record.tried_wisps)
+        if not candidates:
+            return None
+        wisp = candidates[0]
+        start = await self.client.body.position()
+        hazards = Hazards.of(enemies=[enemy["position"] for enemy in enemies], duel_circles=circles,
+                             obstacles=self.record.obstacles.get(state["zone"], []))
+        trip = await travel(self.client, await self.planner(), wisp["position"], arrive_radius=WISP_ARRIVE_RADIUS,
+                            watch=self.watcher(), hazards=hazards)
+        await asyncio.sleep(WISP_SETTLE_SECONDS)
+        after = await snapshot(self.client)
+        stat = "health" if wanted == "health" else "mana"
+        gained = isinstance(after[stat], int) and isinstance(state[stat], int) and after[stat] > state[stat]
+        if trip["result"] == "arrived" and not gained:
+            self.record.tried_wisps.append(wisp["id"])
+        self.events.emit("wisp", f"{kind} {flat_distance(start, wisp['position']):.0f} away: {trip['result']}"
+                                 f"{' (' + trip['reason'] + ')' if trip['reason'] else ''}; {stat} {state[stat]} -> "
+                                 f"{after[stat]}")
+        if gained:
+            return progressed(f"picked up a {kind}", before=state[stat], after=after[stat])
+        moved = flat_distance(start, await self.client.body.position())
+        return travel_outcome(f"walk to a {kind}", trip["reason"], moved, self.record)
+
     async def potion_turn(self, state: dict) -> dict:
         """Drink a health potion the wizard already has, with a click on the HUD's potion button. Only with
         `use_potions` (the operator's permission); potions are never bought. If health does not rise, the
@@ -285,6 +316,9 @@ class QuestLoop:
 
     async def quest_turn(self, state: dict) -> dict:
         fraction = health_fraction(state)
+        wanted = wanted_wisp(fraction, mana_fraction(state))
+        if wanted is not None and (turn := await self.wisp_turn(wanted, state)) is not None:
+            return turn
         if self.use_potions and not self._potion_failed:
             if should_drink_potion(fraction, await attempt(self.client.stats.potion_charge())):
                 return await self.potion_turn(state)

@@ -2,7 +2,7 @@ import unittest
 
 from wizardtraining.progress import (APPROACH_MARGIN, ENEMY_NEAR_PATH, ENEMY_PATH_CLEARANCE, MEANINGFUL_TRAVEL_DISTANCE,
                                      Limits, PlannedRoute, RunRecord, StopRun, check_limits, needs_rest, progressed,
-                                     remember_obstacles, should_drink_potion, stalled, travel_outcome)
+                                     remember_obstacles, should_drink_potion, stalled, travel_outcome, wanted_wisp)
 
 
 def record(**limits) -> RunRecord:
@@ -131,6 +131,14 @@ class PlannedRouteTest(unittest.TestCase):
         self.assertTrue(route.threatens("known", 300.0 - APPROACH_MARGIN - 1))
         self.assertTrue(route.threatens("new", 300.0))
         self.assertFalse(route.threatens("new", ENEMY_PATH_CLEARANCE))
+
+
+class WispTest(unittest.TestCase):
+    def test_health_comes_before_mana(self):
+        self.assertEqual(wanted_wisp(0.3, 0.1), "health")
+        self.assertEqual(wanted_wisp(0.9, 0.2), "mana")
+        self.assertIsNone(wanted_wisp(0.9, 0.9))
+        self.assertIsNone(wanted_wisp(None, None))
 
 
 class PotionTest(unittest.TestCase):

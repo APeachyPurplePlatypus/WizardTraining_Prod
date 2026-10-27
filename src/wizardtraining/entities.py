@@ -24,6 +24,8 @@ NPC_BEHAVIOR_ENEMY_FLAG_OFFSET = 288
 ENTITY_LIST_REFRESH_SECONDS = 0.5
 STEP_AWAY_SECONDS = 0.6
 ENEMY, NPC, DUEL_CIRCLE, OTHER = "enemy", "npc", "duel circle", "other"
+HEALTH_WISP, MANA_WISP = "health wisp", "mana wisp"
+WISP_NAME_PARTS = {"wisphealth": HEALTH_WISP, "wispmana": MANA_WISP}
 
 
 async def npc_enemy_flag(entity) -> bool | None:
@@ -40,6 +42,9 @@ async def npc_enemy_flag(entity) -> bool | None:
 async def classify(entity, name: str) -> str:
     if name == DUEL_CIRCLE_NAME:
         return DUEL_CIRCLE
+    for part, kind in WISP_NAME_PARTS.items():
+        if part in name.lower():
+            return kind
     flag = await npc_enemy_flag(entity)
     return OTHER if flag is None else (ENEMY if flag else NPC)
 
@@ -97,6 +102,11 @@ class EntityTracker:
     async def npc_positions(self) -> list:
         return [where for _, _, _, where in await self._located({NPC})]
 
+    async def wisps(self, kind: str) -> list[dict]:
+        """Health or mana wisps currently loaded: red ones restore health, blue ones mana, when touched."""
+        return [{"id": entity.base_address, "name": name, "position": where}
+                for entity, _, name, where in await self._located({kind})]
+
 
 def tracker_for(client) -> EntityTracker:
     if not hasattr(client, "entity_tracker"):
@@ -114,6 +124,10 @@ async def surroundings(client) -> tuple[list[dict], list]:
 async def nearby_enemies(client) -> list[dict]:
     enemies, _ = await surroundings(client)
     return enemies
+
+
+async def wisps(client, kind: str) -> list[dict]:
+    return await tracker_for(client).wisps(kind)
 
 
 async def nearest_npc(client):

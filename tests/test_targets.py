@@ -1,8 +1,8 @@
 import math
 import unittest
 
-from wizardtraining.targets import (ENEMY_CLEARANCE, STEP_AWAY_DISTANCE, bystanders, escape_point, measured, others,
-                                    quest_targets, too_close)
+from wizardtraining.targets import (ENEMY_CLEARANCE, STEP_AWAY_DISTANCE, WISP_REACH, bystanders, escape_point, measured,
+                                    others, quest_targets, safe_wisps, too_close)
 
 
 def enemy(id_, name, x, y):
@@ -32,6 +32,14 @@ class TargetsTest(unittest.TestCase):
     def test_too_close(self):
         self.assertEqual([e["id"] for e in too_close(self.enemies)], [2])
         self.assertLess(300, ENEMY_CLEARANCE)
+
+    def test_safe_wisps_are_near_clear_untried_and_nearest_first(self):
+        wisps = [{"id": "far", "position": (WISP_REACH + 1, 0)}, {"id": "guarded", "position": (1000, 0)},
+                 {"id": "duel", "position": (0, 2000)}, {"id": "tried", "position": (0, -300)},
+                 {"id": "near", "position": (0, 500)}, {"id": "nearer", "position": (0, -200)}]
+        found = safe_wisps(wisps, me=(0, 0), enemies=[enemy(1, "Eel", 1100, 0)], duel_circles=[(0, 2100)],
+                           tried=["tried"])
+        self.assertEqual([wisp["id"] for wisp in found], ["nearer", "near"])
 
     def test_escape_point_leads_directly_away(self):
         point = escape_point((0, 0), [enemy(1, "Ghost", 100, 0)])

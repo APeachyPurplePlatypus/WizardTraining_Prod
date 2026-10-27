@@ -16,6 +16,8 @@ DUEL_CIRCLE_RADIUS = 500.0
 QUEST_TARGET_ARROW_RADIUS = 700.0
 ENEMY_CLEARANCE = 450.0
 STEP_AWAY_DISTANCE = 400.0
+WISP_REACH = 4000.0
+WISP_ENEMY_CLEARANCE = 600.0
 
 
 def measured(enemies: list[dict], me, duel_circles) -> list[dict]:
@@ -49,6 +51,17 @@ def too_close(enemies: list[dict]) -> list[dict]:
 
 def summary(enemies: list[dict], limit: int = 6) -> list:
     return [(enemy["name"], round(enemy["distance"]), enemy["in_a_duel"]) for enemy in enemies[:limit]]
+
+
+def safe_wisps(wisps: list[dict], *, me, enemies: list[dict], duel_circles, tried=()) -> list[dict]:
+    """Wisps within WISP_REACH, nearest first, leaving out ones already tried, ones with an enemy within
+    WISP_ENEMY_CLEARANCE, and ones inside someone else's duel circle."""
+    def safe(wisp):
+        return (wisp["id"] not in tried
+                and flat_distance(me, wisp["position"]) <= WISP_REACH
+                and all(flat_distance(enemy["position"], wisp["position"]) >= WISP_ENEMY_CLEARANCE for enemy in enemies)
+                and all(flat_distance(circle, wisp["position"]) >= DUEL_CIRCLE_RADIUS for circle in duel_circles))
+    return sorted((wisp for wisp in wisps if safe(wisp)), key=lambda wisp: flat_distance(me, wisp["position"]))
 
 
 def escape_point(me, close: list[dict], distance: float = STEP_AWAY_DISTANCE) -> Point:

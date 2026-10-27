@@ -20,6 +20,7 @@ ENEMY_PATH_CLEARANCE = 500.0
 APPROACH_MARGIN = 150.0
 REST_BELOW_FRACTION = 0.65
 POTION_BELOW_FRACTION = 0.4
+MANA_BELOW_FRACTION = 0.5
 
 
 class StopRun(Exception):
@@ -73,6 +74,7 @@ class RunRecord:
     events_file: str | None = None
     talks_leaving_goal_open: dict[str, int] = field(default_factory=dict)
     teleport_outcomes: dict[str, dict[str, object]] = field(default_factory=dict)
+    tried_wisps: list = field(default_factory=list)
 
     def record_turn(self, turn: dict) -> None:
         self.turns.append(turn)
@@ -130,6 +132,16 @@ def check_limits(record: RunRecord, *, seconds_left: float, stop_requested: bool
 
 def needs_rest(fraction: float | None) -> bool:
     return fraction is not None and fraction < REST_BELOW_FRACTION
+
+
+def wanted_wisp(health: float | None, mana: float | None) -> str | None:
+    """"health" below REST_BELOW_FRACTION, else "mana" below MANA_BELOW_FRACTION, else None. Low mana leaves
+    the wizard only free wand spells, which made each Triton Avenue battle long and costly."""
+    if health is not None and health < REST_BELOW_FRACTION:
+        return "health"
+    if mana is not None and mana < MANA_BELOW_FRACTION:
+        return "mana"
+    return None
 
 
 def should_drink_potion(fraction: float | None, charges) -> bool:

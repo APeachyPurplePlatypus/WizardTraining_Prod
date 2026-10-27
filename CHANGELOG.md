@@ -6,6 +6,10 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Added
 
+- **Health and mana wisps.**
+  - **What:** wisps are now tracked among the loaded entities (names containing "WispHealth" or "WispMana", such as `WC_WispHealth`). Below 65% health the wizard walks to the nearest health wisp within 4,000 units that has no enemy within 600 and isn't in someone's duel circle. With mana under half it does the same for a mana wisp. That comes before a potion or a rest. A wisp it reached that gave nothing isn't tried again, and the event log records each pickup with the stat before and after.
+  - **Why:** the operator pointed out that the map's red and blue wisps restore health and mana. On Triton Avenue health didn't regenerate, and with mana at 4 of 24 the wizard could only cast free wand spells, so two Electric Eels took 136 s and left it at 99/624. Wisps are free and part of normal play, so they come before a scarce potion.
+
 - **Teleport volumes between the walkable areas of a zone.**
   - **What:** each zone's teleport volumes (name, position, radius) are read from its `volumes.xml` (`teleports.py`). When the quest target lies in another piece of the zone's walkable area than the wizard, the loop walks into a volume in the wizard's piece, as into a door. It takes one already known to land in the target's piece, otherwise the untried one nearest the target. It records where it led (a piece of this zone, another zone, or nothing), so a volume that left the zone or did nothing isn't tried again, and logs each crossing.
   - **Why:** "Quest for Clues" sends the wizard to Rotting Fodder on Triton Avenue's upper level. That level sits about 1,100 units above the lower street, and the two halves of the walkable mesh meet only at sheer drops, so every route failed and the run stopped. The operator suggested a teleporter. The zone's volumes include "Tele Up" and "Tele Down", and walking into "Tele Up" at (-16336, 1176) put the wizard at (-17120, 880) on the upper level. Walking into the game's own teleporters is ordinary play, like a door; it is not the memory-writing teleport this framework never uses.

@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from wizardtraining.config import DEIMOS_VARIABLE, RUNTIME_VARIABLE, Settings
 from wizardtraining.keys import RefusedKey, check_allowed
 from wizardtraining.reports import plain, save_report
-from wizardtraining.state import battle_showing, free_to_move, health_fraction
+from wizardtraining.state import battle_showing, free_to_move, health_fraction, mana_fraction
 
 
 class Key(enum.Enum):
@@ -48,6 +48,8 @@ class StateTest(unittest.TestCase):
 
     def test_health_fraction(self):
         self.assertEqual(health_fraction(self.calm), 0.8)
+        self.assertEqual(mana_fraction({"mana": 4, "max_mana": 24}), 4 / 24)
+        self.assertIsNone(mana_fraction({"mana": 4}))
         self.assertIsNone(health_fraction(dict(self.calm, health="<unavailable: ReadingError>")))
 
 
