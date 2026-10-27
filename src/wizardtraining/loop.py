@@ -119,9 +119,16 @@ class QuestLoop:
         try:
             return await self.play_turn(state)
         except KeysIgnored:
+            if await self.busy_now():
+                return stalled("a turn key was ignored while a dialog or menu was opening")
             if free_to_move(state):
                 raise StopRun(KEYS_IGNORED)
             return stalled("a turn key was ignored while busy")
+
+    async def busy_now(self) -> bool:
+        """A dialog or NPC menu can open a moment after a turn began, and then it swallows the turn keys."""
+        return (await dialog_open(self.client) or await services_open(self.client)
+                or not free_to_move(await snapshot(self.client)))
 
     async def play_turn(self, state: dict) -> dict:
         if state["loading"] is True:
@@ -188,9 +195,8 @@ class QuestLoop:
         return progressed("chose from an NPC's menu", option=labels[choice])
 
     async def business_here(self, quest: dict) -> bool:
-        """The quest is ready to turn in, or its next goal is to talk to the NPC at the arrow, here."""
-        if quest["ready_to_turn_in"] is True:
-            return True
+        """The quest's next goal is to talk to the NPC at the arrow, and the wizard is there. Turning a quest in
+        is such a goal too. `ready_to_turn_in` is not used: it read true for quests whose goals were all open."""
         goals = open_goals(quest)
         if not goals or goals[0]["type"] != "persona":
             return False
