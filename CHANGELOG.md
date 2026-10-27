@@ -4,6 +4,13 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ## Unreleased
 
+### Fixed
+
+- **An arrow with no target stops the run instead of walking to the map's origin.**
+  - **What:** a quest arrow reading (0, 0, 0) now stops the run with "the quest arrow shows no target for the ... goal", for the operator.
+  - **Why:** in "Clear as Crystal" the open goal is to collect a Cog from Triton Avenue, and the arrow read (0, 0, 0). The loop walked the wizard to the origin and tried four times to use an object that wasn't there. The same reading means "no target" when no quest is active.
+  - **Not verified:** where such goals' targets can be found by reading the game. The Cog isn't among the loaded entities.
+
 ### Added
 
 - **Health and mana wisps.**

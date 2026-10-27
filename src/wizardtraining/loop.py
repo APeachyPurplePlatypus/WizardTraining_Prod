@@ -37,7 +37,7 @@ from .policy import LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, Spell
 from .progress import (DUEL_NEAR_PATH, ENEMY_NEAR_PATH, PATH_THREATS, Limits, PlannedRoute, RunRecord, StopRun,
                        check_limits, needs_rest, progressed, remember_obstacles, should_drink_potion, stalled,
                        travel_outcome, wanted_wisp)
-from .quests import open_goals, read_quest_arrow, read_quests
+from .quests import arrow_shows_no_target, open_goals, read_quest_arrow, read_quests
 from .reports import plain, save_report
 from .routes import DUEL_CIRCLE_NO_GO, Hazards, RoutePlanner
 from .session import NoClient, attached, hooks_ready
@@ -335,6 +335,9 @@ class QuestLoop:
         goals = open_goals(quest)
         goal = goals[0] if goals else {"type": "persona", "destination_zone": ""}
         arrow = await read_quest_arrow(self.client)
+        if arrow_shows_no_target(arrow):
+            raise StopRun(f"the quest arrow shows no target for the {goal['type']} goal of "
+                          f"{quest.get('title') or quest['name_key']}; left for the operator")
         self.record.quest = {"name": quest["name_key"], "title": quest.get("title"), "goal": goal["type"],
                              "goal_id": goal.get("id"),
                              "goal_zone": goal["destination_zone"], "arrow": plain(arrow)}

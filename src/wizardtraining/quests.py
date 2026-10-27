@@ -73,6 +73,12 @@ async def _title(name_key) -> str | None:
         return None
 
 
+def arrow_shows_no_target(arrow) -> bool:
+    """The arrow reads (0, 0, 0) when it has no target: with no quest active, and for some goals such as
+    collecting an item from the street. Walking to the map's origin then helps nobody."""
+    return all(abs(value) < 1.0 for value in (arrow.x, arrow.y, arrow.z))
+
+
 def open_goals(quest: dict) -> list[dict]:
     return [goal for goal in quest["goals"] if goal["done"] is False]
 
