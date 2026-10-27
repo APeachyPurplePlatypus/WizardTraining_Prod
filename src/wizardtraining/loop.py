@@ -47,6 +47,7 @@ from .progress import (DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY, ENEMY_NEAR_PATH, Limi
                        travel_outcome, wanted_wisp, WISP_ANY_DIRECTION_BELOW_FRACTION, world_of)
 from .quests import arrow_shows_no_target, game_language, open_goals, read_quest_arrow, read_quests
 from .reports import plain, save_report
+from .patrols import VIEWS_TO_JUDGE, note_sightings, unwalked_paths
 from .routes import DUEL_CIRCLE_NO_GO, Hazards, RoutePlanner
 from .session import NoClient, attached, hooks_ready
 from .state import attempt, battle_showing, free_to_move, health_fraction, mana_fraction, snapshot
@@ -66,6 +67,7 @@ DOOR_WAIT_SECONDS = 15.0
 DOOR_POLL_SECONDS = 0.5
 WATCHED_PATH_LENGTH = 2000.0
 MIN_SECONDS_BETWEEN_REROUTES = 0.3
+PATH_SAMPLE_SECONDS = 1.0
 BARELY_MOVED_DISTANCE = 100.0
 ENEMY_PASS_WAIT_SECONDS = 1.5
 ARRIVAL_SETTLE_SECONDS = 1.5
@@ -106,6 +108,7 @@ class QuestLoop:
         self._gear_checked: tuple | None = None
         self._finishing_since: float | None = None
         self.approaches = ApproachLog()
+        self._sighted_at = 0.0
         self._topping_up_in: str | None = None
         self._potion_failed = False
         self._object_in_use = None
@@ -823,6 +826,30 @@ class QuestLoop:
         quest = await self.active_quest()
         return quest is not None and any(open_goal["id"] == goal.get("id") for open_goal in open_goals(quest))
 
+    def mark_streets(self, planner: RoutePlanner, zone: str) -> None:
+        """The patrol paths routes keep off (`planner.streets`): all of them but those earlier runs watched for
+        VIEWS_TO_JUDGE samples without seeing an enemy on (`patrols.unwalked_paths`). The quest's target search
+        keeps every path, since a quest's own enemies may appear only once it is under way."""
+        if not planner.patrols:
+            return
+        unwalked = unwalked_paths(self.record.path_sightings.get(zone, {}), self.record.path_views.get(zone, {}))
+        planner.streets = planner.patrols.without(unwalked)
+        if ignored := unwalked & set(planner.patrols.paths):
+            self.events.emit("knowledge", f"{len(ignored)} of {len(planner.patrols.paths)} patrol paths in {zone} "
+                                          f"were watched {VIEWS_TO_JUDGE} times or more with no enemy on them; "
+                                          "routes count them as sidewalk")
+
+    def note_sightings(self, zone, enemies: list[dict], me, now: float) -> None:
+        """Every PATH_SAMPLE_SECONDS while walking, count the patrol paths in view and those with an enemy on them
+        (`patrols.note_sightings`), so later runs can tell the streets enemies walk from paths none does."""
+        planner = self._planners.get(zone)
+        if planner is None or not planner.patrols or now - self._sighted_at < PATH_SAMPLE_SECONDS:
+            return
+        self._sighted_at = now
+        note_sightings(planner.patrols, self.record.path_sightings.setdefault(zone, {}),
+                       self.record.path_views.setdefault(zone, {}), xy(me),
+                       [xy(enemy["position"]) for enemy in enemies])
+
     async def open_goal_count(self) -> int | None:
         quest = await self.active_quest()
         return None if quest is None else len(open_goals(quest))
@@ -832,6 +859,7 @@ class QuestLoop:
         if zone not in self._planners:
             self._planners[zone] = await load_planner(zone, self.settings.deimos_root)
             self._planners[zone].nav_first = zone in self.record.nav_first_zones
+            self.mark_streets(self._planners[zone], zone)
             self.record.planner_status[zone] = self._planners[zone].status
         return self._planners[zone]
 
@@ -947,7 +975,7 @@ class QuestLoop:
         self.motion.observe(avoid, now)
         around = [] if self.in_grace_after_battle() else enemies_to_route_around(avoid, me=start, destination=destination)
         hazards = Hazards.of(enemies=[enemy["position"] for enemy in avoid], duel_circles=duel_circles,
-                             obstacles=self.record.obstacles.get(zone, []), patrols=planner.patrols,
+                             obstacles=self.record.obstacles.get(zone, []), patrols=planner.streets,
                              keep_out=planner.teleports_to_keep_out_of(start, destination, arrive_radius),
                              tracks=[self.motion.track(enemy, now) for enemy in around])
         return hazards, around
@@ -988,6 +1016,7 @@ class QuestLoop:
             self.motion.observe(enemies, now)
             threats = [] if self.in_grace_after_battle() else others(enemies, ignore)
             self.approaches.record(enemies, now)
+            self.note_sightings(state["zone"], enemies, path_ahead[0], now)
             if close := too_close(threats):
                 await self.step_away_from(close, "while walking", ignore=ignore)
                 return "stepped away from an enemy"

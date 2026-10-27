@@ -27,6 +27,10 @@ NODE_X_OFFSET, NODE_ID_OFFSET = 36, 68
 PATH_ID_STRIDE = 8
 PATH_NAME = re.compile(rb"Path[\x20-\x7e]{1,80}")
 NOT_ENEMY_PATHS = ("wisp", "flax", "mistwood", "cattail", "chest", "reagent")
+NOT_ENEMY_WORDS = {"ore", "wood"}
+SIGHTING_RADIUS = 250.0
+VIEW_RADIUS = 1200.0
+VIEWS_TO_JUDGE = 300
 SAMPLE_SPACING = 100.0
 BUCKET_SIZE = 250.0
 MIN_SHARED_PREFIX = 4
@@ -72,34 +76,63 @@ def _increasing_run(data: bytes, start: int, end: int) -> list[int]:
 
 
 def is_enemy_path(name: str) -> bool:
-    return not any(word in name.lower() for word in NOT_ENEMY_PATHS)
+    """Not a path for wisps, chests or gathering: "Path_Ore_01" in Firecat Alley and "Path_Wood_01" on Unicorn Way
+    lead to ore and wood, and counting them as streets left Firecat Alley with almost no sidewalk. The gathering
+    names are matched as whole words, so "Path Forest" stays."""
+    words = {word.lower() for word in WORD.findall(name)}
+    return not any(part in name.lower() for part in NOT_ENEMY_PATHS) and not words & NOT_ENEMY_WORDS
+
+
+def unwalked_paths(sightings: dict[str, int], views: dict[str, int]) -> set[str]:
+    """The patrol paths watched for VIEWS_TO_JUDGE samples (`note_sightings`) on which no enemy was ever seen. A
+    zone's path data holds paths no enemy walks: Firecat Alley has 40 that are not wisp, chest or gathering paths,
+    many only numbered ("Path 3", "Path 3m"), and by them 80 to 90% of any route there lay within an enemy's reach."""
+    return {path for path, viewed in views.items() if viewed >= VIEWS_TO_JUDGE and not sightings.get(path)}
+
+
+def note_sightings(patrols: "PatrolMap", sightings: dict[str, int], views: dict[str, int], me: Point,
+                   enemies: list[Point]) -> None:
+    """Count one sample: each path within VIEW_RADIUS of the wizard, `me`, was in view, and each enemy seen counts
+    for the path nearest it within SIGHTING_RADIUS."""
+    for path in patrols.paths_within(me, VIEW_RADIUS):
+        views[path] = views.get(path, 0) + 1
+    for enemy in enemies:
+        if (path := patrols.nearest_path(enemy, SIGHTING_RADIUS)) is not None:
+            sightings[path] = sightings.get(path, 0) + 1
 
 
 @dataclass
 class PatrolMap:
-    """Points every SAMPLE_SPACING units along the enemy patrol paths, bucketed for quick nearest-distance checks."""
+    """Points every SAMPLE_SPACING units along the enemy patrol paths, bucketed for quick nearest-distance checks,
+    and the same points with their path's name, for telling which path an enemy is on."""
     segments: list[tuple[Point, Point]] = field(default_factory=list)
     paths: dict[str, list[Point]] = field(default_factory=dict)
     _buckets: dict[tuple[int, int], list[Point]] = field(default_factory=dict)
+    _named: dict[tuple[int, int], list[tuple[float, float, str]]] = field(default_factory=dict)
     _around: dict[tuple, list[Point]] = field(default_factory=dict)
     _distances: dict[tuple, float] = field(default_factory=dict)
 
     @classmethod
     def from_paths(cls, nodes: dict[int, tuple], paths: dict[str, list[int]]) -> "PatrolMap":
+        return cls.of({name: [(nodes[i][0], nodes[i][1]) for i in ids if i in nodes]
+                       for name, ids in paths.items() if is_enemy_path(name)})
+
+    @classmethod
+    def of(cls, paths: dict[str, list[Point]]) -> "PatrolMap":
         patrols = cls()
-        for name, ids in paths.items():
-            if not is_enemy_path(name):
-                continue
-            points = [(nodes[i][0], nodes[i][1]) for i in ids if i in nodes]
+        for name, points in paths.items():
             if points:
                 patrols.paths[name] = points
             for a, b in zip(points, points[1:]):
-                patrols.add_segment(a, b)
+                patrols.add_segment(a, b, name)
             if len(points) == 1:
-                patrols.add_segment(points[0], points[0])
+                patrols.add_segment(points[0], points[0], name)
         return patrols
 
-    def add_segment(self, a: Point, b: Point) -> None:
+    def without(self, names: set[str]) -> "PatrolMap":
+        return PatrolMap.of({name: points for name, points in self.paths.items() if name not in names})
+
+    def add_segment(self, a: Point, b: Point, name: str | None = None) -> None:
         self.segments.append((a, b))
         self._around.clear()
         self._distances.clear()
@@ -107,6 +140,28 @@ class PatrolMap:
         for k in range(steps + 1):
             point = (a[0] + (b[0] - a[0]) * k / steps, a[1] + (b[1] - a[1]) * k / steps)
             self._buckets.setdefault(self._bucket(point), []).append(point)
+            if name is not None:
+                self._named.setdefault(self._bucket(point), []).append((point[0], point[1], name))
+
+    def nearest_path(self, point: Point, within: float) -> str | None:
+        """The name of the path nearest `point`, if one comes within `within`."""
+        best, nearest = None, within * within
+        for x, y, name in self._named_around(point, within):
+            squared = (x - point[0]) ** 2 + (y - point[1]) ** 2
+            if squared < nearest:
+                best, nearest = name, squared
+        return best
+
+    def paths_within(self, point: Point, within: float) -> set[str]:
+        limit = within * within
+        return {name for x, y, name in self._named_around(point, within)
+                if (x - point[0]) ** 2 + (y - point[1]) ** 2 < limit}
+
+    def _named_around(self, point: Point, within: float) -> list[tuple[float, float, str]]:
+        bx, by = self._bucket(point)
+        reach = int(within // BUCKET_SIZE) + 1
+        return [sample for dx in range(-reach, reach + 1) for dy in range(-reach, reach + 1)
+                for sample in self._named.get((bx + dx, by + dy), ())]
 
     @staticmethod
     def _bucket(point: Point) -> tuple[int, int]:

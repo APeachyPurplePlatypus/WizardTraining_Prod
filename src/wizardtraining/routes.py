@@ -9,8 +9,8 @@ Three methods, tried in this order by `movement.travel`:
 Grid and graph routes are searched with A*, then merged into as few straight legs as the walk data
 allows ("string pulling"). Steps near enemies cost more, so routes keep to the parts of a street that
 enemies are not on, and merged legs keep LEG_ENEMY_CLEARANCE from them. Steps near the zone's enemy patrol
-paths cost more too (`patrols.PatrolMap`), so routes prefer the sidewalks enemies do not walk, and merging
-never makes a leg more dangerous than the steps it replaces. Enemies with a track (`motion.Track`) are no-go
+paths cost much more (`patrols.PatrolMap`, `Hazards.step_cost`), so routes keep to the sidewalks enemies do
+not walk, and merging never makes a leg more dangerous than the steps it replaces. Enemies with a track (`motion.Track`) are no-go
 areas ENEMY_KEEP_OUT wide where they will be when the wizard gets there, so a route passes behind an enemy
 walking away and keeps clear of where one is heading. Duel circles, other players'
 fights in progress, are no-go areas: walking into one joins that fight. So are obstacles: places where the
@@ -35,8 +35,8 @@ ENEMY_AVOID_WEIGHT = 6.0
 LEG_ENEMY_CLEARANCE = 450.0
 DUEL_CIRCLE_NO_GO = 900.0
 OBSTACLE_RADIUS = 150.0
-PATROL_AVOID_RADIUS = 700.0
-PATROL_AVOID_WEIGHT = 4.0
+SIDEWALK_DISTANCE = 600.0
+STREET_WEIGHT = 12.0
 MERGE_DANGER_TOLERANCE = 0.25
 NAV_GRID_SPACING = 480.0
 NAV_CELL_REACH = NAV_GRID_SPACING * math.sqrt(2) / 2
@@ -73,15 +73,18 @@ class Hazards:
         return replace(self, obstacles=self.obstacles + tuple(xy(obstacle) for obstacle in obstacles))
 
     def step_cost(self, point: Point) -> float:
-        """1 away from enemies and patrol paths, rising by up to ENEMY_AVOID_WEIGHT on top of an enemy and by up to
-        PATROL_AVOID_WEIGHT on a patrol path."""
+        """1 on a sidewalk, SIDEWALK_DISTANCE or more from every enemy patrol path, rising by up to STREET_WEIGHT on a
+        patrol path, and by up to ENEMY_AVOID_WEIGHT on top of an enemy. The operator: the wizard "is almost always
+        safe" on sidewalks, "even if it takes longer to travel the path". Triton Avenue's and Unicorn Way's
+        sidewalks, raised 20 to 30 units, begin 600 to 750 units from the patrol paths, beyond the 350 to 450
+        at which enemies engage. A street step costs up to 13 sidewalk steps, so a route walks far round to keep to
+        the sidewalk and crosses the street where it is narrowest."""
         cost = 1.0
         if self.enemies:
             nearest = min(math.dist(point, enemy) for enemy in self.enemies)
             cost += ENEMY_AVOID_WEIGHT * max(0.0, 1.0 - nearest / ENEMY_AVOID_RADIUS)
         if self.patrols:
-            cost += PATROL_AVOID_WEIGHT * max(0.0, 1.0 - self.patrols.distance(point, PATROL_AVOID_RADIUS)
-                                              / PATROL_AVOID_RADIUS)
+            cost += STREET_WEIGHT * max(0.0, 1.0 - self.patrols.distance(point, SIDEWALK_DISTANCE) / SIDEWALK_DISTANCE)
         return cost
 
     def line_cost(self, a: Point, b: Point) -> float:
@@ -293,6 +296,7 @@ class RoutePlanner:
         self.placed_objects: list = []
         self.exploration_points: list[tuple[Point, int]] = []
         self.patrols = None
+        self.streets = None
         self.nav_first = False
 
     def crossing(self, start, goal, outcomes: dict[str, object]) -> TeleportVolume | None:

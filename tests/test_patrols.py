@@ -3,7 +3,8 @@ import random
 import struct
 import unittest
 
-from wizardtraining.patrols import PatrolMap, is_enemy_path, name_words, parse_nodes, parse_paths, similar
+from wizardtraining.patrols import (VIEWS_TO_JUDGE, PatrolMap, is_enemy_path, name_words, note_sightings,
+                                   parse_nodes, parse_paths, similar, unwalked_paths)
 
 
 def node_record(node_id: int, x: float, y: float, z: float) -> bytes:
@@ -37,6 +38,9 @@ class ParseTest(unittest.TestCase):
         self.assertFalse(is_enemy_path("Path Wisps 01"))
         self.assertFalse(is_enemy_path("Path_Flax_02"))
         self.assertFalse(is_enemy_path("Path_SilverChest_01"))
+        self.assertFalse(is_enemy_path("Path_Ore_01"))
+        self.assertFalse(is_enemy_path("Path_Wood_02"))
+        self.assertTrue(is_enemy_path("Path Forest Ghost"))
 
 
 class PatrolMapTest(unittest.TestCase):
@@ -46,6 +50,31 @@ class PatrolMapTest(unittest.TestCase):
         self.assertLess(patrols.distance((500, 30), 2000), 31)
         self.assertEqual(patrols.distance((5000, 5000), 2000), 2000)
         self.assertEqual(len(patrols.segments), 1)
+
+
+class SightingsTest(unittest.TestCase):
+    def setUp(self):
+        self.patrols = PatrolMap.of({"Path 3": [(0, 0), (1000, 0)], "Path 3m": [(0, 600), (1000, 600)],
+                                     "Path Far": [(0, 9000), (1000, 9000)]})
+
+    def test_counts_paths_in_view_and_the_path_each_enemy_is_on(self):
+        sightings, views = {}, {}
+        note_sightings(self.patrols, sightings, views, me=(500, 300), enemies=[(400, 40), (2000, 2000)])
+        self.assertEqual(views, {"Path 3": 1, "Path 3m": 1})
+        self.assertEqual(sightings, {"Path 3": 1})
+
+    def test_a_path_watched_long_enough_with_no_enemy_is_unwalked(self):
+        sightings, views = {}, {}
+        for _ in range(VIEWS_TO_JUDGE):
+            note_sightings(self.patrols, sightings, views, me=(500, 300), enemies=[(400, 40)])
+        self.assertEqual(unwalked_paths(sightings, views), {"Path 3m"})
+        self.assertEqual(unwalked_paths(sightings, {"Path 3m": VIEWS_TO_JUDGE - 1}), set())
+
+    def test_streets_leave_out_unwalked_paths(self):
+        streets = self.patrols.without({"Path 3m"})
+        self.assertEqual(set(streets.paths), {"Path 3", "Path Far"})
+        self.assertEqual(streets.distance((500, 600), 700), 600)
+        self.assertEqual(streets.nearest_path((500, 560), 250), None)
 
 
 class DistanceTest(unittest.TestCase):
