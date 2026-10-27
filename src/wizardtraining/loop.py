@@ -98,6 +98,7 @@ JUMP_DISTANCE = 500.0
 LET_PASS_SECONDS = 8.0
 LET_PASS_POLL_SECONDS = 0.25
 TELEPORTED = "teleported"
+TELEPORT_CONFIRM_SECONDS = 2.0
 KEYS_IGNORED = ("the game ignored a turn key while free to move; a popup (such as the Endorse Wizard window) "
                 "may be holding the keyboard; left for the operator")
 
@@ -1037,17 +1038,23 @@ class QuestLoop:
         return jumped
 
     async def teleport_outcome(self, zone: str, planner: RoutePlanner, *, already_jumped: bool):
-        if already_jumped:
-            return await self.piece_here(planner)
+        """Where a teleport volume led: LEFT_ZONE, the walkable piece of this zone the wizard landed in, or
+        NO_EFFECT. A jump counts as staying in the zone only after TELEPORT_CONFIRM_SECONDS with no loading and no
+        zone change: entering the Bazaar from Olde Town moved the wizard before the loading began, and its new
+        position, in the Bazaar's own coordinates, read as Olde Town's walkable piece 4, which later runs kept."""
         start = await self.client.body.position()
+        jumped_at = time.monotonic() if already_jumped else None
         deadline = time.monotonic() + TELEPORT_WAIT_SECONDS
         while time.monotonic() < deadline:
             if await attempt(self.client.is_loading()) is True or await attempt(self.client.zone_name()) != zone:
                 return LEFT_ZONE
-            if flat_distance(start, await self.client.body.position()) > JUMP_DISTANCE:
+            now = time.monotonic()
+            if jumped_at is None and flat_distance(start, await self.client.body.position()) > JUMP_DISTANCE:
+                jumped_at = now
+            if jumped_at is not None and now - jumped_at >= TELEPORT_CONFIRM_SECONDS:
                 return await self.piece_here(planner)
             await asyncio.sleep(TELEPORT_POLL_SECONDS)
-        return NO_EFFECT
+        return NO_EFFECT if jumped_at is None else await self.piece_here(planner)
 
     async def piece_here(self, planner: RoutePlanner) -> int | None:
         here = await self.client.body.position()

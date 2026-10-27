@@ -23,6 +23,13 @@ Every change, enhancement or addition is listed with its rationale, so later con
   - **What:** sections for what changed, why, how it was tested (offline and in the game) and what is not verified, plus a checklist for the changelog entry, personal data and the README's rules.
   - **Why:** the changelog's rationale and the "verified, and not" notes are what make this project useful to the next contributor. The template asks for them at the point a change is proposed.
 
+### Fixed
+
+- **A teleport is judged to stay in the zone only once no loading follows.**
+  - **What:** after the wizard's position jumps in a teleport volume, the run waits up to 2 seconds for loading or a zone change (`loop.TELEPORT_CONFIRM_SECONDS`) before recording which walkable piece of the zone the volume leads to.
+  - **Why:** entering the Bazaar from Olde Town moved the wizard before the loading screen began. Its new position, in the Bazaar's own coordinates, read as Olde Town's walkable piece 4, and that verdict was kept in the knowledge file for later runs (corrected there by hand to "left the zone").
+  - **Not verified yet:** in the game.
+
 ## 0.2.0 (2026-10-27)
 
 What one character's unattended play from level 5 to 10 taught the framework: 71 runs and 139 battles (122 won, 13 lost, 1 fled, 3 left for the operator) over the evening of 2026-10-26 and the day after. Main quests first, side quests as offered, natural walking only, nothing bought. The biggest changes: combat decisions from the game's own spell and enemy data (stuns, pips, healing before a big hit), mana and health refills that do not walk into fights, fleeing that works, other players' fights and message boxes noticed and handled, and routes that keep to the sidewalks.
