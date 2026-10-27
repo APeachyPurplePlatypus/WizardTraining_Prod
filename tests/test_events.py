@@ -47,6 +47,13 @@ class DescriptionTest(unittest.TestCase):
         self.assertEqual(text, "round 2: me 450/624 with 3 pips; cast Frost Beetle on enemy; "
                                "enemies left: Haunted Minion 35")
 
+    def test_describe_round_says_whether_the_game_logged_the_move(self):
+        entry = round_entry(5, 257, "cast Fire Cat (Fire) on enemy Cyclops Legionnaire", [("Cyclops Legionnaire", 60)])
+        entry["sent"] = ["Cast Spell"]
+        self.assertIn("on enemy Cyclops Legionnaire (sent Cast Spell); enemies left", describe_round(entry))
+        entry["sent"] = []
+        self.assertIn("(the game logged no move); enemies left", describe_round(entry))
+
     def test_describe_round_lists_the_hand(self):
         entry = round_entry(1, 600, "cast Snow Serpent (Ice) on enemy", [("Warhorn", 285)])
         entry["view"]["cards"] = [{"name": "Frost Beetle", "pips": 1}, {"name": "Snow Serpent", "pips": 2},

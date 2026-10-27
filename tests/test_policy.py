@@ -38,8 +38,15 @@ class SpellTypePolicyTest(unittest.TestCase):
         self.assertIsNone(self.policy.choose(view([SHIELD, TOO_DEAR])))
 
     def test_flees_when_out_of_mana(self):
-        self.assertEqual(self.policy.choose(view([BOLT, HEAL], health=100, mana=1)), Flee("out of mana (1 left)"))
+        dear_bolt = Card("Snow Serpent", "Damage", True, "Ice", pips=2)
+        self.assertEqual(self.policy.choose(view([dear_bolt, HEAL], health=100, mana=1)), Flee("out of mana (1 left)"))
         self.assertEqual(self.policy.choose(view([BOLT], mana=0)), Flee("out of mana (0 left)"))
+
+    def test_casts_a_spell_it_can_still_pay_for_before_fleeing(self):
+        fire_cat = Card("Fire Cat - Starter Wand", "Damage", True, "Fire", pips=1)
+        nearly_dead = (Combatant("Cyclops Legionnaire", 60),)
+        self.assertEqual(self.policy.choose(view([fire_cat], mana=1, enemies=nearly_dead)), Cast(0, "enemy"))
+        self.assertEqual(self.policy.choose(view([fire_cat], mana=1)), Cast(0, "enemy"))
 
     def test_fights_on_when_the_battle_cannot_be_fled(self):
         stuck = RoundView(round_number=2, health=500, max_health=500, pips=3, power_pips=0, cards=(BOLT,),

@@ -13,6 +13,7 @@ battle to the operator rather than guessing.
 from __future__ import annotations
 
 import asyncio
+import datetime
 import time
 from dataclasses import asdict, replace
 from pathlib import Path
@@ -22,13 +23,13 @@ from wizwalker.memory import DuelPhase
 from wizwalker.memory.memory_objects.enums import WindowFlags
 from wizwalker.utils import get_wiz_install
 
-from .connection import client_log_tail, lost_connection
+from .connection import client_log_tail, lost_connection, moves_sent_since
 from .geometry import flat_distance
 from .movement import KeysIgnored, face_and_step
 from .policy import UNIVERSAL, Card, Cast, CombatPolicy, Combatant, DamageModifier, Flee, Pass, RoundView, problem_with
 from .reports import plain
 from .state import attempt
-from .ui import click, enable_clicks, showing, text_of, window_at
+from .ui import click, enable_clicks, showing, text_of, visible_tree, window_at
 
 APPROACH_STEP_SECONDS = 0.4
 MAX_APPROACH_STEPS = 15
@@ -40,6 +41,7 @@ CARDS_DRAW_SECONDS = 0.5
 EMPTY_HAND_READS = 6
 PAUSE_BETWEEN_CAST_CLICKS_SECONDS = 0.5
 FLEE_CONFIRM_WAIT_SECONDS = 1.0
+MOVE_LOG_SECONDS = 1.0
 PLANNING = ["WorldView", "PlanningPhase", "Alignment", "PlanningPhaseSubWindow"]
 ACTION_BUTTONS = [*PLANNING, "SpellSelection", "ActionButtons"]
 WAITING_FOR_OTHERS = [*PLANNING, "WaitingForOthers"]
@@ -240,22 +242,30 @@ async def play_round(combat, policy: CombatPolicy, can_flee: bool = True) -> dic
         entry["action"] = "pass: the hand read empty"
         return entry
     choice = policy.choose(view)
+    acting_since = datetime.datetime.now().replace(microsecond=0)
     if isinstance(choice, Flee):
         entry["action"] = f"flee: {choice.reason} ({await flee(combat)})"
-        return entry
-    if choice is None or isinstance(choice, Pass):
+    elif choice is None or isinstance(choice, Pass):
         await pass_round(combat)
         entry["action"] = "pass" if choice is None else f"pass: {choice.reason}"
-        return entry
-    if problem := problem_with(choice, view):
+    elif problem := problem_with(choice, view):
         await pass_round(combat)
         entry["action"] = f"pass: {problem}"
-        return entry
-    await cards[choice.card].cast(cast_target(choice, me, enemies), sleep_time=PAUSE_BETWEEN_CAST_CLICKS_SECONDS)
-    card = view.cards[choice.card]
-    target = f"{choice.target} {view.enemies[choice.enemy].name}" if choice.target == "enemy" else choice.target
-    entry["action"] = f"cast {card.name}{f' ({card.school})' if card.school else ''} on {target}"
+    else:
+        await cards[choice.card].cast(cast_target(choice, me, enemies), sleep_time=PAUSE_BETWEEN_CAST_CLICKS_SECONDS)
+        card = view.cards[choice.card]
+        target = f"{choice.target} {view.enemies[choice.enemy].name}" if choice.target == "enemy" else choice.target
+        entry["action"] = f"cast {card.name}{f' ({card.school})' if card.school else ''} on {target}"
+    entry["sent"] = await moves_sent_after(acting_since)
     return entry
+
+
+async def moves_sent_after(since: datetime.datetime) -> list[str]:
+    """The moves the client logged since `since`, other than the "Unready" it sends as a round's planning opens,
+    read MOVE_LOG_SECONDS after acting. Empty when the click did not take."""
+    await asyncio.sleep(MOVE_LOG_SECONDS)
+    moves = moves_sent_since(client_log_tail(Path(get_wiz_install())), since)
+    return [move for move in moves if move != "Unready"]
 
 
 async def pass_round(combat) -> None:
@@ -294,12 +304,14 @@ async def flee_button_enabled(client) -> bool:
 async def flee(combat) -> str:
     """Click the Flee action button, then answer Yes when the game asks to confirm with a message box whose caption
     mentions fleeing, like its "Are you sure you want to add this spell to your spellbook?" box (centerButton is
-    Yes). Says what followed."""
+    Yes). Says what followed, with the planning window's visible parts when no box came. No flee has worked yet: the
+    client's log shows the click sent no move, the round ran out its timer, and the planning window stayed in another
+    selection state (0, not 8) in which no card click sent a move for the rest of the battle."""
     client = combat.client
     await click(client, FLEE_BUTTON)
     await asyncio.sleep(FLEE_CONFIRM_WAIT_SECONDS)
     if not await showing(client, MESSAGE_BOX):
-        return "no confirmation box"
+        return f"no confirmation box; showing {await visible_tree(client, PLANNING)}"
     caption = (await text_of(client, MESSAGE_BOX_CAPTION)).replace("<center>", "").replace("</center>", "").strip()
     if "flee" not in caption.lower():
         return f"a message box that does not mention fleeing was left alone: {caption!r}"

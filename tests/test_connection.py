@@ -2,7 +2,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from wizardtraining.connection import LOG, client_log_tail, lost_connection
+import datetime
+
+from wizardtraining.connection import LOG, client_log_tail, lost_connection, moves_sent_since
 
 DROPPED = """10/27/26 02:06:29 [ERRO] ClientCinematic  HandleAnimationEvent: 'end'
 10/27/26 02:06:35 [DBGM] GameClient      AppCloseConnection() called, connection state is 6
@@ -11,6 +13,21 @@ DROPPED = """10/27/26 02:06:29 [ERRO] ClientCinematic  HandleAnimationEvent: 'en
 10/27/26 02:06:49 [DBGM] GameClient      AppCloseConnection() called, connection state is 5
 10/27/26 02:10:54 [STAT] CORE_SEER       PROCESS MEMORY USAGE at 425 min(s) 0 sec(s)
 """
+
+
+ROUNDS = """10/27/26 09:28:02 [STAT] ClientDuel      Local Player Sending Move: Unready  time left:-1
+10/27/26 09:28:04 [STAT] ClientDuel      Local Player Sending Move: Cast Spell  time left:-1
+10/27/26 09:28:24 [STAT] ClientDuel      Local Player Sending Move: Unready  time left:-1
+10/27/26 09:28:54 [STAT] ClientDuel      Duel 6124866: MSG_CombatPhase(kPhase_Execution) PlayerID:0
+"""
+
+
+class MovesTest(unittest.TestCase):
+    def test_lists_the_moves_sent_since_a_moment(self):
+        self.assertEqual(moves_sent_since(ROUNDS, datetime.datetime(2026, 10, 27, 9, 28, 4)), ["Cast Spell", "Unready"])
+        self.assertEqual(moves_sent_since(ROUNDS, datetime.datetime(2026, 10, 27, 9, 28, 25)), [])
+        self.assertEqual(moves_sent_since("garbage\n" + ROUNDS, datetime.datetime(2026, 10, 27, 9, 28, 0)),
+                         ["Unready", "Cast Spell", "Unready"])
 
 
 class ConnectionTest(unittest.TestCase):

@@ -47,7 +47,7 @@ Worth reaching for before adding guesswork:
 
 ## The game client's log
 
-The client writes `Bin/WizardClient.log` in the game folder (100 MB and growing; read only its end). It says what memory does not: "AppCloseConnection() called" when the server connection drops, "HandleReconnectTimeout" while it retries, and "GameClient::ConnectComplete destination Zone=..." when a connection is made. `connection.lost_connection` uses these. It also logs combat cinematics with damage and health ("ProcessDamageEffect: OldHP: 235, Delta: -85, NewHP: 150"), which could check what a cast did.
+The client writes `Bin/WizardClient.log` in the game folder (100 MB and growing; read only its end). It says what memory does not: "AppCloseConnection() called" when the server connection drops, "HandleReconnectTimeout" while it retries, and "GameClient::ConnectComplete destination Zone=..." when a connection is made. `connection.lost_connection` uses these. It also logs combat cinematics with damage and health ("ProcessDamageEffect: OldHP: 235, Delta: -85, NewHP: 150"), which could check what a cast did. In battle it logs each move the wizard sends ("Local Player Sending Move: Unready" as planning opens, then "Cast Spell" or "Pass"); `connection.moves_sent_since` reads them, so a click that did not take shows as a round with no move. A click on Flee sent no move, and "CombatPlanningPhaseWindow::ShowWindow() - selection is in state" went from 8 to 0 for the rest of that battle.
 
 ## Zone files
 

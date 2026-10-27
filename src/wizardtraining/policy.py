@@ -210,10 +210,15 @@ def stun_on_the_healthiest(view: RoundView) -> Cast | None:
 
 
 def out_of_mana(view: RoundView) -> bool:
-    """Less than FLEE_BELOW_MANA mana: no 2-pip spell, and at most one 1-pip spell, before only the weak free wand
-    spells are left. The operator's rule: "if no mana you have to flee". With 0 mana and no wand spell in hand, the
-    wizard passed four rounds and was defeated by a Cyclops Legionnaire it could not hurt."""
-    return isinstance(view.mana, int) and view.mana < FLEE_BELOW_MANA
+    """Less than FLEE_BELOW_MANA mana, and no castable attack in hand the wizard can still pay for (a mana a pip). The
+    operator's rule: "if no mana you have to flee". With 0 mana and no wand spell in hand, the wizard passed four
+    rounds and was defeated by a Cyclops Legionnaire it could not hurt. With 1 mana and a 1-pip Fire Cat that would
+    surely finish a Cyclops at 60 health, it clicked Flee instead; the flee did not take, and the hand did not work
+    again in that battle, so a spell the wizard can pay for comes first."""
+    if not isinstance(view.mana, int) or view.mana >= FLEE_BELOW_MANA:
+        return False
+    return not any(card.castable and card.spell_type in ATTACK_TARGETS and (card.pips or 1) <= view.mana
+                   for card in view.cards)
 
 
 def surely_finishes(card: Card, target: Combatant) -> bool:

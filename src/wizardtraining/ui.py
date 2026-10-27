@@ -87,6 +87,32 @@ async def answer_known_popup(client) -> str | None:
     return None
 
 
+async def visible_tree(client, path: list[str], depth: int = 3, limit: int = 40) -> list[str]:
+    """The visible windows under `path`, up to `depth` levels down and `limit` in all, as "parent/child" paths with
+    their text after a colon when they have any: what the screen shows, for a report."""
+    found = []
+
+    async def walk(window, prefix: str, levels: int):
+        for child in await window.children():
+            if len(found) >= limit:
+                return
+            if not await child.is_visible():
+                continue
+            name = f"{prefix}{await child.name()}"
+            text = (await child.maybe_text() or "").strip()
+            found.append(f"{name}: {text[:60]}" if text else name)
+            if levels > 1:
+                await walk(child, f"{name}/", levels - 1)
+
+    try:
+        parent = await window_at(client.root_window, path)
+        if parent is not None:
+            await walk(parent, "", depth)
+    except Exception:
+        pass
+    return found
+
+
 async def visible_children(client, path: list[str]) -> list[str]:
     """Names of the visible windows directly under `path`: a quick, machine-readable look at the screen."""
     try:
