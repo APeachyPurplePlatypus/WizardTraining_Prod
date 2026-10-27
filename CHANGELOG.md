@@ -6,6 +6,18 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Added
 
+- **Live event log.**
+  - **What:** each run writes `runtime/events-<started>.jsonl`, one JSON line per event with a readable summary that is also logged as it happens. Events cover:
+    - the run starting and stopping;
+    - zone, level and quest or goal changes;
+    - each battle's start, every round (the wizard's health and pips, the card played, the enemies left), and its end (outcome, rounds, seconds, enemy names and count, health before and after, gold gained, level);
+    - walks (distance, result, each route method's outcome, new obstacles);
+    - rests (seconds and health before and after), step-aways (which enemies, how close);
+    - dialogs (pages, follow-ups, offers) and NPC menus (options and choice).
+
+    The state snapshot now includes gold, the turn line includes health, and the report names its event file.
+  - **Why:** the operator asked for a way to describe the environment so the watcher stops making assumptions. While watching a run, a 90-second battle was reported as "probably a bigger group of enemies". The report later showed it was 5 rounds against a single Haunted Minion. The end-of-run report alone can't answer questions while a run is live, and timings invite guesses. WizWalker exposes no experience-points reading, so rewards are shown as gold, health and level.
+
 - **NPC services menus, and quest titles from the game's language files.**
   - **What:** when an NPC opens its services menu (`NPCServicesWin`, a list of quests by title), the offer policy picks an option. `MainQuestsOnly` takes the option for the active quest, or else the first title the operator approved with `--approve-quest`, and otherwise stops and lists the options. The journal now carries each quest's display title, looked up in `Locale/en-US/*.lang` in Root.wad (`language.py`).
   - **Why:** after "Panic in Three Streets!", Sergeant Muldoon in Olde Town opens a menu of three quests instead of a dialog. The loop didn't recognise it and stalled. A quest's main-quest flag can be read only after accepting it, since the quest definitions are not in the installed files. So the framework never guesses: it needs the active quest's title or the operator's approval. On a non-main-quest offer, the loop still stops once the journal shows it.

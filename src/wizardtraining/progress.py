@@ -69,6 +69,7 @@ class RunRecord:
     stopped: str | None = None
     traceback: str | None = None
     hooks_removed: bool | str | None = None
+    events_file: str | None = None
 
     def record_turn(self, turn: dict) -> None:
         self.turns.append(turn)

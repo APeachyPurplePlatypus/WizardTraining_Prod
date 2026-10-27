@@ -56,7 +56,7 @@ python -m wizardtraining stop
 
 Do not use Ctrl+C, close the window, or kill the process. A run that dies without removing its hooks leaves them patched into the game, and nothing can hook again until the game is restarted.
 
-Every run saves a JSON report in the runtime folder. The report's `stopped` field says why the run ended.
+Every run saves a JSON report in the runtime folder, and its `stopped` field says why the run ended. While it runs, `events-<started>.jsonl` in the same folder records each battle, round, walk, rest, dialog and zone, level or quest change as it happens, so you can follow it from facts.
 
 ## Building on it
 

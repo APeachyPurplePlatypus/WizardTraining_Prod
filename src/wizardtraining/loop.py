@@ -28,6 +28,7 @@ from .dialog import (DIALOG_FINISHED, FOLLOW_UP_WAIT_SECONDS, NPC_ARRIVE_DISTANC
                      choose_service, dialog_open, leave_services, near_npc, read_conversation, service_options,
                      services_open, talk, use_object, wait_for_dialog)
 from .entities import nearby_enemies, step_away, surroundings
+from .events import EventLog, describe_battle, describe_changes, describe_round, enemy_names, health_text
 from .geometry import distance_to_path, flat_distance, path_within
 from .keys import tap
 from .movement import KeysIgnored, face, travel
@@ -66,8 +67,10 @@ log = logging.getLogger(__name__)
 
 class QuestLoop:
     def __init__(self, client, settings: Settings, record: RunRecord, *,
-                 combat_policy: CombatPolicy, offer_policy: OfferPolicy):
+                 combat_policy: CombatPolicy, offer_policy: OfferPolicy, events: EventLog | None = None):
         self.client = client
+        self.events = events or EventLog()
+        self._last_state = self._last_quest = None
         self.settings = settings
         self.record = record
         self.limits = record.limits
@@ -86,7 +89,9 @@ class QuestLoop:
         try:
             if not hooks_ready(self.record.hooks or {}):
                 raise StopRun("reading hooks not ready")
-            self.record.start = await snapshot(self.client)
+            self.record.start = start = await snapshot(self.client)
+            self.events.emit("run", f"started at level {start['level']} in {start['zone']}, health {health_text(start)}, "
+                                    f"gold {start['gold']}; target level {self.limits.target_level}")
             await self.run_turns()
         except StopRun as stop:
             self.record.stopped = str(stop)
@@ -98,6 +103,8 @@ class QuestLoop:
             raise
         finally:
             await self.record_end_state()
+            self.events.emit("run", f"stopped: {self.record.stopped}", turns=len(self.record.turns),
+                             battles=self.record.battles)
 
     async def run_turns(self) -> None:
         deadline = time.monotonic() + self.limits.minutes * 60
@@ -112,8 +119,15 @@ class QuestLoop:
             self.record.record_turn(turn)
             quest = self.record.quest or {}
             self.record.note_place(state["zone"], (quest.get("name"), quest.get("goal_id")))
-            log.info("turn %d: %s (progress=%s, level=%s, zone=%s, goal=%s %s)", len(self.record.turns), turn["did"],
-                     turn["progress"], state["level"], state["zone"], quest.get("goal"), quest.get("goal_zone") or "")
+            log.info("turn %d: %s (progress=%s, level=%s, health=%s, zone=%s, goal=%s %s)", len(self.record.turns),
+                     turn["did"], turn["progress"], state["level"], health_text(state), state["zone"], quest.get("goal"),
+                     quest.get("goal_zone") or "")
+            self.note_changes(state)
+
+    def note_changes(self, state: dict) -> None:
+        for kind, text in describe_changes(self._last_state, state, self._last_quest, self.record.quest):
+            self.events.emit(kind, text)
+        self._last_state, self._last_quest = state, dict(self.record.quest or {})
 
     async def checked_turn(self, state: dict) -> dict:
         try:
@@ -152,15 +166,22 @@ class QuestLoop:
 
     async def battle_turn(self) -> dict:
         self.record.battles += 1
-        zone_before = await attempt(self.client.zone_name())
-        battle = await fight(self.client, self.combat_policy)
+        before = await snapshot(self.client)
+        started = time.monotonic()
+        self.events.emit("battle", f"battle {self.record.battles} started in {before['zone']}, health {health_text(before)}")
+        battle = await fight(self.client, self.combat_policy,
+                             on_round=lambda entry: self.events.emit("round", describe_round(entry)))
         self.record.battle_log.append(battle)
+        after = await snapshot(self.client)
+        fraction = health_fraction(after)
+        defeated = after["zone"] != before["zone"] or (fraction is not None and fraction <= DEFEATED_HEALTH_FRACTION)
+        outcome = "left for the operator" if "stopped" in battle else ("lost" if defeated else "won")
+        self.events.emit("battle", describe_battle(battle, seconds=time.monotonic() - started, before=before,
+                                                   after=after, outcome=outcome), outcome=outcome)
         if "stopped" in battle:
             raise StopRun(battle["stopped"])
-        after = await snapshot(self.client)
-        battle["after"] = {key: after[key] for key in ("zone", "level", "health", "max_health", "mana")}
-        fraction = health_fraction(after)
-        if after["zone"] != zone_before or (fraction is not None and fraction <= DEFEATED_HEALTH_FRACTION):
+        battle["after"] = {key: after[key] for key in ("zone", "level", "health", "max_health", "mana", "gold")}
+        if defeated:
             self.record.defeats += 1
             if self.record.defeats > self.limits.max_defeats:
                 raise StopRun("defeated in battle; stopping for the operator")
@@ -172,9 +193,15 @@ class QuestLoop:
         record = {}
         result = await read_conversation(self.client, record, self.offer_policy)
         self.record.dialog_log.append(record)
+        self.note_dialog(record, result)
         if result == OFFER_LEFT_FOR_OPERATOR:
             raise StopRun(result)
         return progressed("dialog", result=result, pages=len(record["pages"]))
+
+    def note_dialog(self, record: dict, result: str) -> None:
+        offers = [page["offer"] for page in record.get("pages", []) if "offer" in page]
+        self.events.emit("dialog", f"{len(record.get('pages', []))} pages, {record.get('follow_ups', 0)} follow-ups"
+                                   f"{', offers: ' + ', '.join(offers) if offers else ''}; {result}")
 
     async def services_turn(self) -> dict:
         """Pick an option of an NPC's services menu, as the offer policy decides."""
@@ -190,8 +217,10 @@ class QuestLoop:
                           "left for the operator (approve one with --approve-quest)")
         if choice == LEAVE_MENU:
             await leave_services(self.client)
+            self.events.emit("menu", f"left an NPC's menu offering {labels}")
             return progressed("left an NPC's menu", options=labels)
         await choose_service(self.client, options[choice][1])
+        self.events.emit("menu", f"chose {labels[choice]!r} from an NPC's menu offering {labels}")
         return progressed("chose from an NPC's menu", option=labels[choice])
 
     async def business_here(self, quest: dict) -> bool:
@@ -209,10 +238,10 @@ class QuestLoop:
         """Wait for health to come back, stepping away if an enemy comes close. A zone where a full rest
         gains nothing is remembered, and not rested in again."""
         deadline = time.monotonic() + REST_TURN_SECONDS
+        started = time.monotonic()
         while time.monotonic() < deadline and not self.settings.stop_requested():
             if close := too_close(await nearby_enemies(self.client)):
-                await step_away(self.client, close)
-                self.record.step_aways.append(summary(close))
+                await self.step_away_from(close, "while resting")
                 return progressed("stepped away while resting")
             now = await snapshot(self.client)
             if battle_showing(now) or not needs_rest(health_fraction(now)):
@@ -220,8 +249,11 @@ class QuestLoop:
             await asyncio.sleep(REST_POLL_SECONDS)
         health = await attempt(self.client.stats.current_hitpoints())
         gained = isinstance(health, int) and isinstance(state["health"], int) and health > state["health"]
+        self.events.emit("rest", f"rested {time.monotonic() - started:.0f} s: health {state['health']} -> {health} "
+                                 f"of {state['max_health']}")
         if not gained and time.monotonic() >= deadline:
             self.record.zones_without_regeneration.append(state["zone"])
+            self.events.emit("rest", f"no health came back in {state['zone']}; it will not be rested in again")
         return (progressed if gained else stalled)("rest", health_before=state["health"], health=health)
 
     async def quest_turn(self, state: dict) -> dict:
@@ -239,7 +271,8 @@ class QuestLoop:
         goals = open_goals(quest)
         goal = goals[0] if goals else {"type": "persona", "destination_zone": ""}
         arrow = await read_quest_arrow(self.client)
-        self.record.quest = {"name": quest["name_key"], "goal": goal["type"], "goal_id": goal.get("id"),
+        self.record.quest = {"name": quest["name_key"], "title": quest.get("title"), "goal": goal["type"],
+                             "goal_id": goal.get("id"),
                              "goal_zone": goal["destination_zone"], "arrow": plain(arrow)}
         if goal["destination_zone"] not in ("", await self.client.zone_name()):
             return await self.waypoint_turn(arrow, goal)
@@ -355,6 +388,10 @@ class QuestLoop:
                         "methods": [(tried["method"], tried.get("result"), tried.get("reason"),
                                      tried.get("sidesteps"), tried.get("seconds")) for tried in trip["attempts"]]}
         new_obstacles = remember_obstacles(self.record, zone, trip["blocked_at"])
+        methods = ", ".join(f"{tried['method']}: {tried.get('result')}" for tried in trip["attempts"])
+        self.events.emit("walk", f"{did}: moved {moved:.0f}, {trip['result']}"
+                                 f"{' (' + trip['reason'] + ')' if trip['reason'] else ''}; {methods}"
+                                 f"{f'; {new_obstacles} new obstacles' if new_obstacles else ''}")
         return travel_outcome(did, trip["reason"], moved, self.record, new_obstacles=new_obstacles,
                               trip=trip_summary, **details)
 
@@ -381,8 +418,7 @@ class QuestLoop:
             enemies, duel_circles = await surroundings(self.client)
             threats = others(enemies, ignore)
             if close := too_close(threats):
-                await step_away(self.client, close)
-                self.record.step_aways.append(summary(close))
+                await self.step_away_from(close, "while walking")
                 return "stepped away from an enemy"
             stretch = path_within(path_ahead, WATCHED_PATH_LENGTH)
             if any(distance_to_path(circle, stretch) < DUEL_CIRCLE_NO_GO for circle in duel_circles):
@@ -395,6 +431,12 @@ class QuestLoop:
             return None
 
         return watch
+
+    async def step_away_from(self, close: list[dict], when: str) -> None:
+        await step_away(self.client, close)
+        self.record.step_aways.append(summary(close))
+        nearest = close[0]
+        self.events.emit("step away", f"{when}: {enemy_names(close)}, nearest {nearest['distance']:.0f} away")
 
     async def record_end_state(self) -> None:
         try:
@@ -411,6 +453,8 @@ async def play(settings: Settings, limits: Limits, *, combat_policy: CombatPolic
     """Attach to the game, play, remove the hooks, and always save the report, even when interrupted.
     Returns the report and the path it was saved to."""
     record = RunRecord(limits=limits)
+    events = EventLog.in_folder(settings.runtime_folder)
+    record.events_file = str(events.path)
     settings.clear_stop()
     attachment = None
     try:
@@ -418,7 +462,7 @@ async def play(settings: Settings, limits: Limits, *, combat_policy: CombatPolic
             record.hooks = attachment.hooks
             loop = loop_class(attachment.client, settings, record,
                               combat_policy=combat_policy or SpellTypePolicy(),
-                              offer_policy=offer_policy or MainQuestsOnly())
+                              offer_policy=offer_policy or MainQuestsOnly(), events=events)
             await loop.play()
     except NoClient as exc:
         record.stopped = str(exc)

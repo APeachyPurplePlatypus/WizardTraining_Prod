@@ -26,6 +26,7 @@ async def snapshot(client) -> dict:
         "health": await attempt(client.stats.current_hitpoints()),
         "max_health": await attempt(client.stats.max_hitpoints()),
         "mana": await attempt(client.stats.current_mana()),
+        "gold": await attempt(client.stats.current_gold()),
         "position": await attempt(client.body.position()),
         "yaw": await attempt(client.body.yaw()),
         "in_battle": await attempt(client.in_battle()),

@@ -147,8 +147,9 @@ def cast_target(choice: Cast, me, enemies: list):
     return None
 
 
-async def fight(client, policy: CombatPolicy) -> dict:
-    """Play the current battle to its end, or stop and leave it to the operator."""
+async def fight(client, policy: CombatPolicy, on_round=None) -> dict:
+    """Play the current battle to its end, or stop and leave it to the operator. `on_round(entry)` is called
+    after each round the wizard plays, with what it saw and did."""
     result = {"rounds": []}
     combat = CombatHandler(client)
     started = time.monotonic()
@@ -173,6 +174,8 @@ async def fight(client, policy: CombatPolicy) -> dict:
                 result["stopped"] = f"round failed: {type(exc).__name__}; left for the operator"
                 break
             result["rounds"].append(entry)
+            if on_round is not None:
+                on_round(entry)
             entry["then"] = await wait_for_next_round(client, combat, entry["round"], PHASE_TIMEOUT_SECONDS)
         else:
             result["stopped"] = "round limit reached; left for the operator"
