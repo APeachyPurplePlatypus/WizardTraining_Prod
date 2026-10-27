@@ -21,7 +21,7 @@ ENEMY_PATH_CLEARANCE = 500.0
 APPROACH_MARGIN = 150.0
 REST_BELOW_FRACTION = 0.65
 POTION_BELOW_FRACTION = 0.4
-MANA_BELOW_FRACTION = 0.5
+MANA_BELOW_FRACTION = 0.2
 
 
 def world_of(zone: str | None) -> str | None:
@@ -151,7 +151,8 @@ def needs_rest(fraction: float | None) -> bool:
 
 def wanted_wisp(health: float | None, mana: float | None) -> str | None:
     """"health" below REST_BELOW_FRACTION, else "mana" below MANA_BELOW_FRACTION, else None. Low mana leaves
-    the wizard only free wand spells, which made each Triton Avenue battle long and costly."""
+    the wizard only free wand spells, which made each Triton Avenue battle long and costly. But a mana wisp gave
+    only +3 of 28, and used-up ones still show as entities, so mana wisps are sought only when mana is low."""
     if health is not None and health < REST_BELOW_FRACTION:
         return "health"
     if mana is not None and mana < MANA_BELOW_FRACTION:

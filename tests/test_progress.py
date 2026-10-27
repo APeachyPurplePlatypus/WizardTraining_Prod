@@ -148,7 +148,8 @@ class PlannedRouteTest(unittest.TestCase):
 class WispTest(unittest.TestCase):
     def test_health_comes_before_mana(self):
         self.assertEqual(wanted_wisp(0.3, 0.1), "health")
-        self.assertEqual(wanted_wisp(0.9, 0.2), "mana")
+        self.assertEqual(wanted_wisp(0.9, 0.1), "mana")
+        self.assertIsNone(wanted_wisp(0.9, 0.3))
         self.assertIsNone(wanted_wisp(0.9, 0.9))
         self.assertIsNone(wanted_wisp(None, None))
 
