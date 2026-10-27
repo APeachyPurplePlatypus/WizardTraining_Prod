@@ -252,7 +252,7 @@ class QuestLoop:
         """Pick an option of an NPC's services menu, as the offer policy decides."""
         options = await service_options(self.client)
         labels = [label for label, _ in options]
-        active = await self.active_main_quest()
+        active = await self.active_quest()
         self.record.note_menu_choice((active["name_key"], tuple(goal["id"] for goal in open_goals(active)))
                                      if active else None)
         choice = self.offer_policy.choose_service(labels, active_quest=active["title"] if active else None,
@@ -362,7 +362,7 @@ class QuestLoop:
                 return await self.rest_turn(state)
             if fraction < LOWEST_HEALTH_FRACTION_TO_KEEP_QUESTING:
                 raise StopRun("health is low and does not regenerate in this zone; left for the operator")
-        quest = await self.active_main_quest()
+        quest = await self.active_quest()
         if quest is None:
             if await wait_for_dialog(self.client, FOLLOW_UP_WAIT_SECONDS, poll=0.5):
                 return await self.dialog_turn()
@@ -379,13 +379,16 @@ class QuestLoop:
                               f"{quest.get('title') or quest['name_key']}, and neither its tags {goal.get('tags')} "
                               f"nor its enemy {goal.get('target_code')} could be found; left for the operator")
         self.record.quest = {"name": quest["name_key"], "title": quest.get("title"), "goal": goal["type"],
-                             "goal_id": goal.get("id"),
+                             "goal_id": goal.get("id"), "main": quest["mainline"] is True,
                              "goal_zone": goal["destination_zone"], "arrow": plain(arrow)}
         here = await self.client.zone_name()
         if self.record.limits.stay_in_world and leaves_world(here, goal["destination_zone"]):
+            side_quests = [entry.get("title") or entry["name_key"] for entry in (await read_quests(self.client))["journal"]
+                           if entry["mainline"] is not True]
             raise StopRun(f"the main quest {quest.get('title') or quest['name_key']} moves on to "
-                          f"{world_of(goal['destination_zone'])}; the side quests of {world_of(here)} come first, "
-                          "and the framework does not do side quests yet; left for the operator")
+                          f"{world_of(goal['destination_zone'])}; the side quests of {world_of(here)} come first "
+                          f"(open: {', '.join(side_quests) or 'none in the journal'}), and the framework cannot "
+                          "switch the active quest yet; left for the operator")
         if goal["destination_zone"] not in ("", await self.client.zone_name()):
             return await self.waypoint_turn(arrow, goal)
         handler = self.goal_handlers().get(goal["type"])
@@ -477,9 +480,10 @@ class QuestLoop:
             explored.append((round(x), round(y)))
         return turn
 
-    async def active_main_quest(self) -> dict | None:
+    async def active_quest(self) -> dict | None:
+        """The active quest. A side quest stops the run unless the offer policy takes side quests."""
         active = (await read_quests(self.client))["active"]
-        if active is not None and active["mainline"] is not True:
+        if active is not None and active["mainline"] is not True and not getattr(self.offer_policy, "side_quests", False):
             raise StopRun(f"the active quest {active['name_key']} is not a main quest")
         return active
 
@@ -573,11 +577,11 @@ class QuestLoop:
         return arrived
 
     async def goal_still_open(self, goal: dict) -> bool:
-        quest = await self.active_main_quest()
+        quest = await self.active_quest()
         return quest is not None and any(open_goal["id"] == goal.get("id") for open_goal in open_goals(quest))
 
     async def open_goal_count(self) -> int | None:
-        quest = await self.active_main_quest()
+        quest = await self.active_quest()
         return None if quest is None else len(open_goals(quest))
 
     async def planner(self) -> RoutePlanner:

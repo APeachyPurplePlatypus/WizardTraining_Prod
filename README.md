@@ -56,7 +56,7 @@ python -m wizardtraining play --level 7 --minutes 25 --battles 20
 ```
 
 - `probe` reads once without sending keys. Run it first.
-- `play` plays main quests until the level, the time or the battle limit is reached, or until something needs you. It also stops before the main quest leads to another world, because the current world's side quests come first; `--leave-world` follows the main quest anyway.
+- `play` plays main quests until the level, the time or the battle limit is reached, or until something needs you. With `--side-quests` it accepts every quest offer, side quests included, and plays whichever quest is active. It also stops before the main quest leads to another world, because the current world's side quests come first; `--leave-world` follows the main quest anyway.
 - `--approve-quest "<title>"` lets it accept a quest an NPC's menu offers by title, once you have checked it is a main quest.
 - `--use-potions` lets it drink health potions it already has when health is low out of battle. It never buys any.
 

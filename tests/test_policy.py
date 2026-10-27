@@ -1,7 +1,8 @@
 import unittest
 
 from wizardtraining.policy import (ACCEPT, DECLINE, GO_BACK, LEAVE_MENU, STOP, UNIVERSAL, Card, Cast, Combatant,
-                                   DamageModifier, MainQuestsOnly, Pass, RoundView, SpellTypePolicy, problem_with)
+                                   DamageModifier, MainQuestsOnly, Pass, RoundView, SpellTypePolicy, TakeAllQuests,
+                                   problem_with)
 
 HEAL = Card("Fairy", "Heal", True)
 BOLT = Card("Fire Cat", "Damage", True)
@@ -104,6 +105,22 @@ class ProblemWithTest(unittest.TestCase):
     def test_refuses_missing_enemies_and_unknown_targets(self):
         self.assertIn("not there", problem_with(Cast(0, "enemy", enemy=3), view([BOLT])))
         self.assertIn("unknown target", problem_with(Cast(0, "the boss"), view([BOLT])))
+
+
+class TakeAllQuestsTest(unittest.TestCase):
+    def test_accepts_every_offer(self):
+        policy = TakeAllQuests()
+        self.assertTrue(policy.side_quests)
+        self.assertFalse(MainQuestsOnly().side_quests)
+        self.assertEqual(policy.decide(["Will you help? I'm offering you a side quest."], can_go_back=True), ACCEPT)
+        self.assertEqual(policy.decide(["Will you help me?"], can_go_back=False), ACCEPT)
+
+    def test_takes_a_menus_first_quest_with_none_active(self):
+        policy = TakeAllQuests(approved_titles=["Putting Out the Fire!"])
+        options = ["A Good Day to Cyclops", "Putting Out the Fire!"]
+        self.assertEqual(policy.choose_service(options, active_quest=None, business_here=False), 1)
+        self.assertEqual(TakeAllQuests().choose_service(options, active_quest=None, business_here=False), 0)
+        self.assertEqual(TakeAllQuests().choose_service(options, active_quest="Other", business_here=False), LEAVE_MENU)
 
 
 class MainQuestsOnlyTest(unittest.TestCase):

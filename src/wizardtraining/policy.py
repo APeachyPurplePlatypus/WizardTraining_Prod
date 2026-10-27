@@ -184,6 +184,8 @@ class MainQuestsOnly:
     one main quest at a time. An approved quest's offer page is accepted unless it calls itself a side
     quest; the loop stops if it turns out not to be a main quest."""
 
+    side_quests = False
+
     def __init__(self, approved_titles=()):
         self.approved_titles = tuple(approved_titles)
         self._approved_offer_pending = False
@@ -206,3 +208,21 @@ class MainQuestsOnly:
                 self._approved_offer_pending = True
                 return index
         return None
+
+
+class TakeAllQuests(MainQuestsOnly):
+    """Accept every quest offer, side quests included, so the side quests of a world are in the quest book before
+    the main quest leaves it. The loop plays whichever quest the game has active. An NPC's services menu still
+    gets the active quest only when it has business there; with no quest active, the approved titles come
+    first, then the first quest the menu lists."""
+
+    side_quests = True
+
+    def decide(self, pages: list[str], *, can_go_back: bool) -> str:
+        return ACCEPT
+
+    def choose_service(self, options: list[str], *, active_quest: str | None, business_here: bool) -> int | str | None:
+        choice = super().choose_service(options, active_quest=active_quest, business_here=business_here)
+        if choice is None and active_quest is None and options:
+            return 0
+        return choice

@@ -107,6 +107,7 @@ def describe_changes(before: dict | None, after: dict, quest_before: dict | None
     if quest_after and (quest_before is None or (quest_before.get("title"), quest_before.get("goal_id"))
                         != (quest_after.get("title"), quest_after.get("goal_id"))):
         destination = quest_after.get("goal_zone") or "this zone"
-        found.append(("quest", f"{quest_after.get('title') or quest_after.get('name')}: "
+        kind = " (side quest)" if quest_after.get("main") is False else ""
+        found.append(("quest", f"{quest_after.get('title') or quest_after.get('name')}{kind}: "
                                f"{quest_after.get('goal')} goal in {destination}"))
     return found
