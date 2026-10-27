@@ -54,7 +54,7 @@ Some zones' walkable areas come in separate pieces, such as Triton Avenue's lowe
 
 - **collision:** A* over Deimos's hex walk grid, built from the zone's collision.bcd. It is bounded by `MAX_GRID_NODES` and `PLANNING_SECONDS`, then string-pulled into straight legs that Deimos's `straight_path_walkable` accepts.
 - **nav:** A* over the zone.nav waypoint graph, string-pulled into legs that stay within one nav cell of a waypoint.
-- **straight:** one leg, refused if it crosses a duel circle.
+- **straight:** one leg, refused if it crosses a duel circle or passes close to an enemy. When walk data loaded, it is also refused if it is more dangerous than its ends, so it never cuts across a patrol path.
 
 `Hazards` adds cost near enemies (`ENEMY_AVOID_RADIUS`, `ENEMY_AVOID_WEIGHT`), and keeps merged legs `LEG_ENEMY_CLEARANCE` from enemies. It forbids duel circles (`DUEL_CIRCLE_NO_GO`) and recorded obstacles (`OBSTACLE_RADIUS`).
 

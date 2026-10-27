@@ -3,7 +3,8 @@
 Three methods, tried in this order by `movement.travel`:
 1. "collision": a hex walk grid over the zone's walkable mesh, built by Deimos from collision.bcd.
 2. "nav": the zone's zone.nav waypoint graph.
-3. "straight": one straight leg to the destination.
+3. "straight": one straight leg to the destination, only where it keeps clear of enemies and, when walk data
+   loaded, crosses no patrol path its ends are not already on.
 
 Grid and graph routes are searched with A*, then merged into as few straight legs as the walk data
 allows ("string pulling"). Steps near enemies cost more, so routes keep to the parts of a street that
@@ -246,6 +247,17 @@ class RoutePlanner:
             usable.append(NAV)
         return usable + [STRAIGHT]
 
+    def straight_line_ok(self, a: Point, b: Point, hazards: Hazards) -> bool:
+        """A straight leg has nothing keeping it on the sidewalks, so it must stay clear of enemies, and when walk
+        data loaded it may be no more dangerous than its ends: a straight line to a door once cut across a
+        street of patrolling Scarlet Screamers after the walk-data route was blocked."""
+        if not hazards.line_is_safe(a, b):
+            return False
+        if self.methods() == [STRAIGHT]:
+            return True
+        ends = max(hazards.step_cost(a), hazards.step_cost(b))
+        return hazards.line_cost(a, b) <= ends + MERGE_DANGER_TOLERANCE
+
     def walls_allow(self, a: Point, b: Point) -> bool:
         return self.grid_line_walkable is None or self.grid_line_walkable(a, b)
 
@@ -270,5 +282,5 @@ class RoutePlanner:
                                and self.walls_allow(points[i], points[j]) and hazards.line_is_safe(points[i], points[j])
                                and danger_ok(i, j))
         if method == STRAIGHT:
-            return [goal] if hazards.line_is_open(start, goal) else None
+            return [goal] if self.straight_line_ok(start, goal, hazards) else None
         raise ValueError(f"unknown route method {method!r}")

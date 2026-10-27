@@ -180,6 +180,19 @@ class RoutePlannerTest(unittest.TestCase):
         self.assertEqual(planner.crossing(lower, door_in_a_wall, {}), up)
         self.assertIsNone(planner.crossing(lower, (upper[0] + 1000 + GOAL_PIECE_REACH + 100, 0), {}))
 
+    def test_straight_leg_keeps_clear_of_enemies(self):
+        planner = RoutePlanner("zone")
+        self.assertIsNone(planner.route(STRAIGHT, (0, 0), (5000, 0), Hazards.of(enemies=[(2500, 200)])))
+        self.assertEqual(planner.route(STRAIGHT, (0, 0), (5000, 0), Hazards.of(enemies=[(2500, 2000)])), [(5000, 0)])
+
+    def test_straight_leg_never_cuts_across_a_patrol_when_walk_data_loaded(self):
+        patrols = PatrolMap.from_paths({1: (2500, -3000, 0), 2: (2500, 3000, 0)}, {"Path 10_Screamer": [1, 2]})
+        hazards = Hazards.of(patrols=patrols)
+        with_walk_data = RoutePlanner("zone", walk_grid=SquareWalkGrid(3), grid_line_walkable=lambda a, b: False)
+        self.assertIsNone(with_walk_data.route(STRAIGHT, (0, 0), (5000, 0), hazards))
+        self.assertEqual(with_walk_data.route(STRAIGHT, (0, 0), (1000, 0), hazards), [(1000, 0)])
+        self.assertEqual(RoutePlanner("zone").route(STRAIGHT, (0, 0), (5000, 0), hazards), [(5000, 0)])
+
     def test_unknown_method_is_an_error(self):
         with self.assertRaises(ValueError):
             RoutePlanner("zone").route("teleport", (0, 0), (1, 1))
