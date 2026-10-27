@@ -45,7 +45,7 @@ from .state import attempt, battle_showing, free_to_move, health_fraction, mana_
 from .placed import gate_toward, objects_for_goal
 from .targets import bystanders, others, quest_targets, safe_wisps, summary, too_close
 from .teleports import LEFT_ZONE, NO_EFFECT, TeleportVolume, describe_outcome
-from .ui import POTION_BUTTON, click, visible_children
+from .ui import POTION_BUTTON, click, close_known_popup, visible_children
 
 TARGET_REACH = 1200.0
 ARROW_ARRIVE_RADIUS = 250.0
@@ -147,9 +147,15 @@ class QuestLoop:
         self._last_state, self._last_quest = state, dict(self.record.quest or {})
 
     async def checked_turn(self, state: dict) -> dict:
+        if closed := await close_known_popup(self.client):
+            self.events.emit("popup", f"closed the {closed} window without choosing anything")
+            return progressed(f"closed the {closed} window")
         try:
             return await self.play_turn(state)
         except KeysIgnored:
+            if closed := await close_known_popup(self.client):
+                self.events.emit("popup", f"closed the {closed} window, which was holding the keyboard")
+                return progressed(f"closed the {closed} window")
             if await self.busy_now():
                 return stalled("a turn key was ignored while a dialog or menu was opening")
             if free_to_move(state):

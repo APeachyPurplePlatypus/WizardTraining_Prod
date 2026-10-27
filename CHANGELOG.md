@@ -6,6 +6,10 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Added
 
+- **Closing the Endorse a Wizard window.**
+  - **What:** before each turn, and before concluding that a popup holds the keyboard, the loop closes known popups with their own close button. So far that's only the "Endorse a Wizard" window (`WorldView/EndorsementWindow/CloseEndorsementWindowButton`). It never picks an endorsement, and the event log never records the other player's name. Unknown popups still stop the run.
+  - **Why:** after another player joined one of the wizard's battles, the game asked to endorse them. The window held the keyboard, and the run stopped on ignored turn keys. It's the same window the operator closed by hand after a restart. Closing it declines an optional social action; nothing is sent to anyone.
+
 - **Targets for goals the quest arrow doesn't point at.**
   - **What:** when the arrow reads (0, 0, 0), the loop now looks for the goal's target itself. It tries placed objects first: the zone's `gamedata.bin` gives every placed object's template and position (`placed.py`), and the goal's client tags name the objects it needs, so the loop walks to the nearest unused match. Otherwise it tries enemies: each goal now carries the language codes its text fills in for the item and the enemy, and each tracked enemy carries its template's display code, so the loop walks to the nearest loaded enemy whose code the goal names. A used object isn't visited again, and the event log says which target was chosen.
   - **Why:** "Clear as Crystal" asks the wizard to collect a Cog, then defeat Scarlet Screamers. The goal the game tracked had no quest helper, so the arrow read (0, 0, 0), and the Cog wasn't among the loaded entities. The goal's tags were `WC_TA_Cog` and `Ddl_WC_TA_Cogs`, and Triton's `gamedata.bin` places six `WC_TA_Cog instance` objects on the upper level. The defeat goal names its enemy as `WizardMobs_00000331`, "Scarlet Screamer".

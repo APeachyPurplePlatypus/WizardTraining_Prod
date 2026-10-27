@@ -13,6 +13,10 @@ from wizwalker import HookAlreadyActivated
 from .session import HOOK_TIMEOUT_SECONDS
 
 POTION_BUTTON = ["WorldView", "windowHUD", "btnPotions"]
+CLOSABLE_POPUPS = {
+    "Endorse a Wizard": (["WorldView", "EndorsementWindow"],
+                         ["WorldView", "EndorsementWindow", "CloseEndorsementWindowButton"]),
+}
 
 
 async def window_at(root, path: list[str]):
@@ -62,6 +66,17 @@ async def click_window(client, window) -> None:
     await enable_clicks(client)
     async with client.mouse_handler:
         await client.mouse_handler.click_window(window)
+
+
+async def close_known_popup(client) -> str | None:
+    """Close the first showing popup in CLOSABLE_POPUPS with its own close button, and return its name.
+    These ask for an optional choice, such as endorsing another player after a shared battle, and hold the
+    keyboard until closed. Closing declines; nothing is sent. Unknown popups are left alone."""
+    for name, (window, close_button) in CLOSABLE_POPUPS.items():
+        if await showing(client, window):
+            await click(client, close_button)
+            return name
+    return None
 
 
 async def visible_children(client, path: list[str]) -> list[str]:
