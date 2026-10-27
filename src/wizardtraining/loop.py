@@ -603,13 +603,15 @@ class QuestLoop:
         nine to thirteen enemies lost mana, since the fights it led into cost 5 to 10 each and a wisp gives 3 to 6.
         The exit leads back toward the hub: from Cyclops Lane, to Olde Town. For health in a street, explore it:
         wisps are spawned, not placed, and load only nearby. Potions are never bought."""
+        indoors = INTERIOR_WORD in state["zone"]
+        if stat == "mana" and not indoors and state["zone"] not in self.record.zones_with_enemies:
+            self.top_up_in(state["zone"])
         turn = await self.wisp_turn(stat, state, reach=math.inf)
         if turn is not None:
             return turn
         planner = await self.planner()
         if await nearby_enemies(self.client):
             self.saw_enemies(state["zone"])
-        indoors = INTERIOR_WORD in state["zone"]
         if not indoors and state["zone"] not in self.record.zones_with_enemies:
             return await self.safe_zone_refill_turn(stat, state, planner)
         if indoors or stat == "mana":
@@ -632,11 +634,17 @@ class QuestLoop:
         mana comes back (`wait_for_mana_turn`) until `progress.topped_up`; health comes back meanwhile."""
         if stat == "health" and mana_for_a_fight(mana_fraction(state)):
             return None
-        if self._topping_up_in != state["zone"]:
-            self._topping_up_in = state["zone"]
-            self.record.explored.pop(f"{state['zone']}|{MANA_WISP}s", None)
+        self.top_up_in(state["zone"])
         turn = await self.explore_for_wisps_turn("mana", state, planner, again=False)
         return turn if turn is not None else await self.wait_for_mana_turn(state)
+
+    def top_up_in(self, zone: str) -> None:
+        """From now on, refill mana in `zone` until `progress.topped_up`, not just until a fight is allowed. Set as
+        soon as a mana refill begins in a zone without enemies: set only once its search began, a first wisp in Olde
+        Town brought mana from 11 to 14, over the 12 a fight needs, and the wizard went back to Cyclops Lane."""
+        if self._topping_up_in != zone:
+            self._topping_up_in = zone
+            self.record.explored.pop(f"{zone}|{MANA_WISP}s", None)
 
     async def wait_for_mana_turn(self, state: dict) -> dict:
         """Stand still for up to MANA_WAIT_SECONDS, so the loop keeps checking for battles, popups and the STOP file
