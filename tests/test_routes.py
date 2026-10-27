@@ -1,4 +1,5 @@
 import math
+import struct
 import unittest
 
 from wizardtraining.patrols import PatrolMap
@@ -6,7 +7,7 @@ from wizardtraining.routes import (COLLISION, DUEL_CIRCLE_NO_GO, GOAL_PIECE_REAC
                                    MAX_GAP_STEP, NAV, GapStep,
                                    NAV_CELL_REACH,
                                    OBSTACLE_RADIUS, STRAIGHT, Hazards, NavGraph, RoutePlanner, grid_path,
-                                   no_more_dangerous, string_pull)
+                                   no_more_dangerous, parse_nav_file, string_pull)
 from wizardtraining.motion import Track
 from wizardtraining.teleports import TeleportVolume
 
@@ -315,6 +316,32 @@ class GapStepTest(unittest.TestCase):
         self.assertIsNone(self.planner(MAX_GAP_STEP + 1).gap_step((2467, 201), (-11333, -6232)))
         self.assertIsNone(self.planner(175.0).gap_step((2467, 201), (-11333, -6232), failed=[(4, 1)]))
         self.assertIsNone(RoutePlanner("zone").gap_step((0, 0), (1, 1)))
+
+
+def nav_file(waypoints, links) -> bytes:
+    data = bytearray(b"\x00\x00") + struct.pack("<i", len(waypoints))
+    for (x, y, z), number in waypoints:
+        data += struct.pack("<fffh", x, y, z, number)
+    data += struct.pack("<i", len(links))
+    for a, b in links:
+        data += struct.pack("<hh", a, b)
+    return bytes(data)
+
+
+class NavFileTest(unittest.TestCase):
+    def test_reads_waypoints_and_links(self):
+        data = nav_file([((0, 0, 0), 0), ((480, 0, 0), 1), ((480, 480, 0), 2)], [(0, 1), (1, 0), (1, 2), (2, 1)])
+        waypoints, links = parse_nav_file(data)
+        self.assertEqual(waypoints, [(0.0, 0.0, 0.0), (480.0, 0.0, 0.0), (480.0, 480.0, 0.0)])
+        self.assertEqual(links, [(0, 1), (1, 0), (1, 2), (2, 1)])
+
+    def test_keeps_the_waypoints_before_a_number_out_of_place(self):
+        """Olde Town's file numbers its 352nd waypoint 350 again."""
+        data = nav_file([((0, 0, 0), 0), ((480, 0, 0), 1), ((960, 0, 0), 1), ((7000, 0, 0), 2)],
+                        [(0, 1), (1, 0), (1, 2), (2, 3)])
+        waypoints, links = parse_nav_file(data)
+        self.assertEqual(len(waypoints), 2)
+        self.assertEqual(links, [(0, 1), (1, 0)])
 
 if __name__ == "__main__":
     unittest.main()

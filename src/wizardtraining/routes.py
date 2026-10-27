@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import heapq
 import math
+import struct
 import time
 from dataclasses import dataclass, field, replace
 from typing import Callable
@@ -148,6 +149,33 @@ def duel_clearance(here: Point, circle: Point) -> float:
     the first time duel circles were seen, the wizard stood 800 units from one, every route from there entered
     that radius, and it stood still until a Fire Elf engaged it."""
     return min(DUEL_CIRCLE_NO_GO, max(0.0, math.dist(xy(here), xy(circle)) - DUEL_WALK_AWAY_MARGIN))
+
+
+NAV_HEADER_BYTES = 2
+NAV_WAYPOINT_BYTES = 14
+
+
+def parse_nav_file(data: bytes) -> tuple[list[tuple[float, float, float]], list[tuple[int, int]]]:
+    """A zone.nav file's waypoints and links: after a 2-byte header, the waypoint count, each waypoint's x, y, z and
+    its number, then the link count and each link's two waypoint numbers. Waypoints are kept up to the first whose
+    number differs from its place, with the links among them. WizWalker's reader (`pharse_nav_data`) gives up on
+    such a file: Olde Town's numbers its 352nd waypoint 350 again, so its nav graph never loaded, and no route
+    reached the gate to Triton Lane, cut off in a walkable piece of its own. The 6 waypoints after the mismatch
+    have links across most of the town under either numbering, so they are left out."""
+    offset = NAV_HEADER_BYTES
+    (count,) = struct.unpack_from("<i", data, offset)
+    offset += 4
+    waypoints = []
+    for place in range(count):
+        x, y, z, number = struct.unpack_from("<fffh", data, offset + NAV_WAYPOINT_BYTES * place)
+        if number != place:
+            break
+        waypoints.append((x, y, z))
+    offset += NAV_WAYPOINT_BYTES * count
+    (link_count,) = struct.unpack_from("<i", data, offset)
+    links = [struct.unpack_from("<hh", data, offset + 4 + 4 * index) for index in range(link_count)]
+    kept = len(waypoints)
+    return waypoints, [(a, b) for a, b in links if 0 <= a < kept and 0 <= b < kept]
 
 
 @dataclass(frozen=True)

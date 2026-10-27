@@ -1,6 +1,7 @@
 """Load a zone's walk data from the installed game files into a `RoutePlanner`.
 
-- zone.nav: read with WizWalker's `pharse_nav_data` (the library's own spelling).
+- zone.nav: read by `routes.parse_nav_file`, which keeps the waypoints up to the first whose number is out of place,
+  where WizWalker's `pharse_nav_data` gives up on the whole file.
 - collision.bcd: Deimos builds a walk grid from it (src/collision.py, ISC; src/collision_math.py,
   GPL-3.0, which also needs numpy and shapely). Deimos is not an installable package, so its checkout
   is named in WIZARDTRAINING_DEIMOS. Without it the "collision" method is skipped and routes use the
@@ -21,10 +22,9 @@ from collections import deque
 from pathlib import Path
 
 from wizwalker import Wad
-from wizwalker.utils import pharse_nav_data
 
 from .config import DEIMOS_VARIABLE
-from .routes import NavGraph, RoutePlanner
+from .routes import NavGraph, RoutePlanner, parse_nav_file
 from .patrols import PatrolMap, parse_nodes, parse_paths
 from .placed import parse_placed_objects
 from .teleports import parse_teleport_volumes
@@ -258,7 +258,7 @@ async def _teleport_volumes(wad):
 
 async def _nav_graph(wad):
     try:
-        vertices, edges = pharse_nav_data(await wad.get_file("zone.nav"))
+        vertices, edges = parse_nav_file(await wad.get_file("zone.nav"))
     except Exception as exc:
         return None, f"unavailable: {type(exc).__name__}"
     return NavGraph.from_edges(vertices, edges), f"{len(vertices)} waypoints"

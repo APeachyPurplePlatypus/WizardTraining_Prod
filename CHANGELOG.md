@@ -25,6 +25,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **Olde Town's nav graph loads.**
+  - **What:** zone.nav files are read by `routes.parse_nav_file`, which keeps the waypoints up to the first whose number differs from its place, with the links among them. WizWalker's reader gave up on any such file.
+  - **Why:** Olde Town's file numbers its 352nd waypoint 350 again, so the zone never had a nav graph. Leaving Sapphyra's Tower for the Haunted Cave, the arrow pointed at the gate to Triton Lane, cut off in a walkable piece of its own 652 units from the street; with no nav graph, no route reached it and the run stopped for turns without progress. With the 351 waypoints before the mismatch, the planner finds a 15-leg route from the tower to the gate. The last 6 waypoints are left out: under either numbering their links cross most of the town (up to 7,368 units, where links are typically 480). The Commons (290 waypoints) and Firecat Alley (1,116) read as before.
+  - **Not verified yet:** the walk, in the game.
+
 - **A tower's door is entered with X wherever its prompt shows.**
   - **What:** on a goal in another zone, when the interact prompt shows within 2,500 units of the quest arrow (`loop.PROMPT_DOOR_REACH`), the wizard presses X and waits for the zone to change (`QuestLoop.enter_with_x_turn`); the walk toward the arrow stops as soon as the prompt shows.
   - **Why:** "A Brief History of the Spiral" sends the wizard into Sapphyra's Tower in Olde Town. The arrow points at the door volume inside a fenced courtyard the wizard cannot walk into; X was taken only at the arrow, so the run tried teleporters and a step over the fence and stopped for turns without progress. The operator: "u have to press X since it is a tower, like a dungion" and "the prompt to press X has been open since you got stuck". Read at the fence: the prompt showing, 1,732 units from the door.
