@@ -95,6 +95,8 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **A flee is confirmed when the game asks.** After clicking Flee, the battle code waits a second. If a message box shows a caption that mentions fleeing, it answers Yes (`centerButton`, as on the game's other yes/no boxes). Any other box is left alone, and the round's event says what showed. In the game the Flee click alone never ended a battle, neither against General Akilles nor against a Warhorn in Cyclops Lane. A confirmation box is the likeliest reason, but this is not verified yet.
+
 - **Safe places are told by the enemies loaded, not by patrol paths.** The gear turn and the end of a run first required a zone whose files show no patrol paths. But the Commons, Ravenwood, the Shopping District and Olde Town have patrol paths for their friendly NPCs (120 segments in the Commons), and General Akilles' tower has none although he stands in it. A run starting in the Commons never checked its gear. `safe_here` now asks only that no enemy be loaded nearby.
 
 - **A battle that cannot be fled is fought on.** When the wizard flees and the battle goes on to another round, it does not try again in that battle (`RoundView.can_flee`) and plays its cards instead. With 1 mana against General Akilles in his tower, the Flee click did not end the battle; the wizard chose to flee each round, which passed, while the General and his Cyclops took its health from 801 to 486 in three rounds.

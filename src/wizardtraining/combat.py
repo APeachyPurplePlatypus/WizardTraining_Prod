@@ -24,7 +24,7 @@ from .movement import KeysIgnored, face_and_step
 from .policy import UNIVERSAL, Card, Cast, CombatPolicy, Combatant, DamageModifier, Flee, Pass, RoundView, problem_with
 from .reports import plain
 from .state import attempt
-from .ui import enable_clicks
+from .ui import click, enable_clicks, showing, text_of, visible_children
 
 APPROACH_STEP_SECONDS = 0.4
 MAX_APPROACH_STEPS = 15
@@ -35,6 +35,10 @@ PHASE_POLL_SECONDS = 0.5
 CARDS_DRAW_SECONDS = 0.5
 EMPTY_HAND_READS = 6
 PAUSE_BETWEEN_CAST_CLICKS_SECONDS = 0.5
+FLEE_CONFIRM_WAIT_SECONDS = 1.0
+MESSAGE_BOX = ["MessageBoxModalWindow"]
+MESSAGE_BOX_CAPTION = [*MESSAGE_BOX, "messageBoxBG", "messageBoxLayout", "TextArea", "CaptionText"]
+MESSAGE_BOX_YES = [*MESSAGE_BOX, "messageBoxBG", "messageBoxLayout", "AdjustmentWindow", "Layout", "centerButton"]
 BATTLE_END_CONFIRM_SECONDS = 1.0
 DUEL_CIRCLE_EXIT_SECONDS = 2.0
 SCHOOL_NAMES = {2343174: "Fire", 72777: "Ice", 83375795: "Storm", 2448141: "Myth", 2330892: "Life",
@@ -207,8 +211,7 @@ async def play_round(combat, policy: CombatPolicy, can_flee: bool = True) -> dic
         return entry
     choice = policy.choose(view)
     if isinstance(choice, Flee):
-        await combat.flee_button()
-        entry["action"] = f"flee: {choice.reason}"
+        entry["action"] = f"flee: {choice.reason} ({await flee(combat)})"
         return entry
     if choice is None or isinstance(choice, Pass):
         await combat.pass_button()
@@ -222,6 +225,22 @@ async def play_round(combat, policy: CombatPolicy, can_flee: bool = True) -> dic
     card = view.cards[choice.card]
     entry["action"] = f"cast {card.name}{f' ({card.school})' if card.school else ''} on {choice.target}"
     return entry
+
+
+async def flee(combat) -> str:
+    """Click Flee, then answer Yes when the game asks to confirm with a message box whose caption mentions fleeing,
+    like its "Are you sure you want to add this spell to your spellbook?" box (centerButton is Yes). Says what
+    followed. Fleeing a Warhorn with 1 mana did not end the battle when only Flee was clicked."""
+    await combat.flee_button()
+    await asyncio.sleep(FLEE_CONFIRM_WAIT_SECONDS)
+    client = combat.client
+    if not await showing(client, MESSAGE_BOX):
+        return f"no confirmation box; showing {await visible_children(client, [])}"
+    caption = (await text_of(client, MESSAGE_BOX_CAPTION)).replace("<center>", "").replace("</center>", "").strip()
+    if "flee" not in caption.lower():
+        return f"a message box that does not mention fleeing was left alone: {caption!r}"
+    await click(client, MESSAGE_BOX_YES)
+    return f"confirmed {caption!r}"
 
 
 def cast_target(choice: Cast, me, enemies: list):
