@@ -2,8 +2,10 @@ import math
 import unittest
 
 from wizardtraining.patrols import PatrolMap
-from wizardtraining.routes import (COLLISION, DUEL_CIRCLE_NO_GO, LEG_ENEMY_CLEARANCE, NAV, OBSTACLE_RADIUS, STRAIGHT,
-                                   Hazards, NavGraph, RoutePlanner, grid_path, no_more_dangerous, string_pull)
+from wizardtraining.routes import (COLLISION, DUEL_CIRCLE_NO_GO, GOAL_PIECE_REACH, LEG_ENEMY_CLEARANCE, NAV,
+                                   OBSTACLE_RADIUS, STRAIGHT, Hazards, NavGraph, RoutePlanner, grid_path,
+                                   no_more_dangerous, string_pull)
+from wizardtraining.teleports import TeleportVolume
 
 SPACING = 100.0
 
@@ -160,6 +162,23 @@ class RoutePlannerTest(unittest.TestCase):
         self.assertEqual(legs[-1], (1000, 0))
         self.assertTrue(all(hazards.line_is_open(a, b) for a, b in zip(path, path[1:])))
         self.assertIsNone(RoutePlanner("zone").route(STRAIGHT, (0, 0), (1000, 0), hazards))
+
+    def test_a_door_in_a_wall_belongs_to_the_piece_beside_it(self):
+        lower, upper = (0, 0), (10_000, 0)
+
+        def piece_of(point, reach=150):
+            distances = {0: math.dist(point, lower), 1: math.dist(point, upper)}
+            nearest = min(distances, key=distances.get)
+            return nearest if distances[nearest] - 1000 <= reach else None
+
+        planner = RoutePlanner("zone")
+        planner.piece_of = piece_of
+        up = TeleportVolume("Tele Up", 500, 0, 0, 100)
+        planner.teleports = [(up, 0)]
+        door_in_a_wall = (upper[0] + 1000 + GOAL_PIECE_REACH - 100, 0)
+        self.assertIsNone(piece_of(door_in_a_wall))
+        self.assertEqual(planner.crossing(lower, door_in_a_wall, {}), up)
+        self.assertIsNone(planner.crossing(lower, (upper[0] + 1000 + GOAL_PIECE_REACH + 100, 0), {}))
 
     def test_unknown_method_is_an_error(self):
         with self.assertRaises(ValueError):

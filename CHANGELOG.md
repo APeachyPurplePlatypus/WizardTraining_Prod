@@ -6,6 +6,10 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **Doors in walls are reached through teleporters.**
+  - **What:** a goal now belongs to the nearest walkable piece within 600 units, not 150. When that piece is not the wizard's, the loop walks into a teleporter first, as it does for other goals on another level.
+  - **Why:** "The Enemy Revealed" sends the wizard into a building on Triton's upper level. Its door stands in a wall, 150 to 300 units from the nearest walkable ground, so the planner judged the door to be in no walkable piece and never looked for a teleporter. The wizard was on the lower level; every route failed and the run stopped on turns without progress. Doors, NPCs behind counters and quest objects are often outside the walkable area; 600 units covers what was seen while staying well short of the distance between levels.
+
 - **The dodge limit counts all step-aways, not each enemy's.**
   - **What:** after three step-aways of any kind within a minute, at half health or more, the wizard walks on. The exception is a group of three or more enemies, which it still steps away from.
   - **Why:** on the way to Triton's Tele Up, several Ghost-Blue-L02 stood around the path. The per-enemy count let the wizard walk past one, then step away from the next, and the run stopped on turns without progress again.

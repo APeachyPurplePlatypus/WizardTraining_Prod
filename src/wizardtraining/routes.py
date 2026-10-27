@@ -40,6 +40,7 @@ LINE_SAMPLE_SPACING = 60.0
 MAX_MERGE_LOOKAHEAD = 40
 MAX_GRID_NODES = 8000
 PLANNING_SECONDS = 2.0
+GOAL_PIECE_REACH = 600.0
 
 
 @dataclass(frozen=True)
@@ -217,7 +218,7 @@ class RoutePlanner:
         self.grid_line_walkable = grid_line_walkable
         self.nav_graph = nav_graph
         self.status = status or {}
-        self.piece_of: Callable[[Point], int | None] | None = None
+        self.piece_of: Callable[..., int | None] | None = None
         self.teleports: list[tuple[TeleportVolume, int | None]] = []
         self.placed_objects: list = []
         self.exploration_points: list[tuple[Point, int]] = []
@@ -225,10 +226,13 @@ class RoutePlanner:
 
     def crossing(self, start, goal, outcomes: dict[str, object]) -> TeleportVolume | None:
         """A teleport volume to walk into when `goal` lies in another walkable piece than `start`, or None
-        when they are in the same piece, the pieces are unknown, or no volume is left to try."""
+        when they are in the same piece, the pieces are unknown, or no volume is left to try.
+
+        Doors stand in walls, and NPCs and quest objects often behind counters, outside the walkable area: a
+        goal belongs to the nearest piece within GOAL_PIECE_REACH."""
         if self.piece_of is None:
             return None
-        start_piece, goal_piece = self.piece_of(xy(start)), self.piece_of(xy(goal))
+        start_piece, goal_piece = self.piece_of(xy(start)), self.piece_of(xy(goal), GOAL_PIECE_REACH)
         if start_piece is None or goal_piece is None or start_piece == goal_piece:
             return None
         return choose_crossing(self.teleports, start_piece=start_piece, goal_piece=goal_piece, outcomes=outcomes,
