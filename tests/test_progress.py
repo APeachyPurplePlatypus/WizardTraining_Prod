@@ -1,9 +1,10 @@
 import unittest
 
-from wizardtraining.progress import (APPROACH_MARGIN, ENEMY_NEAR_PATH, ENEMY_PATH_CLEARANCE, ENGAGE_MANA_FRACTION,
-                                     MEANINGFUL_TRAVEL_DISTANCE, LimitReached, Limits, PlannedRoute, RunRecord, StopRun,
-                                     check_limits, leaves_world, mana_for_a_fight, nav_did_better, progressed,
-                                     remember_obstacles, should_drink_potion, stalled, travel_outcome, wanted_wisp,
+from wizardtraining.progress import (APPROACH_MARGIN, ENEMY_NEAR_PATH, ENEMY_PATH_CLEARANCE, ENGAGE_HEALTH_FRACTION,
+                                     ENGAGE_MANA_FRACTION, MEANINGFUL_TRAVEL_DISTANCE, LimitReached, Limits,
+                                     PlannedRoute, RunRecord, StopRun, check_limits, health_for_a_fight, leaves_world,
+                                     mana_for_a_fight, nav_did_better, progressed, remember_obstacles,
+                                     short_for_a_fight, should_drink_potion, stalled, travel_outcome, wanted_wisp,
                                      world_of)
 
 
@@ -182,6 +183,19 @@ class WispTest(unittest.TestCase):
         self.assertFalse(mana_for_a_fight(ENGAGE_MANA_FRACTION - 0.01))
         self.assertTrue(mana_for_a_fight(ENGAGE_MANA_FRACTION))
         self.assertTrue(mana_for_a_fight(None))
+
+    def test_a_fight_needs_health(self):
+        self.assertFalse(health_for_a_fight(1 / 801))
+        self.assertFalse(health_for_a_fight(ENGAGE_HEALTH_FRACTION - 0.01))
+        self.assertTrue(health_for_a_fight(ENGAGE_HEALTH_FRACTION))
+        self.assertTrue(health_for_a_fight(None))
+
+    def test_health_comes_before_mana_for_a_fight(self):
+        self.assertEqual(short_for_a_fight(1 / 801, 22 / 30), "health")
+        self.assertEqual(short_for_a_fight(1 / 801, 0.0), "health")
+        self.assertEqual(short_for_a_fight(1.0, 1 / 30), "mana")
+        self.assertIsNone(short_for_a_fight(ENGAGE_HEALTH_FRACTION, ENGAGE_MANA_FRACTION))
+        self.assertIsNone(short_for_a_fight(None, None))
 
 
 class PotionTest(unittest.TestCase):

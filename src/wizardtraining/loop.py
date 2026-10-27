@@ -41,9 +41,9 @@ from .movement import KeysIgnored, Reroute, face, travel
 from .navigation import load_planner
 from .policy import LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, SpellTypePolicy
 from .progress import (DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY, ENEMY_NEAR_PATH, LimitReached, Limits, PATH_THREATS,
-                       PlannedRoute, RunRecord, StopRun, check_limits, leaves_world, mana_for_a_fight, nav_did_better,
-                       progressed, remember_obstacles, should_drink_potion, stalled, travel_outcome, wanted_wisp,
-                       WISP_ANY_DIRECTION_BELOW_FRACTION, world_of)
+                       PlannedRoute, RunRecord, StopRun, check_limits, leaves_world, nav_did_better,
+                       progressed, remember_obstacles, short_for_a_fight, should_drink_potion, stalled, travel_outcome,
+                       wanted_wisp, WISP_ANY_DIRECTION_BELOW_FRACTION, world_of)
 from .quests import arrow_shows_no_target, game_language, open_goals, read_quest_arrow, read_quests
 from .reports import plain, save_report
 from .routes import DUEL_CIRCLE_NO_GO, Hazards, RoutePlanner
@@ -466,8 +466,11 @@ class QuestLoop:
                           f"{world_of(goal['destination_zone'])}; the side quests of {world_of(here)} come first "
                           f"(open: {', '.join(side_quests) or 'none in the journal'}), and the framework cannot "
                           "switch the active quest yet; left for the operator")
-        if goal["type"] in FIGHT_GOALS and not mana_for_a_fight(mana_fraction(state)):
-            return await self.mana_turn(state)
+        short = short_for_a_fight(health_fraction(state), mana_fraction(state))
+        if goal["type"] in FIGHT_GOALS and short is not None:
+            turn = await self.refill_turn(short, state)
+            if turn is not None:
+                return turn
         if goal["destination_zone"] not in ("", await self.client.zone_name()):
             return await self.waypoint_turn(arrow, goal)
         handler = self.goal_handlers().get(goal["type"])
@@ -584,55 +587,65 @@ class QuestLoop:
                                       also=target_in_reach, avoid=bystanders(enemies, targets), ignore=targets,
                                       seen=summary(enemies))
 
-    async def mana_turn(self, state: dict) -> dict:
-        """Too little mana for a fight the quest asks for (`progress.mana_for_a_fight`). Fetch the nearest safe mana
-        wisp in sight, however far. With none in an interior, walk out through its exit volume: the streets have
-        wisps, and General Akilles' tower has none. With none in a street, explore it: wisps are spawned, not
-        placed, and load only nearby. Mana does not come back by itself (0 stayed 0 for minutes of standing),
-        potions are never bought, and every spell costs mana, wand spells too."""
-        turn = await self.wisp_turn("mana", state, reach=math.inf)
+    async def refill_turn(self, stat: str, state: dict) -> dict | None:
+        """Too little health or mana for a fight the quest asks for (`progress.short_for_a_fight`). Fetch the
+        nearest safe wisp of that kind in sight, however far. With none in an interior, walk out through its exit
+        volume: the streets have wisps, and General Akilles' tower has none. With none in a street, explore it:
+        wisps are spawned, not placed, and load only nearby. In a zone where no enemy has shown up this run, such
+        as the Commons, None, so the wizard goes on toward the quest: wisps come with the enemies. Neither comes
+        back by itself (0 mana stayed 0 for minutes of standing, 263 health for over two minutes), potions are never
+        bought, and every spell costs mana, wand spells too."""
+        turn = await self.wisp_turn(stat, state, reach=math.inf)
         if turn is not None:
             return turn
         planner = await self.planner()
-        if INTERIOR_WORD not in state["zone"]:
-            return await self.explore_for_mana_turn(state, planner)
-        exits = [volume for volume, _ in planner.teleports if EXIT_WORD in volume.name.lower()]
-        if exits:
-            me = await self.client.body.position()
-            door = min(exits, key=lambda volume: flat_distance(me, volume.point))
-            self.events.emit("mana", f"{state['mana']} of {state['max_mana']} mana and no mana wisp here; leaving "
-                                     f"through {door.name} for the street's wisps")
-            if flat_distance(me, door.point) <= WAYPOINT_ARRIVE_RADIUS:
-                return await self.zone_door_turn(XYZ(door.x, door.y, door.z))
-            return await self.travel_turn("walk to the exit for mana wisps", XYZ(door.x, door.y, door.z),
-                                          arrive_radius=door.radius)
-        return stalled("too little mana for the fight, and no mana wisp here to fetch")
+        if INTERIOR_WORD in state["zone"]:
+            return await self.leave_for_wisps_turn(stat, state, planner)
+        if await nearby_enemies(self.client) and state["zone"] not in self.record.zones_with_enemies:
+            self.record.zones_with_enemies.append(state["zone"])
+        if state["zone"] not in self.record.zones_with_enemies:
+            return None
+        return await self.explore_for_wisps_turn(stat, state, planner)
 
-    async def explore_for_mana_turn(self, state: dict, planner: RoutePlanner) -> dict:
-        """Walk to the nearest part of the street not explored for mana yet, stopping as soon as an untried mana
-        wisp loads. Once every part has been seen, start over: used-up wisps come back."""
-        explored = self.record.explored.setdefault(f"{state['zone']}|mana wisps", [])
+    async def leave_for_wisps_turn(self, stat: str, state: dict, planner: RoutePlanner) -> dict:
+        exits = [volume for volume, _ in planner.teleports if EXIT_WORD in volume.name.lower()]
+        if not exits:
+            return stalled(f"too little {stat} for the fight, and no {stat} wisp here to fetch")
+        me = await self.client.body.position()
+        door = min(exits, key=lambda volume: flat_distance(me, volume.point))
+        self.events.emit(stat, f"{state[stat]} of {state['max_' + stat]} {stat} and no {stat} wisp here; leaving "
+                               f"through {door.name} for the street's wisps")
+        if flat_distance(me, door.point) <= WAYPOINT_ARRIVE_RADIUS:
+            return await self.zone_door_turn(XYZ(door.x, door.y, door.z))
+        return await self.travel_turn(f"walk to the exit for {stat} wisps", XYZ(door.x, door.y, door.z),
+                                      arrive_radius=door.radius)
+
+    async def explore_for_wisps_turn(self, stat: str, state: dict, planner: RoutePlanner) -> dict:
+        """Walk to the nearest part of the street not explored for this kind of wisp yet, stopping as soon as an
+        untried one loads. Once every part has been seen, start over: used-up wisps come back."""
+        kind = HEALTH_WISP if stat == "health" else MANA_WISP
+        explored = self.record.explored.setdefault(f"{state['zone']}|{kind}s", [])
         me = await self.client.body.position()
         area = next_area_to_explore(planner.exploration_points, me=(me.x, me.y), explored=explored)
         if area is None:
             explored.clear()
             area = next_area_to_explore(planner.exploration_points, me=(me.x, me.y))
         if area is None:
-            return stalled("too little mana for the fight, and no part of this zone to look for mana wisps in")
+            return stalled(f"too little {stat} for the fight, and no part of this zone to look for {kind}s in")
         (x, y), _ = area
-        self.events.emit("mana", f"{state['mana']} of {state['max_mana']} mana, no mana wisp in sight; looking at "
-                                 f"({x:.0f}, {y:.0f})")
+        self.events.emit(stat, f"{state[stat]} of {state['max_' + stat]} {stat}, no {kind} in sight; looking at "
+                               f"({x:.0f}, {y:.0f})")
 
         async def wisp_in_sight():
             enemies, circles = await surroundings(self.client)
-            found = safe_wisps(await wisps(self.client, MANA_WISP), me=await self.client.body.position(),
+            found = safe_wisps(await wisps(self.client, kind), me=await self.client.body.position(),
                                enemies=enemies, duel_circles=circles, tried=self.recently_tried_wisps(),
                                reach=math.inf)
-            return "mana wisp in sight" if found else None
+            return f"{kind} in sight" if found else None
 
-        turn = await self.travel_turn("explore for mana wisps", XYZ(x, y, 0.0), arrive_radius=WAYPOINT_ARRIVE_RADIUS * 3,
+        turn = await self.travel_turn(f"explore for {kind}s", XYZ(x, y, 0.0), arrive_radius=WAYPOINT_ARRIVE_RADIUS * 3,
                                       also=wisp_in_sight, avoid=await nearby_enemies(self.client))
-        if turn.get("trip", {}).get("reason") in (None, "mana wisp in sight", "every route method failed"):
+        if turn.get("trip", {}).get("reason") in (None, f"{kind} in sight", "every route method failed"):
             explored.append((round(x), round(y)))
         return turn
 

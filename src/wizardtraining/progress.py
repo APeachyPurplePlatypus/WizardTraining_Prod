@@ -26,6 +26,7 @@ WISP_ANY_DIRECTION_BELOW_FRACTION = 0.35
 POTION_BELOW_FRACTION = 0.4
 MANA_BELOW_FRACTION = 0.2
 ENGAGE_MANA_FRACTION = 0.4
+ENGAGE_HEALTH_FRACTION = 0.6
 
 
 def world_of(zone: str | None) -> str | None:
@@ -99,6 +100,7 @@ class RunRecord:
     visited_objects: list[str] = field(default_factory=list)
     arrivals: dict[str, dict] = field(default_factory=dict)
     explored: dict[str, list] = field(default_factory=dict)
+    zones_with_enemies: list[str] = field(default_factory=list)
 
     def record_turn(self, turn: dict) -> None:
         self.turns.append(turn)
@@ -172,6 +174,22 @@ def mana_for_a_fight(mana: float | None) -> bool:
     """At least ENGAGE_MANA_FRACTION of the mana pool, or mana unknown. A Warhorn fight took 6 to 10 mana of 30,
     and with 1 mana the wizard walked into General Akilles and his Cyclops and could only pass."""
     return mana is None or mana >= ENGAGE_MANA_FRACTION
+
+
+def health_for_a_fight(health: float | None) -> bool:
+    """At least ENGAGE_HEALTH_FRACTION of max health, or health unknown. Won fights at level 8 cost up to 435
+    health of 717, and a wizard logged back in with 1 health was defeated in its first round."""
+    return health is None or health >= ENGAGE_HEALTH_FRACTION
+
+
+def short_for_a_fight(health: float | None, mana: float | None) -> str | None:
+    """"health" or "mana", whichever is too low for a fight the quest asks for, else None. Health comes first: a
+    fight at 1 health is lost in a round whatever the mana, and a health wisp gives about a quarter of it back."""
+    if not health_for_a_fight(health):
+        return "health"
+    if not mana_for_a_fight(mana):
+        return "mana"
+    return None
 
 
 def should_drink_potion(fraction: float | None, charges) -> bool:
