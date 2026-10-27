@@ -18,6 +18,7 @@ DEIMOS_VARIABLE = "WIZARDTRAINING_DEIMOS"
 RUNTIME_VARIABLE = "WIZARDTRAINING_RUNTIME"
 DEFAULT_RUNTIME_FOLDER = "runtime"
 STOP_FILE_NAME = "STOP"
+KNOWLEDGE_FILE_NAME = "knowledge.json"
 
 
 @dataclass(frozen=True)
@@ -35,6 +36,10 @@ class Settings:
     @property
     def stop_file(self) -> Path:
         return self.runtime_folder / STOP_FILE_NAME
+
+    @property
+    def knowledge_file(self) -> Path:
+        return self.runtime_folder / KNOWLEDGE_FILE_NAME
 
     def stop_requested(self) -> bool:
         return self.stop_file.exists()

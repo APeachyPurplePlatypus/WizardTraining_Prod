@@ -31,6 +31,7 @@ from .entities import HEALTH_WISP, MANA_WISP, nearby_enemies, step_away, surroun
 from .events import EventLog, describe_battle, describe_changes, describe_round, enemy_names, health_text
 from .geometry import distance_to_path, flat_distance, path_within
 from .keys import tap
+from .knowledge import Knowledge
 from .movement import KeysIgnored, face, travel
 from .navigation import load_planner
 from .policy import LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, SpellTypePolicy
@@ -730,7 +731,10 @@ async def play(settings: Settings, limits: Limits, *, combat_policy: CombatPolic
     """Attach to the game, play, remove the hooks, and always save the report, even when interrupted.
     Returns the report and the path it was saved to."""
     record = RunRecord(limits=limits)
+    knowledge = Knowledge.load(settings.knowledge_file)
+    knowledge.give_to(record)
     events = EventLog.in_folder(settings.runtime_folder)
+    events.emit("knowledge", f"from earlier runs: {knowledge.summary()}")
     record.events_file = str(events.path)
     settings.clear_stop()
     attachment = None
@@ -747,5 +751,7 @@ async def play(settings: Settings, limits: Limits, *, combat_policy: CombatPolic
     finally:
         if attachment is not None:
             record.hooks_removed = attachment.hooks_removed
+        knowledge.learn_from(record)
+        knowledge.save(settings.knowledge_file)
         path = save_report("quest-loop", record.as_report(), settings.runtime_folder)
     return record.as_report(), path

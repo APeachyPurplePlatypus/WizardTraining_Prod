@@ -6,7 +6,7 @@ from pathlib import Path
 
 PACKAGE = Path(__file__).resolve().parent.parent / "src" / "wizardtraining"
 NO_GAME_ACCESS = ["config", "geometry", "routes", "targets", "policy", "progress", "state", "reports", "keys",
-                  "language", "events", "teleports", "placed", "patrols"]
+                  "language", "events", "teleports", "placed", "patrols", "knowledge"]
 
 
 def imported_modules(path: Path) -> set[str]:

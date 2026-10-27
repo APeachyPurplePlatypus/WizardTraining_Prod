@@ -6,6 +6,10 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Added
 
+- **Runs remember what earlier runs learned.**
+  - **What:** `runtime/knowledge.json` keeps the zones where health does not come back while resting and where each teleport volume leads. A run starts with it, logs a one-line summary, and adds what it learned when it ends. Obstacles and "no effect" teleport verdicts are not kept: the players and enemies behind most obstacles move on, and a walk that fell short of a volume once looked like "no effect". Delete the file to start fresh.
+  - **Why:** runs are bounded (an hour, a battle count), so a night of play is many runs. Each one started blank. After the rematch with The Harvest Lord, a new run rested a minute in his tower for nothing: the run before it had already found that health does not come back there. Each run also walked into Triton's teleporters to learn where they go.
+
 - **A map of the game data you can read (`docs/game-data.md`).**
   - **What:** the live memory reads the framework uses (WizWalker 1.8.2 names), those available but not used yet (an enemy's level, school and boss status outside battle; caster stats; spell effects; the duel), and the zone files with their parsers.
   - **Why:** the operator pointed out that WizWalker shows what game data is available for solving problems. Most fixes in this release replaced a guess with a read: patrol paths instead of exploring, teleport volumes instead of walking at walls, wards and resistances instead of the first card in hand. The map makes the next read easy to find.

@@ -60,6 +60,8 @@ Some zones' walkable areas come in separate pieces, such as Triton Avenue's lowe
 
 ## Battles
 
+Each run starts with what earlier runs learned (`knowledge.Knowledge`, saved as `runtime/knowledge.json`): zones where health does not come back while resting, and where teleport volumes lead. It adds what it learns when it ends.
+
 `combat.fight` waits for each planning phase. It builds a `policy.RoundView` (health, pips, cards by spell type and school, living enemies with their shields, wards, traps and resistances) and asks the policy for a `Cast`. It validates the choice, casts through the mouseless cursor or passes, and waits for the next round. The battle code stops on timeouts, a round limit or any error, leaving the battle to the operator.
 
 ## Dialogs
