@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 from wizardtraining.events import (EventLog, change, describe_battle, describe_changes, describe_round, dialog_text,
-                                   enemy_names)
+                                   enemy_names, threat_text)
 
 
 def round_entry(number, health, action, enemies):
@@ -57,6 +57,13 @@ class DescriptionTest(unittest.TestCase):
         entry["returned to combat"] = "answered 'Would you like to return to combat?'"
         self.assertIn("442/624 with 3 pips; answered 'Would you like to return to combat?'; cast Frost Beetle",
                       describe_round(entry))
+
+    def test_threat_text_names_the_nearest_enemy_before_a_battle(self):
+        self.assertEqual(threat_text({"name": "Fire Elf Hunter", "distance": 520, "closing": 310}),
+                         "; nearest enemy last seen: Fire Elf Hunter 520 away, closing at 310/s")
+        self.assertEqual(threat_text({"name": "Fire Elf Hunter", "distance": 520, "closing": None}),
+                         "; nearest enemy last seen: Fire Elf Hunter 520 away")
+        self.assertEqual(threat_text(None), "")
 
     def test_describe_round_lists_the_hand(self):
         entry = round_entry(1, 600, "cast Snow Serpent (Ice) on enemy", [("Warhorn", 285)])

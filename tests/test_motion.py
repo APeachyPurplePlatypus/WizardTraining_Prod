@@ -1,7 +1,7 @@
 import unittest
 
 from wizardtraining.motion import (MAX_ENEMY_SPEED, MOTION_WINDOW_SECONDS, PREDICTION_HORIZON_SECONDS, MotionTracker,
-                                   Track, closest_approach)
+                                   Track, closest_approach, closing_speed)
 from wizardtraining.routes import COLLISION, ENEMY_KEEP_OUT, Hazards, RoutePlanner
 
 from test_routes import SquareWalkGrid
@@ -38,6 +38,14 @@ class MotionTrackerTest(unittest.TestCase):
         track = Track((0, 0), (100, 0))
         self.assertEqual(track.at(2), (200, 0))
         self.assertEqual(track.at(PREDICTION_HORIZON_SECONDS + 10), (100 * PREDICTION_HORIZON_SECONDS, 0))
+
+
+class ClosingSpeedTest(unittest.TestCase):
+    def test_how_fast_an_enemy_comes_toward_a_point(self):
+        self.assertAlmostEqual(closing_speed(Track((0.0, 0.0), (300.0, 0.0)), (500.0, 0.0)), 300.0)
+        self.assertAlmostEqual(closing_speed(Track((0.0, 0.0), (-300.0, 0.0)), (500.0, 0.0)), -300.0)
+        self.assertAlmostEqual(closing_speed(Track((0.0, 0.0), (0.0, 300.0)), (500.0, 0.0)), 0.0)
+        self.assertEqual(closing_speed(Track((5.0, 5.0)), (5.0, 5.0)), 0.0)
 
 
 class ClosestApproachTest(unittest.TestCase):

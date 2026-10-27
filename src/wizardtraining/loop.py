@@ -31,12 +31,13 @@ from .dialog import (DIALOG_FINISHED, FOLLOW_UP_WAIT_SECONDS, NPC_ARRIVE_DISTANC
                      services_open, talk, use_object, wait_for_dialog)
 from .entities import HEALTH_WISP, MANA_WISP, nearby_enemies, step_away, surroundings, wisps
 from .equipment import count_items, equip, read_items, read_wizard
-from .events import EventLog, describe_battle, describe_changes, describe_round, dialog_text, enemy_names, health_text
+from .events import (EventLog, describe_battle, describe_changes, describe_round, dialog_text, enemy_names, health_text,
+                     threat_text)
 from .gear import describe_stats, upgrades
 from .geometry import distance_to_path, flat_distance, path_within, xy
 from .keys import tap
 from .knowledge import Knowledge
-from .motion import MotionTracker, closest_approach
+from .motion import MotionTracker, closest_approach, closing_speed
 from .movement import KeysIgnored, Reroute, face, travel
 from .navigation import load_planner
 from .policy import LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, SpellTypePolicy
@@ -68,6 +69,7 @@ MIN_SECONDS_BETWEEN_REROUTES = 0.3
 BARELY_MOVED_DISTANCE = 100.0
 ENEMY_PASS_WAIT_SECONDS = 1.5
 ARRIVAL_SETTLE_SECONDS = 1.5
+SETTLE_LOOK_SECONDS = 0.25
 EXIT_WORD = "exit"
 INTERIOR_WORD = "/Interiors/"
 FIGHT_GOALS = ("bounty", "bountycollect")
@@ -102,6 +104,7 @@ class QuestLoop:
         self.wear_gear = wear_gear
         self._gear_checked: tuple | None = None
         self._finishing_since: float | None = None
+        self._nearest_threat: dict | None = None
         self._topping_up_in: str | None = None
         self._potion_failed = False
         self._object_in_use = None
@@ -171,8 +174,6 @@ class QuestLoop:
     def note_changes(self, state: dict) -> None:
         for kind, text in describe_changes(self._last_state, state, self._last_quest, self.record.quest):
             self.events.emit(kind, text)
-        if self._last_state is not None and state["zone"] != self._last_state["zone"]:
-            self.motion.forget()
         arrived = self._last_state is not None and state["zone"] != self._last_state["zone"]
         if arrived and isinstance(state["zone"], str) and isinstance(state["position"], dict):
             self.record.arrivals[state["zone"]] = {"from": self._last_state["zone"],
@@ -280,13 +281,26 @@ class QuestLoop:
     async def settle(self) -> None:
         """Wait ARRIVAL_SETTLE_SECONDS after a loading screen or a zone change, until two zone readings a moment
         apart agree. Right after loading the zone once read as the zone just left: the loop walked toward that
-        zone's door coordinates inside the Myth school, straight back out through its exit."""
-        await asyncio.sleep(ARRIVAL_SETTLE_SECONDS)
+        zone's door coordinates inside the Myth school, straight back out through its exit. The wait is spent
+        watching the enemies, so the first route out of a door knows where they are heading: with nothing
+        observed yet every enemy counted as standing still, and 9 seconds after leaving the Witch's house a
+        patrolling Fire Elf walked into the wizard."""
+        self.motion.forget()
+        await self.watch_enemies(ARRIVAL_SETTLE_SECONDS)
         zone = await self.client.zone_name()
         while (again := await self.client.zone_name()) != zone and not self.settings.stop_requested():
             zone = again
             await asyncio.sleep(ARRIVAL_SETTLE_SECONDS)
         self._settled_in = zone
+
+    async def watch_enemies(self, seconds: float) -> None:
+        """Note where the loaded enemies are every SETTLE_LOOK_SECONDS for `seconds`, for their velocities."""
+        deadline = time.monotonic() + seconds
+        while time.monotonic() < deadline:
+            enemies = await attempt(nearby_enemies(self.client))
+            if isinstance(enemies, list):
+                self.motion.observe(enemies, time.monotonic())
+            await asyncio.sleep(SETTLE_LOOK_SECONDS)
 
     async def battle_turn(self) -> dict:
         self.record.battles += 1
@@ -852,9 +866,11 @@ class QuestLoop:
         new_obstacles = remember_obstacles(self.record, zone, trip["blocked_at"])
         methods = ", ".join(f"{tried['method']}: {tried.get('result')}{failure_text(tried)}{reroute_text(tried)}"
                             for tried in trip["attempts"])
+        threat = self._nearest_threat if trip["reason"] == "battle" else None
         self.events.emit("walk", f"{did}: moved {moved:.0f}, {trip['result']}"
                                  f"{' (' + trip['reason'] + ')' if trip['reason'] else ''}; {methods}"
-                                 f"{f'; {new_obstacles} new obstacles' if new_obstacles else ''}")
+                                 f"{f'; {new_obstacles} new obstacles' if new_obstacles else ''}"
+                                 f"{threat_text(threat)}", nearest_threat=threat)
         return travel_outcome(did, trip["reason"], moved, self.record, new_obstacles=new_obstacles,
                               trip=trip_summary, **details)
 
@@ -963,6 +979,7 @@ class QuestLoop:
             now = time.monotonic()
             self.motion.observe(enemies, now)
             threats = [] if self.in_grace_after_battle() else others(enemies, ignore)
+            self.note_nearest_threat(threats, now, path_ahead[0])
             if close := too_close(threats):
                 await self.step_away_from(close, "while walking", ignore=ignore)
                 return "stepped away from an enemy"
@@ -982,6 +999,17 @@ class QuestLoop:
             return None
 
         return watch
+
+    def note_nearest_threat(self, threats: list[dict], now: float, here) -> None:
+        """Keep the nearest threat, its distance and how fast it is closing on `here`, the wizard, to report when
+        a walk ends in a battle: how near enemies come before they engage is not documented, and differs between
+        them."""
+        if not threats:
+            self._nearest_threat = None
+            return
+        nearest = min(threats, key=lambda enemy: enemy["distance"])
+        self._nearest_threat = {"name": nearest["name"], "distance": round(nearest["distance"]),
+                                "closing": round(closing_speed(self.motion.track(nearest, now), here))}
 
     def in_grace_after_battle(self) -> bool:
         return in_grace_after_battle(self._battle_ended_at, now=time.monotonic())

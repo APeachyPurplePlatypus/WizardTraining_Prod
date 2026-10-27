@@ -68,6 +68,15 @@ class MotionTracker:
         self._samples.clear()
 
 
+def closing_speed(track: Track, point) -> float:
+    """How fast the enemy is coming toward `point`, in units per second; negative when it is moving away."""
+    dx, dy = point[0] - track.position[0], point[1] - track.position[1]
+    distance = math.hypot(dx, dy)
+    if distance == 0:
+        return 0.0
+    return (track.velocity[0] * dx + track.velocity[1] * dy) / distance
+
+
 def closest_approach(track: Track, path: list, speed: float = WALK_UNITS_PER_SECOND) -> float:
     """How close the enemy will come to the wizard as it walks `path` from its first point, starting now."""
     points = [xy(point) for point in path]

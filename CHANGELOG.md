@@ -124,6 +124,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **Battles noticed at once, and enemies watched before the first route out of a door.**
+  - **What:** turning in place (`movement.turn_toward`) checks for a battle before every tap and stops at once, and the walk ends "interrupted (battle)" instead of failing and trying the next route method. The settle after a zone change watches the loaded enemies every quarter second (`QuestLoop.watch_enemies`), so the first route already knows where they are heading; before, the motion tracker was emptied on arrival and every enemy counted as standing still. A walk that ends in a battle now says which enemy was nearest when last seen, how far, and how fast it was closing (`motion.closing_speed`), to measure how near enemies come before they engage.
+  - **Why:** the operator thought the fight after leaving the Witch's house should have been avoided. The client's log shows the wizard arrived in Firecat Alley at 12:15:49 and a Fire Elf engaged it at 12:15:58, after 1,432 units of walking; the framework noticed only at 12:16:12, because the turn loop went on tapping through 25 turn taps while the battle froze the wizard. Of the day's battles that began during a walk, 30 were noticed late this way and 22 at once. The planning time lost this way is also a likely cause of first-round casts that never reached the game, and of the game's idle box. Of 83 battles that day, about 58 came while walking somewhere else than to a quest target.
+  - **Not verified yet:** in the game.
+
 - **A bounty arrow at a door leads through it.** When the wizard has reached a bounty goal's arrow, no target is in reach, and the arrow lies within 150 units of a teleport volume's edge (`teleports.volume_at`), it walks through that door, as waypoints already did. In the Witch's house, "Which Hunt?" asked for Magma from the Magmamen outside; the arrow pointed at the house's exit, and the wizard "arrived" at it every turn until the run stopped for turns without progress.
 
 - **Fleeing works: the confirmation is answered where the game shows it.**

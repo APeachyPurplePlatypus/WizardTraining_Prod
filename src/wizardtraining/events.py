@@ -100,6 +100,14 @@ def pips_text(enemy: dict) -> str:
     return f" ({enemy['pips']} pips)" if enemy.get("pips") else ""
 
 
+def threat_text(threat: dict | None) -> str:
+    """"; nearest enemy last seen: Fire Elf Hunter 520 away, closing at 310/s" or ""."""
+    if not threat:
+        return ""
+    closing = f", closing at {threat['closing']}/s" if threat.get("closing") is not None else ""
+    return f"; nearest enemy last seen: {threat['name']} {threat['distance']} away{closing}"
+
+
 def hand_text(cards) -> str:
     """"; hand: Frost Beetle x2, Snow Serpent (2 pips)" listing the cards in hand once each, with pip costs, or ""."""
     if not cards:
