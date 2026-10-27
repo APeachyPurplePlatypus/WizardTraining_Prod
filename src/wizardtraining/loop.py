@@ -39,7 +39,8 @@ from .navigation import load_planner
 from .policy import LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, SpellTypePolicy
 from .progress import (DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY, ENEMY_NEAR_PATH, Limits, PATH_THREATS, PlannedRoute,
                        RunRecord, StopRun, check_limits, leaves_world, nav_did_better, progressed, remember_obstacles,
-                       should_drink_potion, stalled, travel_outcome, wanted_wisp, world_of)
+                       should_drink_potion, stalled, travel_outcome, wanted_wisp, WISP_ANY_DIRECTION_BELOW_FRACTION,
+                       world_of)
 from .quests import arrow_shows_no_target, game_language, open_goals, read_quest_arrow, read_quests
 from .reports import plain, save_report
 from .routes import DUEL_CIRCLE_NO_GO, Hazards, RoutePlanner
@@ -289,13 +290,23 @@ class QuestLoop:
         except Exception:
             return False
 
-    async def wisp_turn(self, wanted: str, state: dict) -> dict | None:
-        """Walk to the nearest safe health or mana wisp and touch it. None when there is no safe one in reach,
-        so the turn falls back to a potion or a rest. A wisp that gives nothing is not tried again."""
+    async def wisp_heading(self, wanted: str, health) -> XYZ | None:
+        """Where the quest goes next, so that a wisp is fetched only on the way there. None, any direction, when
+        health is below WISP_ANY_DIRECTION_BELOW_FRACTION or the arrow shows no target."""
+        if wanted == "health" and health is not None and health < WISP_ANY_DIRECTION_BELOW_FRACTION:
+            return None
+        arrow = await attempt(read_quest_arrow(self.client))
+        return None if arrow is None or arrow_shows_no_target(arrow) else arrow
+
+    async def wisp_turn(self, wanted: str, state: dict, heading=None) -> dict | None:
+        """Walk to the nearest safe health or mana wisp on the way to `heading` and touch it. None when there is
+        no such wisp, so the quest goes on. A wisp trip that gives nothing, whether it arrived or was cut short,
+        is not tried again: used-up wisps still show as entities, and retrying them walked the wizard back and
+        forth between them."""
         kind = HEALTH_WISP if wanted == "health" else MANA_WISP
         enemies, circles = await surroundings(self.client)
         candidates = safe_wisps(await wisps(self.client, kind), me=await self.client.body.position(), enemies=enemies,
-                                duel_circles=circles, tried=self.record.tried_wisps)
+                                duel_circles=circles, tried=self.record.tried_wisps, heading=heading)
         if not candidates:
             return None
         wisp = candidates[0]
@@ -310,7 +321,7 @@ class QuestLoop:
         after = await snapshot(self.client)
         stat = "health" if wanted == "health" else "mana"
         gained = isinstance(after[stat], int) and isinstance(state[stat], int) and after[stat] > state[stat]
-        if trip["result"] == "arrived" and not gained:
+        if not gained:
             self.record.tried_wisps.append(wisp["id"])
         self.events.emit("wisp", f"{kind} {flat_distance(start, wisp['position']):.0f} away: {trip['result']}"
                                  f"{' (' + trip['reason'] + ')' if trip['reason'] else ''}; {stat} {state[stat]} -> "
@@ -343,8 +354,10 @@ class QuestLoop:
             if should_drink_potion(fraction, await attempt(self.client.stats.potion_charge())):
                 return await self.potion_turn(state)
         wanted = wanted_wisp(fraction, mana_fraction(state))
-        if wanted is not None and (turn := await self.wisp_turn(wanted, state)) is not None:
-            return turn
+        if wanted is not None:
+            turn = await self.wisp_turn(wanted, state, heading=await self.wisp_heading(wanted, fraction))
+            if turn is not None:
+                return turn
         quest = await self.active_quest()
         if quest is None:
             if await wait_for_dialog(self.client, FOLLOW_UP_WAIT_SECONDS, poll=0.5):

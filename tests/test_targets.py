@@ -2,8 +2,8 @@ import math
 import unittest
 
 from wizardtraining.routes import ENEMY_KEEP_OUT
-from wizardtraining.targets import (AFTER_BATTLE_GRACE_SECONDS, ENEMY_CLEARANCE, WISP_REACH,
-                                    back_away, bystanders, enemies_to_route_around, in_grace_after_battle,
+from wizardtraining.targets import (AFTER_BATTLE_GRACE_SECONDS, ENEMY_CLEARANCE, WISP_DETOUR, WISP_REACH,
+                                    back_away, bystanders, detour, enemies_to_route_around, in_grace_after_battle,
                                     keeps_blocking, measured, next_area_to_explore, others, quest_targets,
                                     safe_wisps, threat_centre, too_close)
 
@@ -43,6 +43,16 @@ class TargetsTest(unittest.TestCase):
         found = safe_wisps(wisps, me=(0, 0), enemies=[enemy(1, "Eel", 1100, 0)], duel_circles=[(0, 2100)],
                            tried=["tried"])
         self.assertEqual([wisp["id"] for wisp in found], ["nearer", "near"])
+
+    def test_with_a_heading_only_wisps_on_the_way_count(self):
+        wisps = [{"id": "behind", "position": (-1500, 0)}, {"id": "ahead", "position": (1500, 300)},
+                 {"id": "aside", "position": (0, 1400)}]
+        found = safe_wisps(wisps, me=(0, 0), enemies=[], duel_circles=[], heading=(10000, 0))
+        self.assertEqual([wisp["id"] for wisp in found], ["ahead"])
+        self.assertLessEqual(detour((0, 0), (1500, 300), (10000, 0)), WISP_DETOUR)
+        self.assertGreater(detour((0, 0), (-1500, 0), (10000, 0)), WISP_DETOUR)
+        anywhere = safe_wisps(wisps, me=(0, 0), enemies=[], duel_circles=[])
+        self.assertEqual({wisp["id"] for wisp in anywhere}, {"behind", "ahead", "aside"})
 
     def test_next_area_to_explore_is_the_nearest_not_yet_explored(self):
         points = [((0, 5000), 0), ((0, 1000), 0), ((0, 3000), 1)]

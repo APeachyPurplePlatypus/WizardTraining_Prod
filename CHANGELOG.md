@@ -72,6 +72,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **Wisps are fetched only on the way, and a failed wisp trip is not repeated.**
+  - **What:** a wisp now counts only when the detour through it toward the quest arrow is at most 1,200 units (`targets.WISP_DETOUR`). Below 35% health (`progress.WISP_ANY_DIRECTION_BELOW_FRACTION`) any wisp in reach still counts. With no wisp on the way, the quest goes on. A wisp trip that gains nothing is marked tried even when it was cut short. Before, only a trip that arrived was marked.
+  - **Why:** the operator saw the wizard "keeps going back and forth" in Cyclops Lane and "isn't going to the right mobs". The bounty's targets were at the far end of the lane. Below 65% health, every turn walked back up to 2,500 units to the nearest wisp. Two of those were used up ("health 263 -> 263"), and interrupted trips were tried again. On the way back, the Cyclopes and Trolls the quest did not ask for pulled the wizard into fights.
+  - **Not verified yet:** in the game.
+
 - **An NPC menu option whose label cannot be read no longer crashes the run.** A school professor's services menu has a spell-training option whose label text cannot be read from memory. Reading it raised a memory error, and a run that started beside the professor stopped at once. Such a label now reads as empty, so the option is never chosen.
 
 - **An empty hand is read again before passing.** When the hand reads empty in a planning phase and the wizard is alive, the battle code reads it again every half second, up to six times. If it is still empty it passes, logged as "pass: the hand read empty". Round lines now show mana too. In a fight with two Warhorns, the hand read empty in round 3 although the wizard had cast from a full hand in rounds 1 and 2: it passed with 107 health and three pips, and was defeated. The operator noticed it as "you stopped selecting cards". The hand was most likely read before the round's cards were drawn.
