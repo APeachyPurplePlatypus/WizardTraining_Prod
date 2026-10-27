@@ -46,6 +46,25 @@ class LimitsTest(unittest.TestCase):
             self.check(run)
 
 
+class DoorLoopTest(unittest.TestCase):
+    def test_zone_changes_count_until_the_quest_goal_changes(self):
+        run = record(max_zone_changes_without_quest_change=2)
+        for zone in ("Hub", "Shops", "Hub"):
+            run.note_place(zone, ("quest", 1))
+        check_limits(run, seconds_left=60, stop_requested=False)
+        run.note_place("Shops", ("quest", 1))
+        with self.assertRaisesRegex(StopRun, "back and forth"):
+            check_limits(run, seconds_left=60, stop_requested=False)
+        run.note_place("Shops", ("quest", 2))
+        self.assertEqual(run.zone_changes_without_quest_change, 0)
+
+    def test_staying_in_one_zone_is_not_a_zone_change(self):
+        run = record()
+        for _ in range(5):
+            run.note_place("Hub", ("quest", 1))
+        self.assertEqual(run.zone_changes_without_quest_change, 0)
+
+
 class TravelOutcomeTest(unittest.TestCase):
     def outcome(self, reason, moved, stops_in_a_row=0):
         run = record()

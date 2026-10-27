@@ -4,6 +4,13 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ## Unreleased
 
+### Added
+
+- **Door-loop guard and zones in the turn log.**
+  - **What:** each turn's log line now shows the zone and the quest goal. The run stops after `Limits.max_zone_changes_without_quest_change` (10) zone changes in which the quest goal stayed the same.
+  - **Why:** walking through a door counts as progress, so a wizard bouncing between two zones would never trip the stall limit. Without zones in the log, a watcher also can't tell a long door chain from a loop. On 2026-10-26 a run going from Ravenwood through the Commons and the Shopping District toward Olde Town was stopped by hand as a suspected loop; the report showed it was a real trip. Ten changes leaves room for chains like that one (about five doors) and still catches a back-and-forth well before the 200-turn limit.
+  - **Not verified:** whether 10 is enough for the longest legitimate door chains later in the game.
+
 ### Fixed
 
 - **Routes avoid collision walls.**

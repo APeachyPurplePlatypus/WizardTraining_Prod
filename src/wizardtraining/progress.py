@@ -37,6 +37,7 @@ class Limits:
     max_loading_waits_in_a_row: int = 40
     max_immobile_threat_stops_in_a_row: int = 8
     max_obstacles_per_zone: int = 40
+    max_zone_changes_without_quest_change: int = 10
 
 
 @dataclass
@@ -54,6 +55,8 @@ class RunRecord:
     dialog_log: list[dict] = field(default_factory=list)
     zones_without_regeneration: list[str] = field(default_factory=list)
     obstacles: dict[str, list] = field(default_factory=dict)
+    zone_changes_without_quest_change: int = 0
+    last_place: tuple | None = None
     planner_status: dict[str, dict] = field(default_factory=dict)
     quest: dict | None = None
     hooks: dict | None = None
@@ -67,6 +70,17 @@ class RunRecord:
     def record_turn(self, turn: dict) -> None:
         self.turns.append(turn)
         self.turns_without_progress = 0 if turn["progress"] else self.turns_without_progress + 1
+
+    def note_place(self, zone, quest_goal) -> None:
+        """Count zone changes since the quest goal last changed. Doors count as progress, so a wizard
+        walking back and forth through the same doors would otherwise never trip a limit."""
+        if self.last_place is not None:
+            last_zone, last_goal = self.last_place
+            if quest_goal != last_goal:
+                self.zone_changes_without_quest_change = 0
+            elif zone != last_zone:
+                self.zone_changes_without_quest_change += 1
+        self.last_place = (zone, quest_goal)
 
     def as_report(self) -> dict:
         return {"source": "wizwalker", "simulated": False, **asdict(self)}
@@ -94,6 +108,8 @@ def check_limits(record: RunRecord, *, seconds_left: float, stop_requested: bool
         raise StopRun("several turns without progress")
     if len(record.step_aways) >= limits.max_step_aways:
         raise StopRun("stepped away from enemies too often")
+    if record.zone_changes_without_quest_change > limits.max_zone_changes_without_quest_change:
+        raise StopRun("changed zones many times without the quest changing; possibly going back and forth through doors")
 
 
 def needs_rest(fraction: float | None) -> bool:

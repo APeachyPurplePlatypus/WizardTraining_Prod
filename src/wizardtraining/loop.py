@@ -107,8 +107,10 @@ class QuestLoop:
             turn = await self.checked_turn(state)
             turn["level"], turn["health"] = state["level"], state["health"]
             self.record.record_turn(turn)
-            log.info("turn %d: %s (progress=%s, level=%s)", len(self.record.turns), turn["did"], turn["progress"],
-                     state["level"])
+            quest = self.record.quest or {}
+            self.record.note_place(state["zone"], (quest.get("name"), quest.get("goal_id")))
+            log.info("turn %d: %s (progress=%s, level=%s, zone=%s, goal=%s %s)", len(self.record.turns), turn["did"],
+                     turn["progress"], state["level"], state["zone"], quest.get("goal"), quest.get("goal_zone") or "")
 
     async def checked_turn(self, state: dict) -> dict:
         try:
@@ -194,7 +196,8 @@ class QuestLoop:
         goals = open_goals(quest)
         goal = goals[0] if goals else {"type": "persona", "destination_zone": ""}
         arrow = await read_quest_arrow(self.client)
-        self.record.quest = {"name": quest["name_key"], "goal": goal["type"], "arrow": plain(arrow)}
+        self.record.quest = {"name": quest["name_key"], "goal": goal["type"], "goal_id": goal.get("id"),
+                             "goal_zone": goal["destination_zone"], "arrow": plain(arrow)}
         if goal["destination_zone"] not in ("", await self.client.zone_name()):
             return await self.waypoint_turn(arrow, goal)
         handler = self.goal_handlers().get(goal["type"])
