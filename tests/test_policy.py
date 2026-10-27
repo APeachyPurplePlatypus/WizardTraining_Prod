@@ -190,6 +190,20 @@ class SeveralEnemiesTest(unittest.TestCase):
         self.assertEqual(self.policy.choose(view([beetle, heartbeat], health=357, max_health=801, enemies=spent,
                                                  pips=1)), Cast(0, "enemy", 0))
 
+    def test_finishes_the_enemy_holding_the_pips_before_saving_for_a_heal(self):
+        beetle = Card("Frost Beetle", "Damage", True, "Ice", pips=1)
+        pixie = Card("Pixie", "Heal", False, "Life", pips=2)
+        alicane = (Combatant("Alicane Swiftarrow", 16, pips=3),)
+        self.assertEqual(self.policy.choose(view([beetle, pixie], health=288, max_health=832, enemies=alicane, pips=1)),
+                         Cast(0, "enemy", 0))
+
+    def test_heals_when_finishing_one_enemy_still_leaves_a_big_hit(self):
+        beetle = Card("Frost Beetle", "Damage", True, "Ice", pips=1)
+        heartbeat = Card("Heartbeat", "Heal", True, "Life", pips=1)
+        enemies = (Combatant("Magma Man", 16, pips=1), Combatant("Alicane Swiftarrow", 480, pips=4))
+        self.assertEqual(self.policy.choose(view([beetle, heartbeat], health=300, max_health=832, enemies=enemies,
+                                                 pips=1)), Cast(1, "self"))
+
     def test_stuns_the_enemy_holding_the_pips_when_there_is_no_heal(self):
         beetle = Card("Frost Beetle", "Damage", True, "Ice", pips=1)
         saved_up = (Combatant("General Akilles", 145, pips=5),)

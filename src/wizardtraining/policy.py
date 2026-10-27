@@ -7,7 +7,7 @@ check what a policy returns before acting on it.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Literal, Protocol
 
 ATTACK_TARGETS = {"Damage": "enemy", "Steal": "enemy", "AOE": "all enemies"}
@@ -148,6 +148,10 @@ class SpellTypePolicy:
     def choose(self, view: RoundView) -> Cast | Pass | Flee | None:
         if out_of_mana(view) and view.can_flee:
             return Flee(f"out of mana ({view.mana} left)")
+        attacks = [index for index, card in enumerate(view.cards) if card.castable and card.spell_type in ATTACK_TARGETS]
+        finisher = cheapest_finisher(view, attacks) if view.enemies else None
+        if finisher is not None and ends_the_danger(view, finisher):
+            return finisher
         fraction = view.health_fraction()
         if (fraction is not None and fraction < LOW_HEALTH_FRACTION) or within_reach_of_a_big_hit(view):
             heal = first_castable(view.cards, lambda card: card.spell_type in HEAL_SPELL_TYPES)
@@ -160,8 +164,6 @@ class SpellTypePolicy:
                                                                 f"({worth_saving_for.pips} pips)")
         if not view.enemies:
             return None
-        attacks = [index for index, card in enumerate(view.cards) if card.castable and card.spell_type in ATTACK_TARGETS]
-        finisher = cheapest_finisher(view, attacks)
         if finisher is not None:
             return finisher
         stun = stun_while_saving_a_pip(view, attacks)
@@ -216,6 +218,14 @@ def stun_on_the_most_dangerous(view: RoundView) -> Cast | None:
         return None
     return Cast(stun, "enemy", max(stunnable, key=lambda index: (view.enemies[index].pips or 0,
                                                                 view.enemies[index].health or 0)))
+
+
+def ends_the_danger(view: RoundView, finisher: Cast) -> bool:
+    """Finishing the enemy `finisher` targets leaves no enemy, or none that could take what health is left: then
+    the finishing blow comes before any heal. With 288 health and Alicane Swiftarrow at 16, holding 3 pips, the
+    wizard passed to save pips for a heal instead of finishing her with a 1-pip attack, and lost the battle."""
+    left = tuple(enemy for index, enemy in enumerate(view.enemies) if index != finisher.enemy)
+    return not left or not within_reach_of_a_big_hit(replace(view, enemies=left))
 
 
 def within_reach_of_a_big_hit(view: RoundView) -> bool:
