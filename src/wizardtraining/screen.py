@@ -1,11 +1,9 @@
-"""What the game's window tree shows: windows found by name among the visible ones, and the game's idle box told
-by its text. No WizWalker import: it walks any objects with the window methods (`children`, `is_visible`, `name`),
-so it is tested offline with stand-ins.
+"""What the game's window tree shows: windows found by name or by their text among the visible ones. No WizWalker
+import: it walks any objects with the window methods (`children`, `is_visible`, `name`, `maybe_text`), so it is
+tested offline with stand-ins.
 """
 
 from __future__ import annotations
-
-IDLE_BOX_WORDS = ("return to combat", "you are idle")
 
 
 async def or_default(coro, default):
@@ -34,7 +32,38 @@ async def visible_named(root, name: str, depth: int) -> list:
     return found
 
 
-def is_idle_box(caption: str) -> bool:
-    """The game's idle box: "You Are Idle" (GUI_CombatAFKTitle), "Would you like to return to combat?"
-    (GUI_CombatAFKMessage) and one button, "Return" (GUI_ReturnToCombat). Either line may be the caption read."""
-    return any(words in caption.lower() for words in IDLE_BOX_WORDS)
+async def window_saying(root, words, depth: int) -> list | None:
+    """The visible windows from just below `root` down to the first one, within `depth` levels, whose text mentions
+    any of `words` (case aside), or None. The chain tells where it shows, whatever its window names."""
+    async def walk(window, chain, levels):
+        for child in await or_default(window.children(), []):
+            if not await or_default(child.is_visible(), False):
+                continue
+            text = (await or_default(child.maybe_text(), "") or "").lower()
+            if any(word in text for word in words):
+                return [*chain, child]
+            if levels > 1 and (found := await walk(child, [*chain, child], levels - 1)) is not None:
+                return found
+        return None
+
+    return await walk(root, [], depth)
+
+
+async def visible_names_under(window, depth: int, limit: int = 60) -> list[str]:
+    """The visible windows under `window`, `depth` levels down and `limit` in all, as "parent/child" names without
+    their text, which can hold other players' names and chat."""
+    found = []
+
+    async def walk(parent, prefix, levels):
+        for child in await or_default(parent.children(), []):
+            if len(found) >= limit:
+                return
+            if not await or_default(child.is_visible(), False):
+                continue
+            name = f"{prefix}{await or_default(child.name(), '?')}"
+            found.append(name)
+            if levels > 1:
+                await walk(child, f"{name}/", levels - 1)
+
+    await walk(window, "", depth)
+    return found

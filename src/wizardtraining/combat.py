@@ -29,7 +29,7 @@ from .movement import KeysIgnored, face_and_step
 from .policy import UNIVERSAL, Card, Cast, CombatPolicy, Combatant, DamageModifier, Flee, Pass, RoundView, problem_with
 from .reports import plain
 from .state import attempt
-from .screen import is_idle_box, or_default, visible_named
+from .screen import or_default, visible_named, visible_names_under, window_saying
 from .ui import (click, click_window, enable_clicks, showing, text_under, visible_children, visible_tree,
                  visible_tree_under, window_at)
 
@@ -53,10 +53,14 @@ CHANGE_SETTLE_SECONDS = 0.5
 PASS_BUTTON = [*ACTION_BUTTONS, "Focus"]
 FLEE_BUTTON = [*ACTION_BUTTONS, "Flee"]
 MESSAGE_BOX = "MessageBoxModalWindow"
-MESSAGE_BOXES = ([*PLANNING_PHASE, MESSAGE_BOX], [MESSAGE_BOX])
 MESSAGE_BOX_SEARCH_DEPTH = 4
-BOX_CAPTION = ["messageBoxBG", "messageBoxLayout", "TextArea", "CaptionText"]
-BOX_YES = ["messageBoxBG", "messageBoxLayout", "AdjustmentWindow", "Layout", "centerButton"]
+BOX_LAYOUT = "messageBoxLayout"
+BOX_CAPTION = ["messageBoxBG", BOX_LAYOUT, "TextArea", "CaptionText"]
+LAYOUT_CENTER_BUTTON = ["AdjustmentWindow", "Layout", "centerButton"]
+BOX_YES = ["messageBoxBG", BOX_LAYOUT, *LAYOUT_CENTER_BUTTON]
+IDLE_BOX_WORDS = ("return to combat", "you are idle")
+IDLE_BOX_SEARCH_DEPTH = 9
+LEVELS_ABOVE_THE_CAPTION_SHOWN = 4
 FLEE_WORD = "flee"
 CONFIRMED = "confirmed"
 BATTLE_END_CONFIRM_SECONDS = 1.0
@@ -326,14 +330,11 @@ async def reopen_card_choice(client) -> bool:
 
 
 async def message_box(client) -> tuple[object, str] | None:
-    """The message box showing, as (its window, its caption), else None. In battle the game shows its boxes under
-    WorldView/PlanningPhase, not on top; any other visible one within MESSAGE_BOX_SEARCH_DEPTH levels is found too.
-    While the wizard was idle in another player's fight the game kept the planning window hidden, so a box under
-    it could not show, and none was found at those two places."""
-    for path in MESSAGE_BOXES:
-        if await showing(client, path):
-            box = await window_at(client.root_window, path)
-            return box, await caption_of(box)
+    """The message box on screen, as (its window, its caption), else None: the first visible one within
+    MESSAGE_BOX_SEARCH_DEPTH levels, searched through visible windows only. The flee box shows under
+    WorldView/PlanningPhase. A box's own visible flag is not enough: while the planning window was hidden, one under
+    it still read visible and was taken for the box showing, while the idle box stood at
+    WorldView/MessageBoxModalWindow."""
     for box in await visible_named(client.root_window, MESSAGE_BOX, MESSAGE_BOX_SEARCH_DEPTH):
         return box, await caption_of(box)
     return None
@@ -345,21 +346,27 @@ async def caption_of(box) -> str:
 
 
 async def return_to_combat(client) -> str | None:
-    """Answer the game's idle box ("You Are Idle", "Would you like to return to combat?") with its button, and say
-    so; None when it is not showing. Until answered the game passes for the wizard every round and keeps the
-    planning window hidden: after joining another player's fight, the client's log showed "MSG_CombatAFK" at the
-    start of all nine rounds, no move from the wizard, and its hand read empty from round 5. Its one button,
-    "Return", is looked for where the flee box has Yes; when it is not there, what the box shows is reported."""
-    showing_box = await message_box(client)
-    if showing_box is None or not is_idle_box(showing_box[1]):
+    """Answer the game's idle box with its button, and say so; None when it is not showing. Until answered the game
+    passes for the wizard every round and keeps the planning window hidden: after joining another player's fight,
+    the client's log showed "MSG_CombatAFK" at the start of all nine rounds, no move from the wizard, and its hand
+    read empty from round 5. The box is found by its text, "You Are Idle" (GUI_CombatAFKTitle) or "Would you like
+    to return to combat?" (GUI_CombatAFKMessage), anywhere on screen: looked for by window name, under the planning
+    phase, on top and four levels down, it was never found. Its one button, "Return" (GUI_ReturnToCombat), is looked
+    for where the flee box has Yes; when it is not there, the window names around the text are reported."""
+    chain = await window_saying(client.root_window, IDLE_BOX_WORDS, IDLE_BOX_SEARCH_DEPTH)
+    if chain is None:
         return None
-    box, caption = showing_box
-    button = await or_default(window_at(box, BOX_YES), None)
+    names = [await or_default(window.name(), "?") for window in chain]
+    where = "/".join(names)
+    layout = next((window for window, name in zip(chain, names) if name == BOX_LAYOUT), None)
+    button = None if layout is None else await or_default(window_at(layout, LAYOUT_CENTER_BUTTON), None)
     if button is None:
-        return f"found {caption!r} but no button at {'/'.join(BOX_YES)}; it shows {await visible_tree_under(box, 6)}"
+        around = chain[max(0, len(chain) - 1 - LEVELS_ABOVE_THE_CAPTION_SHOWN)]
+        return (f"found the idle box at {where} but no button at {BOX_LAYOUT}/{'/'.join(LAYOUT_CENTER_BUTTON)}; "
+                f"around it: {await visible_names_under(around, LEVELS_ABOVE_THE_CAPTION_SHOWN + 2)}")
     await click_window(client, button)
     await asyncio.sleep(CHANGE_SETTLE_SECONDS)
-    return f"answered {caption!r}"
+    return f"answered the idle box at {where}"
 
 
 async def flee_button_enabled(client) -> bool:
