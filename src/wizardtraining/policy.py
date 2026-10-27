@@ -15,6 +15,7 @@ HEAL_SPELL_TYPES = {"Heal"}
 LOW_HEALTH_FRACTION = 0.4
 SIDE_QUEST_OFFER_PHRASE = "offering you a side quest"
 ACCEPT, DECLINE, GO_BACK, STOP = "accept", "decline", "go back", "stop"
+LEAVE_MENU = "leave menu"
 
 
 @dataclass(frozen=True)
@@ -104,13 +105,18 @@ class OfferPolicy(Protocol):
         """What to do on a dialog page showing ACCEPT and DECLINE: ACCEPT, DECLINE, GO_BACK or STOP.
         `pages` is the text of every page of this conversation so far, the offer page last."""
 
-    def choose_service(self, options: list[str], *, active_quest: str | None) -> int | None:
-        """Which option of an NPC's services menu to click, or None to leave the menu to the operator.
-        `options` are the option labels (quest titles); `active_quest` is the active quest's title."""
+    def choose_service(self, options: list[str], *, active_quest: str | None, business_here: bool) -> int | str | None:
+        """Which option of an NPC's services menu to click (its index), LEAVE_MENU to close the menu, or None
+        to leave it to the operator. `options` are the option labels (quest titles); `active_quest` is the
+        active quest's title; `business_here` says whether that quest has something to do with this NPC now."""
 
 
 def same_title(a: str | None, b: str | None) -> bool:
     return a is not None and b is not None and a.strip().casefold() == b.strip().casefold()
+
+
+def index_of(options: list[str], title: str) -> int | None:
+    return next((index for index, option in enumerate(options) if same_title(option, title)), None)
 
 
 class MainQuestsOnly:
@@ -119,9 +125,12 @@ class MainQuestsOnly:
     go back a page once to read it. Otherwise stop for the operator rather than guess.
 
     An NPC's services menu lists quests by title, and whether a quest is a main quest can be read only
-    once it is accepted. So the menu's option for the active quest is taken, and otherwise only a title
-    the operator approved (`approved_titles`, the CLI's --approve-quest). An approved quest's offer page is
-    accepted unless it calls itself a side quest; the loop stops if it turns out not to be a main quest."""
+    once it is accepted. With a quest active, the menu's option for it is taken only when that quest has
+    business with this NPC (to talk or to turn in); otherwise the menu is left, because the menu reopens
+    after every conversation and choosing the active quest again only replays its dialog. With no quest
+    active, the first title the operator approved (`approved_titles`, the CLI's --approve-quest) is taken,
+    one main quest at a time. An approved quest's offer page is accepted unless it calls itself a side
+    quest; the loop stops if it turns out not to be a main quest."""
 
     def __init__(self, approved_titles=()):
         self.approved_titles = tuple(approved_titles)
@@ -135,13 +144,13 @@ class MainQuestsOnly:
             return ACCEPT
         return GO_BACK if can_go_back else STOP
 
-    def choose_service(self, options: list[str], *, active_quest: str | None) -> int | None:
-        for index, option in enumerate(options):
-            if same_title(option, active_quest):
-                return index
+    def choose_service(self, options: list[str], *, active_quest: str | None, business_here: bool) -> int | str | None:
+        if active_quest is not None:
+            index = index_of(options, active_quest) if business_here else None
+            return LEAVE_MENU if index is None else index
         for title in self.approved_titles:
-            for index, option in enumerate(options):
-                if same_title(option, title):
-                    self._approved_offer_pending = True
-                    return index
+            index = index_of(options, title)
+            if index is not None:
+                self._approved_offer_pending = True
+                return index
         return None

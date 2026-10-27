@@ -25,14 +25,14 @@ from wizwalker import Keycode
 from .combat import approach, fight
 from .config import Settings
 from .dialog import (DIALOG_FINISHED, FOLLOW_UP_WAIT_SECONDS, NPC_ARRIVE_DISTANCE, OFFER_LEFT_FOR_OPERATOR,
-                     choose_service, dialog_open, near_npc, read_conversation, service_options, services_open, talk,
-                     use_object, wait_for_dialog)
+                     choose_service, dialog_open, leave_services, near_npc, read_conversation, service_options,
+                     services_open, talk, use_object, wait_for_dialog)
 from .entities import nearby_enemies, step_away, surroundings
 from .geometry import distance_to_path, flat_distance, path_within
 from .keys import tap
 from .movement import KeysIgnored, face, travel
 from .navigation import load_planner
-from .policy import CombatPolicy, MainQuestsOnly, OfferPolicy, SpellTypePolicy
+from .policy import LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, SpellTypePolicy
 from .progress import (DUEL_NEAR_PATH, ENEMY_NEAR_PATH, PATH_THREATS, Limits, PlannedRoute, RunRecord, StopRun,
                        check_limits, needs_rest, progressed, remember_obstacles, stalled, travel_outcome)
 from .quests import open_goals, read_quest_arrow, read_quests
@@ -173,13 +173,31 @@ class QuestLoop:
         """Pick an option of an NPC's services menu, as the offer policy decides."""
         options = await service_options(self.client)
         labels = [label for label, _ in options]
-        active = (await read_quests(self.client))["active"]
-        choice = self.offer_policy.choose_service(labels, active_quest=active["title"] if active else None)
+        active = await self.active_main_quest()
+        self.record.note_menu_choice((active["name_key"], tuple(goal["id"] for goal in open_goals(active)))
+                                     if active else None)
+        choice = self.offer_policy.choose_service(labels, active_quest=active["title"] if active else None,
+                                                  business_here=active is not None and await self.business_here(active))
         if choice is None:
             raise StopRun(f"an NPC's menu offers {labels}, and none is the active quest or an approved title; "
                           "left for the operator (approve one with --approve-quest)")
+        if choice == LEAVE_MENU:
+            await leave_services(self.client)
+            return progressed("left an NPC's menu", options=labels)
         await choose_service(self.client, options[choice][1])
         return progressed("chose from an NPC's menu", option=labels[choice])
+
+    async def business_here(self, quest: dict) -> bool:
+        """The quest is ready to turn in, or its next goal is to talk to the NPC at the arrow, here."""
+        if quest["ready_to_turn_in"] is True:
+            return True
+        goals = open_goals(quest)
+        if not goals or goals[0]["type"] != "persona":
+            return False
+        try:
+            return await near_npc(self.client, await read_quest_arrow(self.client, wait_seconds=1.0))
+        except Exception:
+            return False
 
     async def rest_turn(self, state: dict) -> dict:
         """Wait for health to come back, stepping away if an enemy comes close. A zone where a full rest

@@ -65,6 +65,19 @@ class DoorLoopTest(unittest.TestCase):
         self.assertEqual(run.zone_changes_without_quest_change, 0)
 
 
+class MenuLoopTest(unittest.TestCase):
+    def test_menu_choices_count_until_the_quest_goal_changes(self):
+        run = record(max_menu_choices_without_quest_change=2)
+        run.note_menu_choice(("quest", (1,)))
+        run.note_menu_choice(("quest", (1,)))
+        check_limits(run, seconds_left=60, stop_requested=False)
+        run.note_menu_choice(("quest", (1,)))
+        with self.assertRaisesRegex(StopRun, "menu kept reopening"):
+            check_limits(run, seconds_left=60, stop_requested=False)
+        run.note_menu_choice(("quest", (2,)))
+        self.assertEqual(run.menu_choices_without_quest_change, 1)
+
+
 class TravelOutcomeTest(unittest.TestCase):
     def outcome(self, reason, moved, stops_in_a_row=0):
         run = record()

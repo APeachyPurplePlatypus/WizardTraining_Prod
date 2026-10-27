@@ -30,6 +30,7 @@ PAGE_TEXT = ["WorldView", "wndDialogMain", "txtArea", "txtMessage"]
 SERVICES_MENU = ["WorldView", "NPCServicesWin"]
 SERVICES_OPTIONS = ["WorldView", "NPCServicesWin", "ControlSprite", "optionsLayout"]
 SERVICES_OPTION_BUTTON = "OptionButton"
+SERVICES_EXIT = ["WorldView", "NPCServicesWin", "wndDialogMain", "Exit"]
 DIALOG_FINISHED = "dialog finished"
 OFFER_LEFT_FOR_OPERATOR = "a quest offer the offer policy would not handle; left for the operator"
 TALK_KEY_SECONDS = 0.1
@@ -77,6 +78,10 @@ async def service_options(client) -> list[tuple[str, object]]:
 
 async def choose_service(client, button) -> None:
     await click_window(client, button)
+
+
+async def leave_services(client) -> None:
+    await click(client, SERVICES_EXIT)
 
 
 async def wait_for_dialog(client, timeout: float, poll: float = DIALOG_POLL_SECONDS) -> bool:

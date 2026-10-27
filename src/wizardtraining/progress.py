@@ -38,6 +38,7 @@ class Limits:
     max_immobile_threat_stops_in_a_row: int = 8
     max_obstacles_per_zone: int = 40
     max_zone_changes_without_quest_change: int = 10
+    max_menu_choices_without_quest_change: int = 3
 
 
 @dataclass
@@ -57,6 +58,8 @@ class RunRecord:
     obstacles: dict[str, list] = field(default_factory=dict)
     zone_changes_without_quest_change: int = 0
     last_place: tuple | None = None
+    menu_choices_without_quest_change: int = 0
+    last_menu_goal: tuple | None = None
     planner_status: dict[str, dict] = field(default_factory=dict)
     quest: dict | None = None
     hooks: dict | None = None
@@ -81,6 +84,13 @@ class RunRecord:
             elif zone != last_zone:
                 self.zone_changes_without_quest_change += 1
         self.last_place = (zone, quest_goal)
+
+    def note_menu_choice(self, quest_goal) -> None:
+        """Count NPC-menu choices made while the quest goal stays the same. Dialogs count as progress, so a
+        menu that reopens after every conversation would otherwise never trip a limit."""
+        same_goal = self.last_menu_goal == quest_goal
+        self.menu_choices_without_quest_change = self.menu_choices_without_quest_change + 1 if same_goal else 1
+        self.last_menu_goal = quest_goal
 
     def as_report(self) -> dict:
         return {"source": "wizwalker", "simulated": False, **asdict(self)}
@@ -110,6 +120,8 @@ def check_limits(record: RunRecord, *, seconds_left: float, stop_requested: bool
         raise StopRun("stepped away from enemies too often")
     if record.zone_changes_without_quest_change > limits.max_zone_changes_without_quest_change:
         raise StopRun("changed zones many times without the quest changing; possibly going back and forth through doors")
+    if record.menu_choices_without_quest_change > limits.max_menu_choices_without_quest_change:
+        raise StopRun("an NPC's menu kept reopening without the quest changing; left for the operator")
 
 
 def needs_rest(fraction: float | None) -> bool:

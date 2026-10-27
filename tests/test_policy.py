@@ -1,7 +1,7 @@
 import unittest
 
-from wizardtraining.policy import (ACCEPT, DECLINE, GO_BACK, STOP, Card, Cast, Combatant, MainQuestsOnly, RoundView,
-                                   SpellTypePolicy, problem_with)
+from wizardtraining.policy import (ACCEPT, DECLINE, GO_BACK, LEAVE_MENU, STOP, Card, Cast, Combatant, MainQuestsOnly,
+                                   RoundView, SpellTypePolicy, problem_with)
 
 HEAL = Card("Fairy", "Heal", True)
 BOLT = Card("Fire Cat", "Damage", True)
@@ -70,26 +70,38 @@ class MainQuestsOnlyTest(unittest.TestCase):
 class ServicesMenuTest(unittest.TestCase):
     menu = ["Trouble on Triton Avenue ", "A Good Day to Cyclops", "Putting Out the Fire!"]
 
-    def test_takes_the_option_for_the_active_quest(self):
-        self.assertEqual(MainQuestsOnly().choose_service(self.menu, active_quest="putting out the fire!"), 2)
+    def choose(self, policy=None, *, active_quest=None, business_here=False):
+        policy = policy or MainQuestsOnly()
+        return policy.choose_service(self.menu, active_quest=active_quest, business_here=business_here)
+
+    def test_takes_the_active_quests_option_when_it_has_business_here(self):
+        self.assertEqual(self.choose(active_quest="putting out the fire!", business_here=True), 2)
+
+    def test_leaves_the_menu_when_the_active_quest_has_no_business_here(self):
+        self.assertEqual(self.choose(active_quest="Trouble on Triton Avenue", business_here=False), LEAVE_MENU)
+        approved = MainQuestsOnly(approved_titles=["A Good Day to Cyclops"])
+        self.assertEqual(self.choose(approved, active_quest="Trouble on Triton Avenue"), LEAVE_MENU)
+
+    def test_leaves_the_menu_when_it_does_not_list_the_active_quest(self):
+        self.assertEqual(self.choose(active_quest="Another Quest", business_here=True), LEAVE_MENU)
 
     def test_takes_the_first_approved_title_in_the_operators_order(self):
         policy = MainQuestsOnly(approved_titles=["Putting Out the Fire!", "Trouble on Triton Avenue"])
-        self.assertEqual(policy.choose_service(self.menu, active_quest=None), 2)
+        self.assertEqual(self.choose(policy), 2)
 
     def test_leaves_unapproved_menus_to_the_operator(self):
-        self.assertIsNone(MainQuestsOnly().choose_service(self.menu, active_quest=None))
-        self.assertIsNone(MainQuestsOnly(approved_titles=["Other"]).choose_service(self.menu, active_quest="Else"))
+        self.assertIsNone(self.choose())
+        self.assertIsNone(self.choose(MainQuestsOnly(approved_titles=["Other"])))
 
     def test_accepts_the_offer_of_an_approved_title_once(self):
         policy = MainQuestsOnly(approved_titles=["A Good Day to Cyclops"])
-        policy.choose_service(self.menu, active_quest=None)
+        self.choose(policy)
         self.assertEqual(policy.decide(["Help the city?"], can_go_back=True), ACCEPT)
         self.assertEqual(policy.decide(["Help again?"], can_go_back=True), GO_BACK)
 
     def test_an_approved_title_that_calls_itself_a_side_quest_is_declined(self):
         policy = MainQuestsOnly(approved_titles=["A Good Day to Cyclops"])
-        policy.choose_service(self.menu, active_quest=None)
+        self.choose(policy)
         self.assertEqual(policy.decide(["I am offering you a side quest."], can_go_back=True), DECLINE)
 
 
