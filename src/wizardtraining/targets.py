@@ -64,6 +64,12 @@ def safe_wisps(wisps: list[dict], *, me, enemies: list[dict], duel_circles, trie
     return sorted((wisp for wisp in wisps if safe(wisp)), key=lambda wisp: flat_distance(me, wisp["position"]))
 
 
+def next_area_to_explore(points: list, *, me, explored=()) -> tuple | None:
+    """The nearest exploration point not explored yet, as ((x, y), piece), or None when all are done."""
+    left = [point for point in points if (round(point[0][0]), round(point[0][1])) not in explored]
+    return min(left, key=lambda point: flat_distance(me, point[0]), default=None)
+
+
 def escape_point(me, close: list[dict], distance: float = STEP_AWAY_DISTANCE) -> Point:
     """The point `distance` from `me`, directly away from the close enemies taken together."""
     mx, my = xy(me)

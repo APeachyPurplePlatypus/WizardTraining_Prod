@@ -43,7 +43,7 @@ from .routes import DUEL_CIRCLE_NO_GO, Hazards, RoutePlanner
 from .session import NoClient, attached, hooks_ready
 from .state import attempt, battle_showing, free_to_move, health_fraction, mana_fraction, snapshot
 from .placed import gate_toward, objects_for_goal
-from .targets import bystanders, others, quest_targets, safe_wisps, summary, too_close
+from .targets import bystanders, next_area_to_explore, others, quest_targets, safe_wisps, summary, too_close
 from .teleports import LEFT_ZONE, NO_EFFECT, TeleportVolume, describe_outcome
 from .ui import POTION_BUTTON, click, close_known_popup, visible_children
 
@@ -348,6 +348,8 @@ class QuestLoop:
         arrow = await read_quest_arrow(self.client)
         if arrow_shows_no_target(arrow):
             arrow = await self.target_without_arrow(goal)
+            if arrow is None and goal["type"] in ("bounty", "bountycollect") and goal.get("target_code"):
+                return await self.explore_turn(goal)
             if arrow is None:
                 raise StopRun(f"the quest arrow shows no target for the {goal['type']} goal of "
                               f"{quest.get('title') or quest['name_key']}, and neither its tags {goal.get('tags')} "
@@ -391,6 +393,32 @@ class QuestLoop:
                                        f"{matching[0]['distance']:.0f} away, {len(matching)} in sight")
             return matching[0]["position"]
         return None
+
+    async def explore_turn(self, goal: dict) -> dict:
+        """Look for a goal's enemies when none is in sight: walk to the nearest part of the zone not explored
+        yet, stopping as soon as one shows up. Stops the run once every part has been seen."""
+        code = goal["target_code"]
+        zone = await self.client.zone_name()
+        planner = await self.planner()
+        explored = self.record.explored.setdefault(f"{zone}|{code}", [])
+        me = await self.client.body.position()
+        area = next_area_to_explore(planner.exploration_points, me=(me.x, me.y), explored=explored)
+        if area is None:
+            raise StopRun(f"explored all of {zone} without seeing the enemy {code}; left for the operator")
+        (x, y), _ = area
+        self.events.emit("explore", f"looking for {code}: walking to ({x:.0f}, {y:.0f}), "
+                                    f"{len(planner.exploration_points) - len(explored)} of "
+                                    f"{len(planner.exploration_points)} areas left")
+
+        async def target_in_sight():
+            enemies = await nearby_enemies(self.client)
+            return "target in sight" if any(enemy.get("display_code") == code for enemy in enemies) else None
+
+        turn = await self.travel_turn("explore for quest enemies", XYZ(x, y, 0.0), arrive_radius=WAYPOINT_ARRIVE_RADIUS * 3,
+                                      also=target_in_sight, avoid=await nearby_enemies(self.client))
+        if turn.get("trip", {}).get("reason") in (None, "target in sight", "every route method failed"):
+            explored.append((round(x), round(y)))
+        return turn
 
     async def active_main_quest(self) -> dict | None:
         active = (await read_quests(self.client))["active"]

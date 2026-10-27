@@ -2,7 +2,7 @@ import math
 import unittest
 
 from wizardtraining.targets import (ENEMY_CLEARANCE, STEP_AWAY_DISTANCE, WISP_REACH, bystanders, escape_point, measured,
-                                    others, quest_targets, safe_wisps, too_close)
+                                    next_area_to_explore, others, quest_targets, safe_wisps, too_close)
 
 
 def enemy(id_, name, x, y):
@@ -40,6 +40,12 @@ class TargetsTest(unittest.TestCase):
         found = safe_wisps(wisps, me=(0, 0), enemies=[enemy(1, "Eel", 1100, 0)], duel_circles=[(0, 2100)],
                            tried=["tried"])
         self.assertEqual([wisp["id"] for wisp in found], ["nearer", "near"])
+
+    def test_next_area_to_explore_is_the_nearest_not_yet_explored(self):
+        points = [((0, 5000), 0), ((0, 1000), 0), ((0, 3000), 1)]
+        self.assertEqual(next_area_to_explore(points, me=(0, 0)), ((0, 1000), 0))
+        self.assertEqual(next_area_to_explore(points, me=(0, 0), explored=[(0, 1000)]), ((0, 3000), 1))
+        self.assertIsNone(next_area_to_explore(points, me=(0, 0), explored=[(0, 1000), (0, 3000), (0, 5000)]))
 
     def test_escape_point_leads_directly_away(self):
         point = escape_point((0, 0), [enemy(1, "Ghost", 100, 0)])

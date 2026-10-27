@@ -28,6 +28,7 @@ from .placed import parse_placed_objects
 from .teleports import parse_teleport_volumes
 
 WALL_CLEARANCE = 30.0
+EXPLORE_SPACING = 2500.0
 MAX_CELLS_SEARCHED_FOR_A_FREE_ONE = 2000
 PIECE_REACH = 150.0
 
@@ -50,6 +51,7 @@ async def load_planner(zone: str, deimos_root: Path | None) -> RoutePlanner:
     if free is not None:
         planner.piece_of = free.piece_of
         planner.teleports = [(volume, free.piece_of(volume.point, volume.radius + PIECE_REACH)) for volume in volumes]
+        planner.exploration_points = free.exploration_points(EXPLORE_SPACING)
     return planner
 
 
@@ -83,6 +85,25 @@ class FreeArea:
     @property
     def piece_count(self) -> int:
         return len(self._pieces)
+
+    def exploration_points(self, spacing: float) -> list[tuple[tuple[float, float], int]]:
+        """One walkable point per `spacing`-sized square of each piece, with the piece's index: places to go
+        and look when a goal's targets are not in sight."""
+        from shapely.geometry import box
+        points = []
+        for index, piece in enumerate(self._pieces):
+            min_x, min_y, max_x, max_y = piece.bounds
+            x = min_x
+            while x < max_x:
+                y = min_y
+                while y < max_y:
+                    part = piece.intersection(box(x, y, x + spacing, y + spacing))
+                    if not part.is_empty and part.area > spacing * spacing * 0.05:
+                        where = part.representative_point()
+                        points.append(((where.x, where.y), index))
+                    y += spacing
+                x += spacing
+        return points
 
     def piece_of(self, point, reach: float = PIECE_REACH) -> int | None:
         """The index of the piece within `reach` of `point`, the nearest one if several, or None."""

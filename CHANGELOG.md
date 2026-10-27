@@ -6,6 +6,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Added
 
+- **Exploring for a defeat goal's enemies.**
+  - **What:** when a defeat goal has no quest arrow and none of the enemies it names are in sight, the loop walks to the nearest unexplored part of the zone and stops as soon as one shows up. The zone's walkable area is split into points about 2,500 units apart on every level (`FreeArea.exploration_points`), and the loop uses teleporters where needed. Once every point has been seen, it stops for the operator. The event log says where it is looking and how many areas are left.
+  - **Why:** "Clear as Crystal" asks for Scarlet Screamers on Triton Avenue, and the goal has no quest helper. Enemies only load when the wizard is fairly close, and the zone's spawn data names "Spawn point 10_Screamer" and "11_Screamer" without positions that could be read. Looking around is what a player would do.
+  - **Not verified:** how long a full search takes in large zones. The run's time and turn limits still bound it.
+
 - **Closing the Endorse a Wizard window.**
   - **What:** before each turn, and before concluding that a popup holds the keyboard, the loop closes known popups with their own close button. So far that's only the "Endorse a Wizard" window (`WorldView/EndorsementWindow/CloseEndorsementWindowButton`). It never picks an endorsement, and the event log never records the other player's name. Unknown popups still stop the run.
   - **Why:** after another player joined one of the wizard's battles, the game asked to endorse them. The window held the keyboard, and the run stopped on ignored turn keys. It's the same window the operator closed by hand after a restart. Closing it declines an optional social action; nothing is sent to anyone.

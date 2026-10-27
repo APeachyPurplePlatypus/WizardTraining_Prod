@@ -77,6 +77,7 @@ class RunRecord:
     tried_wisps: list = field(default_factory=list)
     visited_objects: list[str] = field(default_factory=list)
     arrivals: dict[str, dict] = field(default_factory=dict)
+    explored: dict[str, list] = field(default_factory=dict)
 
     def record_turn(self, turn: dict) -> None:
         self.turns.append(turn)
