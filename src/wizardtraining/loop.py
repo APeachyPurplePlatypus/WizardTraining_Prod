@@ -43,7 +43,8 @@ from .routes import DUEL_CIRCLE_NO_GO, Hazards, RoutePlanner
 from .session import NoClient, attached, hooks_ready
 from .state import attempt, battle_showing, free_to_move, health_fraction, mana_fraction, snapshot
 from .placed import gate_toward, objects_for_goal
-from .targets import bystanders, next_area_to_explore, others, quest_targets, safe_wisps, summary, too_close
+from .targets import (bystanders, next_area_to_explore, others, quest_targets, safe_wisps, still_worth_dodging,
+                      summary, too_close)
 from .teleports import LEFT_ZONE, NO_EFFECT, TeleportVolume, describe_outcome
 from .ui import POTION_BUTTON, click, close_known_popup, visible_children
 
@@ -83,6 +84,8 @@ class QuestLoop:
         self.use_potions = use_potions
         self._potion_failed = False
         self._object_in_use = None
+        self._dodges: dict[int, list[float]] = {}
+        self._facing: set[int] = set()
         self.events = events or EventLog()
         self._last_state = self._last_quest = None
         self.settings = settings
@@ -309,7 +312,7 @@ class QuestLoop:
         deadline = time.monotonic() + REST_TURN_SECONDS
         started = time.monotonic()
         while time.monotonic() < deadline and not self.settings.stop_requested():
-            if close := too_close(await nearby_enemies(self.client)):
+            if close := self.worth_dodging(too_close(await nearby_enemies(self.client)), health_fraction(state)):
                 await self.step_away_from(close, "while resting")
                 return progressed("stepped away while resting")
             now = await snapshot(self.client)
@@ -640,7 +643,7 @@ class QuestLoop:
                 return reason
             enemies, duel_circles = await surroundings(self.client)
             threats = others(enemies, ignore)
-            if close := too_close(threats):
+            if close := self.worth_dodging(too_close(threats), health_fraction(state)):
                 await self.step_away_from(close, "while walking")
                 return "stepped away from an enemy"
             stretch = path_within(path_ahead, WATCHED_PATH_LENGTH)
@@ -655,7 +658,23 @@ class QuestLoop:
 
         return watch
 
+    def worth_dodging(self, close: list[dict], health: float | None) -> list[dict]:
+        """The close enemies still worth stepping away from; see `targets.still_worth_dodging`."""
+        now = time.monotonic()
+        kept = []
+        for enemy in close:
+            if still_worth_dodging(self._dodges.get(enemy["id"], []), now=now, health=health):
+                kept.append(enemy)
+            elif enemy["id"] not in self._facing:
+                self._facing.add(enemy["id"])
+                self.events.emit("step away", f"{enemy['name']} keeps blocking the way; no longer stepping away from "
+                                              f"it at {health:.0%} health")
+        return kept
+
     async def step_away_from(self, close: list[dict], when: str) -> None:
+        now = time.monotonic()
+        for enemy in close:
+            self._dodges.setdefault(enemy["id"], []).append(now)
         key = await step_away(self.client, close)
         self.record.step_aways.append(summary(close))
         nearest = close[0]

@@ -6,6 +6,10 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **No endless dodging of an enemy that blocks the way.**
+  - **What:** once the wizard has stepped away from the same enemy three times within a minute, and health is at least half, it stops stepping away from that enemy. It walks on, and passes it or fights it. The event log records the decision.
+  - **Why:** a `Minion-Myth-00` stood about 371 units from the wizard, on the way to Triton's Tele Up. Every turn the route led toward it, the wizard stepped away, and it planned again: seven times in six seconds, until the run stopped on turns without progress. At 70% health, one minion is a fight worth taking. Below half health the wizard still dodges, as before.
+
 - **Stepping away from enemies without turning first.**
   - **What:** a step-away now moves backward with S when the close enemies are within 90 degrees of where the wizard faces, and forward with W when they're behind. It never turns first, lasts 0.8 s, and the event log says which way it went.
   - **Why:** the operator saw that the wizard still got caught. Three of the first four battles of a Triton run began right after a step-away (at 384, 268 and 343 units). Measured in the game: reading the state takes about 1 ms and finding enemies about 1 ms, so the 20 Hz watcher does notice in time. But a 180-degree turn with A and D took 1.88 s, during which a chasing enemy closed in. S moved 380 units in 0.6 s, as fast as W (370), with no turn at all.

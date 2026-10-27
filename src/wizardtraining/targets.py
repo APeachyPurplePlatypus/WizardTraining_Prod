@@ -17,6 +17,9 @@ QUEST_TARGET_ARROW_RADIUS = 700.0
 ENEMY_CLEARANCE = 450.0
 WISP_REACH = 4000.0
 WISP_ENEMY_CLEARANCE = 600.0
+DODGES_BEFORE_FACING = 3
+DODGE_MEMORY_SECONDS = 60.0
+FACE_ABOVE_HEALTH = 0.5
 
 
 def measured(enemies: list[dict], me, duel_circles) -> list[dict]:
@@ -70,6 +73,15 @@ def next_area_to_explore(points: list, *, me, explored=(), prefer=()) -> tuple |
     left = [point for point in points if (round(point[0][0]), round(point[0][1])) not in explored]
     preferred = [point for point in left if point[1] in set(prefer)]
     return min(preferred or left, key=lambda point: flat_distance(me, point[0]), default=None)
+
+
+def still_worth_dodging(dodge_times: list[float], *, now: float, health: float | None) -> bool:
+    """False once an enemy has been stepped away from DODGES_BEFORE_FACING times in DODGE_MEMORY_SECONDS while
+    the wizard's health is at least FACE_ABOVE_HEALTH: it keeps blocking the way, and dodging it again only
+    loops. The wizard then walks on, and passes it or fights it."""
+    recent = [moment for moment in dodge_times if now - moment <= DODGE_MEMORY_SECONDS]
+    healthy = health is not None and health >= FACE_ABOVE_HEALTH
+    return not (healthy and len(recent) >= DODGES_BEFORE_FACING)
 
 
 def threat_centre(close: list[dict]) -> Point:
