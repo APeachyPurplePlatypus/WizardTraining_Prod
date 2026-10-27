@@ -58,11 +58,11 @@ class DescriptionTest(unittest.TestCase):
         self.assertIn("442/624 with 3 pips; answered 'Would you like to return to combat?'; cast Frost Beetle",
                       describe_round(entry))
 
-    def test_threat_text_names_the_nearest_enemies_before_a_battle(self):
-        nearest = [{"name": "Snowman-Fire-L12", "distance": 500, "closing": 190, "in_duel": False, "avoided": True},
-                   {"name": "FireElf-Red-L02", "distance": 640, "closing": -50, "in_duel": True, "avoided": False}]
-        self.assertEqual(threat_text(nearest), "; nearest enemies last seen: Snowman-Fire-L12 500 away closing at "
-                                               "190/s, FireElf-Red-L02 640 away closing at -50/s (in a duel, not avoided)")
+    def test_threat_text_names_the_closest_approaches_before_a_battle(self):
+        closest = [{"name": "FireElf-Red-L02", "distance": 301, "seconds_before": 3.2},
+                   {"name": "Snowman-Fire-L12", "distance": 954, "seconds_before": 0.1}]
+        self.assertEqual(threat_text(closest), "; closest approaches before the battle: FireElf-Red-L02 301 (3.2 s "
+                                               "before), Snowman-Fire-L12 954 (0.1 s before)")
         self.assertEqual(threat_text(None), "")
         self.assertEqual(threat_text([]), "")
 

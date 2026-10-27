@@ -1,7 +1,7 @@
 import unittest
 
 from wizardtraining.motion import (MAX_ENEMY_SPEED, MOTION_WINDOW_SECONDS, PREDICTION_HORIZON_SECONDS, MotionTracker,
-                                   Track, closest_approach, closing_speed)
+                                   ApproachLog, Track, closest_approach, closing_speed)
 from wizardtraining.routes import COLLISION, ENEMY_KEEP_OUT, Hazards, RoutePlanner
 
 from test_routes import SquareWalkGrid
@@ -38,6 +38,24 @@ class MotionTrackerTest(unittest.TestCase):
         track = Track((0, 0), (100, 0))
         self.assertEqual(track.at(2), (200, 0))
         self.assertEqual(track.at(PREDICTION_HORIZON_SECONDS + 10), (100 * PREDICTION_HORIZON_SECONDS, 0))
+
+
+class ApproachLogTest(unittest.TestCase):
+    def test_reports_each_enemys_nearest_reading_in_the_last_seconds(self):
+        log = ApproachLog()
+        log.record([{"id": 1, "name": "FireElf-Red-L02", "distance": 301.0}], now=10.0)
+        log.record([{"id": 1, "name": "FireElf-Red-L02", "distance": 954.0},
+                    {"id": 2, "name": "Snowman-Fire-L12", "distance": 700.0}], now=13.0)
+        self.assertEqual(log.closest(13.2, 2), [{"name": "FireElf-Red-L02", "distance": 301, "seconds_before": 3.2},
+                                                {"name": "Snowman-Fire-L12", "distance": 700, "seconds_before": 0.2}])
+
+    def test_forgets_readings_older_than_its_memory(self):
+        log = ApproachLog()
+        log.record([{"id": 1, "name": "Troll", "distance": 200.0}], now=0.0)
+        log.record([{"id": 1, "name": "Troll", "distance": 800.0}], now=7.0)
+        self.assertEqual(log.closest(7.0, 3), [{"name": "Troll", "distance": 800, "seconds_before": 0.0}])
+        log.forget()
+        self.assertEqual(log.closest(7.0, 3), [])
 
 
 class ClosingSpeedTest(unittest.TestCase):

@@ -20,6 +20,7 @@ MIN_MOTION_SPAN_SECONDS = 0.3
 PREDICTION_HORIZON_SECONDS = 4.0
 MAX_ENEMY_SPEED = 1000.0
 APPROACH_SAMPLE_SPACING = 60.0
+APPROACH_MEMORY_SECONDS = 6.0
 
 
 @dataclass(frozen=True)
@@ -63,6 +64,35 @@ class MotionTracker:
         if math.hypot(*velocity) > MAX_ENEMY_SPEED:
             return Track(position)
         return Track(position, velocity)
+
+    def forget(self) -> None:
+        self._samples.clear()
+
+
+class ApproachLog:
+    """How near each enemy came to the wizard over the last APPROACH_MEMORY_SECONDS. A battle is set off when an
+    enemy comes within its reach, and begins seconds later at one of the places battles are held, by which time
+    the enemy may be far off and walking away: a Fire Elf stepped away from at 301 units engaged 3 seconds later,
+    when the nearest enemy read 954 units away."""
+
+    def __init__(self):
+        self._samples: deque = deque()
+
+    def record(self, enemies: list[dict], now: float) -> None:
+        for enemy in enemies:
+            self._samples.append((now, enemy["id"], enemy["name"], enemy["distance"]))
+        while self._samples and now - self._samples[0][0] > APPROACH_MEMORY_SECONDS:
+            self._samples.popleft()
+
+    def closest(self, now: float, count: int) -> list[dict]:
+        """The `count` enemies that came nearest, each with its nearest distance and how many seconds ago."""
+        nearest: dict[object, tuple] = {}
+        for when, enemy_id, name, distance in self._samples:
+            if now - when <= APPROACH_MEMORY_SECONDS and (enemy_id not in nearest or distance < nearest[enemy_id][2]):
+                nearest[enemy_id] = (when, name, distance)
+        ranked = sorted(nearest.values(), key=lambda sample: sample[2])[:count]
+        return [{"name": name, "distance": round(distance), "seconds_before": round(now - when, 1)}
+                for when, name, distance in ranked]
 
     def forget(self) -> None:
         self._samples.clear()

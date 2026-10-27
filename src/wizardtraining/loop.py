@@ -37,7 +37,7 @@ from .gear import describe_stats, upgrades
 from .geometry import distance_to_path, flat_distance, path_within, xy
 from .keys import tap
 from .knowledge import Knowledge
-from .motion import MotionTracker, closest_approach, closing_speed
+from .motion import ApproachLog, MotionTracker, closest_approach
 from .movement import KeysIgnored, Reroute, face, travel
 from .navigation import load_planner
 from .policy import LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, SpellTypePolicy
@@ -105,7 +105,7 @@ class QuestLoop:
         self.wear_gear = wear_gear
         self._gear_checked: tuple | None = None
         self._finishing_since: float | None = None
-        self._nearest_threat: list[dict] | None = None
+        self.approaches = ApproachLog()
         self._topping_up_in: str | None = None
         self._potion_failed = False
         self._object_in_use = None
@@ -287,6 +287,7 @@ class QuestLoop:
         observed yet every enemy counted as standing still, and 9 seconds after leaving the Witch's house a
         patrolling Fire Elf walked into the wizard."""
         self.motion.forget()
+        self.approaches.forget()
         await self.watch_enemies(ARRIVAL_SETTLE_SECONDS)
         zone = await self.client.zone_name()
         while (again := await self.client.zone_name()) != zone and not self.settings.stop_requested():
@@ -867,7 +868,8 @@ class QuestLoop:
         new_obstacles = remember_obstacles(self.record, zone, trip["blocked_at"])
         methods = ", ".join(f"{tried['method']}: {tried.get('result')}{failure_text(tried)}{reroute_text(tried)}"
                             for tried in trip["attempts"])
-        threat = self._nearest_threat if trip["reason"] == "battle" else None
+        threat = (self.approaches.closest(time.monotonic(), NEAREST_ENEMIES_NOTED) or None
+                  if trip["reason"] == "battle" else None)
         self.events.emit("walk", f"{did}: moved {moved:.0f}, {trip['result']}"
                                  f"{' (' + trip['reason'] + ')' if trip['reason'] else ''}; {methods}"
                                  f"{f'; {new_obstacles} new obstacles' if new_obstacles else ''}"
@@ -980,7 +982,7 @@ class QuestLoop:
             now = time.monotonic()
             self.motion.observe(enemies, now)
             threats = [] if self.in_grace_after_battle() else others(enemies, ignore)
-            self.note_nearest_enemies(enemies, threats, now, path_ahead[0])
+            self.approaches.record(enemies, now)
             if close := too_close(threats):
                 await self.step_away_from(close, "while walking", ignore=ignore)
                 return "stepped away from an enemy"
@@ -1000,18 +1002,6 @@ class QuestLoop:
             return None
 
         return watch
-
-    def note_nearest_enemies(self, enemies: list[dict], threats: list[dict], now: float, here) -> None:
-        """Keep the NEAREST_ENEMIES_NOTED nearest loaded enemies, with each one's distance, how fast it is closing
-        on `here`, the wizard, and whether it stood in a duel or was not avoided, to report when a walk ends in a
-        battle: how near enemies come before they engage is not documented, and differs between them. The nearest
-        avoided enemy alone once read 881 units away and walking off when a battle began."""
-        avoided = {id(enemy) for enemy in threats}
-        self._nearest_threat = [
-            {"name": enemy["name"], "distance": round(enemy["distance"]),
-             "closing": round(closing_speed(self.motion.track(enemy, now), here)),
-             "in_duel": bool(enemy.get("in_a_duel")), "avoided": id(enemy) in avoided}
-            for enemy in sorted(enemies, key=lambda enemy: enemy["distance"])[:NEAREST_ENEMIES_NOTED]] or None
 
     def in_grace_after_battle(self) -> bool:
         return in_grace_after_battle(self._battle_ended_at, now=time.monotonic())
