@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from dataclasses import asdict
+from dataclasses import asdict, replace
 
 from wizwalker.combat import CombatHandler
 from wizwalker.memory import DuelPhase
@@ -197,8 +197,9 @@ async def read_hand(combat):
     return view, me, cards, enemies
 
 
-async def play_round(combat, policy: CombatPolicy) -> dict:
+async def play_round(combat, policy: CombatPolicy, can_flee: bool = True) -> dict:
     view, me, cards, enemies = await read_hand(combat)
+    view = replace(view, can_flee=can_flee)
     entry = {"round": view.round_number, "view": asdict(view)}
     if not view.cards:
         await combat.pass_button()
@@ -236,6 +237,7 @@ async def fight(client, policy: CombatPolicy, on_round=None) -> dict:
     after each round the wizard plays, with what it saw and did."""
     result = {"rounds": []}
     combat = CombatHandler(client)
+    can_flee = True
     started = time.monotonic()
     await enable_clicks(client)
     async with client.mouse_handler:
@@ -253,7 +255,7 @@ async def fight(client, policy: CombatPolicy, on_round=None) -> dict:
                 continue
             await asyncio.sleep(CARDS_DRAW_SECONDS)
             try:
-                entry = await play_round(combat, policy)
+                entry = await play_round(combat, policy, can_flee)
             except Exception as exc:
                 result["stopped"] = f"round failed: {type(exc).__name__}; left for the operator"
                 break
@@ -261,6 +263,8 @@ async def fight(client, policy: CombatPolicy, on_round=None) -> dict:
             if on_round is not None:
                 on_round(entry)
             entry["then"] = await wait_for_next_round(client, combat, entry["round"], PHASE_TIMEOUT_SECONDS)
+            if entry["action"].startswith("flee") and entry["then"] == "next round":
+                can_flee = False
         else:
             result["stopped"] = "round limit reached; left for the operator"
     result["final_phase"] = plain(await duel_phase(client))

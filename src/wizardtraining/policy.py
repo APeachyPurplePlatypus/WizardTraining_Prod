@@ -66,7 +66,8 @@ class Combatant:
 
 @dataclass(frozen=True)
 class RoundView:
-    """What the wizard sees in a planning phase. `enemies` holds only the living ones."""
+    """What the wizard sees in a planning phase. `enemies` holds only the living ones. `can_flee` turns false once
+    a flee did not end the battle: some boss fights, such as General Akilles in his tower, cannot be fled."""
     round_number: int | None
     health: int | None
     max_health: int | None
@@ -75,6 +76,7 @@ class RoundView:
     cards: tuple[Card, ...]
     enemies: tuple[Combatant, ...]
     mana: int | None = None
+    can_flee: bool = True
 
     def health_fraction(self) -> float | None:
         if isinstance(self.health, int) and isinstance(self.max_health, int) and self.max_health > 0:
@@ -123,7 +125,7 @@ class CombatPolicy(Protocol):
 
 
 class SpellTypePolicy:
-    """With less than FLEE_BELOW_MANA mana, flee. Below LOW_HEALTH_FRACTION, heal; with a heal in hand that needs
+    """With less than FLEE_BELOW_MANA mana, flee, unless this battle cannot be fled. Below LOW_HEALTH_FRACTION, heal; with a heal in hand that needs
     more pips than the wizard has, pass to save pips for it. Otherwise attack the first living enemy with the
     affordable attack expected to do the most: its pip cost (damage grows with pips: Frost Beetle, 1 pip, about 85;
     Snow Serpent, 2 pips, about 175), times the share the target's shields, wards, traps and resistances let
@@ -131,7 +133,7 @@ class SpellTypePolicy:
     for attacks."""
 
     def choose(self, view: RoundView) -> Cast | Pass | Flee | None:
-        if out_of_mana(view):
+        if out_of_mana(view) and view.can_flee:
             return Flee(f"out of mana ({view.mana} left)")
         fraction = view.health_fraction()
         if fraction is not None and fraction < LOW_HEALTH_FRACTION:

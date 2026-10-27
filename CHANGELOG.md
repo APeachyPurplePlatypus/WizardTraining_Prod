@@ -89,6 +89,8 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **A battle that cannot be fled is fought on.** When the wizard flees and the battle goes on to another round, it does not try again in that battle (`RoundView.can_flee`) and plays its cards instead. With 1 mana against General Akilles in his tower, the Flee click did not end the battle; the wizard chose to flee each round, which passed, while the General and his Cyclops took its health from 801 to 486 in three rounds.
+
 - **Routes are planned in a fraction of a second, so the wizard no longer stands still among patrolling enemies.**
   - **What:** straightening a nav route checks each sample of each shortcut against only the waypoints in nearby buckets (`NavGraph.near_a_waypoint`), not against all of them. The walk grid remembers each cell's floor height, and the patrol map each point's distance to a patrol path; both are fixed within a zone. On Cyclops Lane, with patrol paths as hazards, a nav route from the lane's start took 5.8 to 7.1 s and now takes 0.14 to 0.25 s, with the same legs. A collision route took 1.2 to 1.5 s and now takes 0.2 to 0.8 s.
   - **Why:** the operator saw the wizard "still attacking wrong mobs" on its way to the Warhorns the quest asked for. The run log showed why. Each turn stood still for 4 to 6 seconds before "route by nav", and before two of the fights a failed nav route was followed by a collision route planned for about 16 more seconds. In one of those, the wizard moved 40 units in 19 seconds before a Cyclops walked into it. Profiling put 99% of a nav route's time in the waypoint check: 65 million distance calls.

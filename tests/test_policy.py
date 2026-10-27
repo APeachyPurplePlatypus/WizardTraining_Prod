@@ -41,6 +41,11 @@ class SpellTypePolicyTest(unittest.TestCase):
         self.assertEqual(self.policy.choose(view([BOLT, HEAL], health=100, mana=1)), Flee("out of mana (1 left)"))
         self.assertEqual(self.policy.choose(view([BOLT], mana=0)), Flee("out of mana (0 left)"))
 
+    def test_fights_on_when_the_battle_cannot_be_fled(self):
+        stuck = RoundView(round_number=2, health=500, max_health=500, pips=3, power_pips=0, cards=(BOLT,),
+                          enemies=ONE_ENEMY, mana=1, can_flee=False)
+        self.assertEqual(self.policy.choose(stuck), Cast(0, "enemy"))
+
     def test_fights_with_enough_mana_or_when_mana_is_unknown(self):
         self.assertEqual(self.policy.choose(view([BOLT], mana=2)), Cast(0, "enemy"))
         self.assertEqual(self.policy.choose(view([BOLT])), Cast(0, "enemy"))
