@@ -53,6 +53,7 @@ async def load_planner(zone: str, deimos_root: Path | None) -> RoutePlanner:
     planner.patrols = patrols
     if free is not None:
         planner.piece_of = free.piece_of
+        planner.piece_reaches = free.reaches
         planner.teleports = [(volume, free.piece_of(volume.point, volume.radius + PIECE_REACH)) for volume in volumes]
         planner.exploration_points = free.exploration_points(EXPLORE_SPACING)
     return planner
@@ -115,6 +116,10 @@ class FreeArea:
         distances = [piece.distance(where) for piece in self._pieces]
         nearest = min(range(len(distances)), key=distances.__getitem__, default=None)
         return nearest if nearest is not None and distances[nearest] <= reach else None
+
+    def reaches(self, index: int, point, reach: float) -> bool:
+        """Whether piece `index` comes within `reach` of `point`."""
+        return self._pieces[index].distance(self._point(*point)) <= reach
 
     def contains_point(self, x: float, y: float) -> bool:
         return bool(self._contains_xy(self._area, x, y))

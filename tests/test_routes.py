@@ -194,6 +194,21 @@ class RoutePlannerTest(unittest.TestCase):
         self.assertEqual(with_walk_data.route(STRAIGHT, (0, 0), (1000, 0), hazards), [(1000, 0)])
         self.assertEqual(RoutePlanner("zone").route(STRAIGHT, (0, 0), (5000, 0), hazards), [(5000, 0)])
 
+    def test_no_crossing_to_a_goal_the_wizards_piece_reaches(self):
+        planner = RoutePlanner("zone")
+        planner.piece_of = lambda point, reach=150: 1 if point[1] < -2000 else 0
+        planner.piece_reaches = lambda piece, point, reach: piece == 0 and point[1] > -2300
+        planner.teleports = [(TeleportVolume("to IceSchool", 3605, 3662, 0, 142), 0)]
+        self.assertIsNone(planner.crossing((0, 0), (22, -2170), {}))
+        self.assertEqual(planner.crossing((0, 0), (22, -4000), {}).name, "to IceSchool")
+
+    def test_no_crossing_where_the_nav_graph_walks(self):
+        planner = RoutePlanner("zone", nav_graph=square_nav_graph(3))
+        planner.piece_of = lambda point, reach=150: 1 if point[1] > 800 else 0
+        planner.teleports = [(TeleportVolume("to IceSchool", 900, 0, 0, 142), 0)]
+        self.assertIsNone(planner.crossing((0, 0), (960, 960), {}))
+        self.assertEqual(planner.crossing((0, 0), (960, 5000), {}).name, "to IceSchool")
+
     def test_routes_keep_out_of_teleport_volumes(self):
         planner = RoutePlanner("zone", walk_grid=SquareWalkGrid(20), grid_line_walkable=lambda a, b: True)
         jeweler = TeleportVolume("WC_Shop Jewelry", 1000, 0, 0, 100)

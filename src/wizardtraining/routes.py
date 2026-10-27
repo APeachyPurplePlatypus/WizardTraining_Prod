@@ -267,6 +267,7 @@ class RoutePlanner:
         self.nav_graph = nav_graph
         self.status = status or {}
         self.piece_of: Callable[..., int | None] | None = None
+        self.piece_reaches: Callable[[int, Point, float], bool] | None = None
         self.teleports: list[tuple[TeleportVolume, int | None]] = []
         self.placed_objects: list = []
         self.exploration_points: list[tuple[Point, int]] = []
@@ -277,14 +278,33 @@ class RoutePlanner:
         when they are in the same piece, the pieces are unknown, or no volume is left to try.
 
         Doors stand in walls, and NPCs and quest objects often behind counters, outside the walkable area: a
-        goal belongs to the nearest piece within GOAL_PIECE_REACH."""
+        goal belongs to the nearest piece within GOAL_PIECE_REACH. But when the wizard's own piece also comes
+        within GOAL_PIECE_REACH of the goal, or the zone's nav graph links the two, it walks there. Ravenwood's
+        walkway to the Commons is missing from its collision mesh, so its gate lay in a sliver of walkable
+        ground of its own, and a crossing toward that sliver walked into the school doors instead."""
         if self.piece_of is None:
             return None
         start_piece, goal_piece = self.piece_of(xy(start)), self.piece_of(xy(goal), GOAL_PIECE_REACH)
         if start_piece is None or goal_piece is None or start_piece == goal_piece:
             return None
+        if self.piece_reaches is not None and self.piece_reaches(start_piece, xy(goal), GOAL_PIECE_REACH):
+            return None
+        if self.nav_links(start, goal):
+            return None
         return choose_crossing(self.teleports, start_piece=start_piece, goal_piece=goal_piece, outcomes=outcomes,
                                goal=goal)
+
+    def nav_links(self, start, goal) -> bool:
+        """Whether the nav graph has a path from a waypoint within GOAL_PIECE_REACH of `start` to one within it of
+        `goal`."""
+        if self.nav_graph is None or not self.nav_graph.vertices:
+            return False
+        start, goal = xy(start), xy(goal)
+        waypoints = self.nav_graph.path(start, goal, Hazards())
+        if not waypoints:
+            return False
+        first, last = self.nav_graph.vertices[waypoints[0]], self.nav_graph.vertices[waypoints[-1]]
+        return math.dist(first, start) <= GOAL_PIECE_REACH and math.dist(last, goal) <= GOAL_PIECE_REACH
 
     def teleports_to_keep_out_of(self, start, destination, arrive_radius: float) -> list[tuple[Point, float]]:
         """The teleport volumes a walk from `start` to `destination` must not cross, as circles TELEPORT_CLEARANCE
