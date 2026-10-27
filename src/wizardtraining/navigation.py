@@ -30,6 +30,8 @@ from .placed import parse_placed_objects
 from .teleports import parse_teleport_volumes
 
 WALL_CLEARANCE = 45.0
+BODY_HEIGHT = 180.0
+FLOOR_TOLERANCE = 8.0
 EXPLORE_SPACING = 2500.0
 MAX_CELLS_SEARCHED_FOR_A_FREE_ONE = 2000
 PIECE_REACH = 150.0
@@ -72,7 +74,8 @@ async def _collision_grid(wad, zone: str, deimos_root: Path | None):
         if not grid.has_mesh:
             return None, None, "no walkable mesh"
         footprints = await asyncio.to_thread(deimos.placed_object_footprints, zone)
-        blocked = unary_union([deimos.zone_bcd_walls(world, zone), *footprints])
+        walls = await asyncio.to_thread(deimos.walls_at_body_height, world, zone)
+        blocked = unary_union([walls, *footprints])
         free_area = deimos.walkable_union(world, zone).difference(blocked.buffer(WALL_CLEARANCE))
     except Exception as exc:
         return None, None, f"unavailable: {type(exc).__name__}"
@@ -172,9 +175,30 @@ class WallAwareGrid:
 class _DeimosCollision:
     def __init__(self):
         from src.collision import CollisionWorld
-        from src.collision_math import _walkable_union, get_walk_grid, zone_bcd_walls
+        from src.collision_math import _all_collider_solids, _walkable_tris, _walkable_union, get_walk_grid
         self.CollisionWorld, self.get_walk_grid = CollisionWorld, get_walk_grid
-        self.walkable_union, self.zone_bcd_walls = _walkable_union, zone_bcd_walls
+        self.walkable_union, self.walkable_tris, self.collider_solids = _walkable_union, _walkable_tris, _all_collider_solids
+
+    def walls_at_body_height(self, world, zone: str):
+        """Where the collision file's boxes, cylinders and spheres stand in the wizard's way: each collider's
+        footprint, over the walkable floor whose height puts the collider's bottom less than BODY_HEIGHT above
+        it and its top above it. Deimos's own walls (`zone_bcd_walls`) count only colliders starting within 50
+        units of the floor, which suits teleporting. Cyclops Lane's tents are cylinders starting 59 and 109
+        units up, and the wizard walked into them."""
+        from shapely.ops import unary_union
+        tree, triangles, heights = self.walkable_tris(world, zone)
+        if tree is None:
+            return unary_union([])
+        blocked = []
+        for footprint, bottom, top, _ in self.collider_solids(world):
+            floor = [triangles[index] for index in tree.query(footprint)
+                     if bottom - BODY_HEIGHT <= heights[index] <= top + FLOOR_TOLERANCE
+                     and triangles[index].intersects(footprint)]
+            if floor:
+                region = footprint.intersection(unary_union(floor))
+                if not region.is_empty:
+                    blocked.append(region)
+        return unary_union(blocked)
 
     @staticmethod
     def placed_object_footprints(zone: str) -> list:

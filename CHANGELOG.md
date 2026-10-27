@@ -66,6 +66,10 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **Walls at the wizard's height.**
+  - **What:** the walkable area now subtracts every box, cylinder and sphere collider that stands in the wizard's way: its bottom less than 180 units above the floor beneath it, and its top above that floor. Deimos's own wall builder, used until now, counts only colliders that start within 50 units of the floor. That suits its teleporting but not walking.
+  - **Why:** the operator saw the wizard keep walking into Cyclops Lane's fairground tents, even after placed objects were added: the tents are not placed objects. At every point where the wizard got stuck there, the floor is at height 1 and two cylinders cover the spot, from 59 to 436 and from 109 to 340. Those are the tents, left out as "overhead".
+
 - **Wall clearance matches the wizard's body.** The walkable area now keeps 45 units from collision walls, not 30, which is the body radius Deimos's walk grid uses. With 30, a gap of about 77 units between two boxes in the Myth school stayed walkable, though the wizard cannot fit through it. Routes on Triton Avenue, Cyclops Lane, in Ravenwood and in the Shopping District were checked and still found. The operator noticed the wizard "always" walks into props in the Myth school. Some of those props seem not to be box colliders at all: no collision route reaches the quest NPC there, and the nav and straight-line fallbacks still bump into them.
 
 - **A zone read during loading no longer breaks the report.** The zone reads as empty for a moment during some loading screens. The loop recorded an "arrival" in that empty zone, and saving the report then failed, because JSON keys could not be sorted with an empty one among zone names; the report of that run was lost. Arrivals now need a zone name, and reports turn every key into text before sorting.
