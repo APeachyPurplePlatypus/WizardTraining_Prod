@@ -71,6 +71,19 @@ class KnowledgeTest(unittest.TestCase):
         later.path_views[TRITON]["Path 3m"] += 100
         self.assertEqual(knowledge.path_views, {TRITON: {"Path 3m": 200}})
 
+    def test_keeps_the_spells_the_wizard_knows(self):
+        knowledge = Knowledge()
+        run = RunRecord(limits=Limits())
+        knowledge.give_to(run)
+        run.known_spells = [74836240, 1887199642]
+        knowledge.learn_from(run)
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "knowledge.json"
+            knowledge.save(path)
+            later = RunRecord(limits=Limits())
+            Knowledge.load(path).give_to(later)
+        self.assertEqual(later.known_spells, [74836240, 1887199642])
+
     def test_a_new_run_starts_with_it(self):
         run = RunRecord(limits=Limits())
         Knowledge({TRITON: {"Tele Up": 0}}).give_to(run)

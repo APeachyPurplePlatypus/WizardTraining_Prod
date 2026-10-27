@@ -50,6 +50,8 @@ from .quests import arrow_shows_no_target, game_language, open_goals, read_quest
 from .reports import plain, save_report
 from .patrols import VIEWS_TO_JUDGE, note_sightings, unwalked_paths
 from .routes import Hazards, RoutePlanner, duel_clearance
+from .spellbook import SpellCatalog, deck_spells, learned_spell_ids
+from .spells import KNOWN_AT_FIRST_CHECK, LEARNED, SpellLog, learned_text, newly_learned, spell_entry
 from .session import NoClient, attached, hooks_ready
 from .state import attempt, battle_showing, free_to_move, health_fraction, mana_fraction, snapshot
 from .placed import gate_toward, objects_for_goal
@@ -69,6 +71,7 @@ DOOR_POLL_SECONDS = 0.5
 WATCHED_PATH_LENGTH = 2000.0
 MIN_SECONDS_BETWEEN_REROUTES = 0.3
 PATH_SAMPLE_SECONDS = 1.0
+SPELL_CHECK_SECONDS = 60.0
 BARELY_MOVED_DISTANCE = 100.0
 ENEMY_PASS_WAIT_SECONDS = 1.5
 ARRIVAL_SETTLE_SECONDS = 1.5
@@ -110,6 +113,9 @@ class QuestLoop:
         self._finishing_since: float | None = None
         self.approaches = ApproachLog()
         self._sighted_at = 0.0
+        self._spells_checked_at: float | None = None
+        self._spell_catalog: SpellCatalog | None = None
+        self.spell_log = SpellLog(settings.runtime_folder)
         self._topping_up_in: str | None = None
         self._potion_failed = False
         self._object_in_use = None
@@ -171,10 +177,46 @@ class QuestLoop:
                         goal=(quest.get("goal"), quest.get("goal_zone")), arrow=plain_xy({"position": quest.get("arrow")}))
             self.record.record_turn(turn)
             self.record.note_place(state["zone"], (quest.get("name"), quest.get("goal_id")))
+            await self.check_spells(state)
             log.info("turn %d: %s (progress=%s, level=%s, health=%s, zone=%s, goal=%s %s)", len(self.record.turns),
                      turn["did"], turn["progress"], state["level"], health_text(state), state["zone"], quest.get("goal"),
                      quest.get("goal_zone") or "")
             self.note_changes(state)
+
+    async def check_spells(self, state: dict) -> None:
+        """Every SPELL_CHECK_SECONDS, and at once after a level up, compare the learned spells with those known
+        before and log each new one (`spells.SpellLog`), with whether it is in the equipped deck, so the deck can
+        be changed when a better spell comes. The first check ever lists every spell already known. Reads
+        memory only, never clicks, so it runs anywhere the wizard is free to move."""
+        now = time.monotonic()
+        leveled = self._last_state is not None and state["level"] != self._last_state["level"]
+        due = self._spells_checked_at is None or now - self._spells_checked_at >= SPELL_CHECK_SECONDS
+        if not (due or leveled) or not free_to_move(state):
+            return
+        self._spells_checked_at = now
+        learned = await attempt(learned_spell_ids(self.client))
+        if not isinstance(learned, list):
+            return
+        first = not self.record.known_spells
+        new = newly_learned(self.record.known_spells, learned)
+        if not new:
+            return
+        deck = await attempt(deck_spells(self.client))
+        deck = deck if isinstance(deck, dict) else {}
+        if self._spell_catalog is None:
+            self._spell_catalog = SpellCatalog(game_language())
+        for template_id in new:
+            spell = await self._spell_catalog.describe(template_id)
+            entry = spell_entry(spell, kind=KNOWN_AT_FIRST_CHECK if first else LEARNED, deck=deck,
+                                level=state["level"], zone=state["zone"])
+            self.spell_log.add(entry)
+            if not first:
+                self.events.emit("spell", learned_text(spell, deck), spell=entry)
+        if first:
+            self.events.emit("spell", f"knows {len(new)} spells, {sum(1 for spell in new if spell in deck)} of them "
+                                      f"in the equipped deck ({sum(deck.values())} cards); listed in "
+                                      f"{self.spell_log.path.name}")
+        self.record.known_spells = sorted(set(self.record.known_spells) | set(new))
 
     def note_changes(self, state: dict) -> None:
         for kind, text in describe_changes(self._last_state, state, self._last_quest, self.record.quest):

@@ -6,6 +6,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Added
 
+- **A log of every spell learned, and whether it is in the deck.**
+  - **What:** about once a minute, and at once after a level up, the run reads the learned spells from memory (the player's spellbook behavior, `spellbook.learned_spell_ids`) and the equipped deck (the deck item's deck behavior, `spellbook.deck_spells`), and compares them with the spells it knew before, kept in the knowledge file (`Knowledge.known_spells`). Each new spell is named from the game's files (TemplateManifest.xml maps the template ID to its spell file: name, school, pip cost, effects with their values, as "damage 65-105" or "heal 400"; `spellbook.SpellCatalog`) and written to `runtime/spells-learned.jsonl` with the time, level and zone and how many copies are in the equipped deck, and a "spell" event says it, such as "learned Freeze (Ice, 0 pips; stun 1); not in the equipped deck (14 cards)". The first check lists every spell already known. Nothing is clicked: the spellbook is never opened.
+  - **Why:** the operator asked for "a log everytime a new card is learned so you know when and if to add it to your equipped deck". The battle code only sees the cards that are in the deck; a spell learned but never added would never be played.
+  - **Verified:** the reads, by a read-only script against the game at level 10: 5 learned spells (Frost Beetle, Pixie, Freeze, Snow Serpent, Volcanic Shield), all in the 14-card deck, named with school, pips and effects in under a second. A spell learned during a run: not yet.
+
 - **CI for the offline tests.**
   - **What:** a GitHub Actions workflow runs `python -m unittest discover -s tests` on every pull request and every push to `main`, on Ubuntu and Windows with Python 3.11 and 3.13.
   - **Why:** changes reach `main` only through reviewed pull requests now. A red check shows a broken decision module before anyone merges or plays with it. Ubuntu proves the decide modules really need neither Windows nor WizWalker.

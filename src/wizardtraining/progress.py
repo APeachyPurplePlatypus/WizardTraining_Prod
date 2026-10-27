@@ -104,6 +104,7 @@ class RunRecord:
     zones_with_enemies: list[str] = field(default_factory=list)
     path_sightings: dict[str, dict[str, int]] = field(default_factory=dict)
     path_views: dict[str, dict[str, int]] = field(default_factory=dict)
+    known_spells: list[int] = field(default_factory=list)
 
     def record_turn(self, turn: dict) -> None:
         self.turns.append(turn)

@@ -3,9 +3,10 @@ tested offline.
 
 Kept: where each teleport volume leads, zones whose collision data misses obstacles, so routes there try the
 nav graph first, how often each patrol path was in view and how often an enemy was seen on it
-(`patrols.note_sightings`), so routes stop counting paths no enemy walks as street, and zones where enemies
-have been met, so a run that starts in Cyclops Lane, or meets no enemy at
-its entrance, does not take it for a place to wait for mana. Without them, every new run walked into teleporters
+(`patrols.note_sightings`), so routes stop counting paths no enemy walks as street, the spells the wizard knows,
+so a spell learned between runs is still noticed (`spells.newly_learned`), and zones where enemies have been met,
+so a run that starts in Cyclops Lane, or meets no enemy at its entrance, does not take it for a place to wait for
+mana. Without them, every new run walked into teleporters
 to find out again, and walked into Cyclops Lane's tents again. Not kept: obstacles, because the players and
 enemies that caused most of them move on, and "no effect" teleport verdicts, because a walk that fell short of a
 volume once looked like one.
@@ -27,6 +28,7 @@ class Knowledge:
     zones_with_enemies: list[str] = field(default_factory=list)
     path_sightings: dict[str, dict[str, int]] = field(default_factory=dict)
     path_views: dict[str, dict[str, int]] = field(default_factory=dict)
+    known_spells: list[int] = field(default_factory=list)
 
     @classmethod
     def load(cls, path: Path) -> "Knowledge":
@@ -40,7 +42,8 @@ class Knowledge:
                    nav_first_zones=list(data.get("nav_first_zones", [])),
                    zones_with_enemies=list(data.get("zones_with_enemies", [])),
                    path_sightings=counts_by_zone(data.get("path_sightings", {})),
-                   path_views=counts_by_zone(data.get("path_views", {})))
+                   path_views=counts_by_zone(data.get("path_views", {})),
+                   known_spells=[int(spell) for spell in data.get("known_spells", [])])
 
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -53,6 +56,7 @@ class Knowledge:
         record.zones_with_enemies = list(self.zones_with_enemies)
         record.path_sightings = counts_by_zone(self.path_sightings)
         record.path_views = counts_by_zone(self.path_views)
+        record.known_spells = list(self.known_spells)
 
     def learn_from(self, record) -> None:
         """Keep what a run found out, leaving out "no effect" verdicts."""
@@ -67,6 +71,7 @@ class Knowledge:
                 for path, count in counts.items():
                     kept = mine.setdefault(zone, {})
                     kept[path] = max(kept.get(path, 0), count)
+        self.known_spells = sorted(set(self.known_spells) | set(record.known_spells))
         for zone, outcomes in record.teleport_outcomes.items():
             for volume, outcome in outcomes.items():
                 if outcome != NO_EFFECT:
