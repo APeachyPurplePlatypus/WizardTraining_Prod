@@ -29,7 +29,9 @@ from .movement import KeysIgnored, face_and_step
 from .policy import UNIVERSAL, Card, Cast, CombatPolicy, Combatant, DamageModifier, Flee, Pass, RoundView, problem_with
 from .reports import plain
 from .state import attempt
-from .ui import click, enable_clicks, showing, text_of, visible_tree, window_at
+from .screen import is_idle_box, or_default, visible_named
+from .ui import (click, click_window, enable_clicks, showing, text_under, visible_children, visible_tree,
+                 visible_tree_under, window_at)
 
 APPROACH_STEP_SECONDS = 0.4
 MAX_APPROACH_STEPS = 15
@@ -50,11 +52,12 @@ CHANGE_CHOICE = [*WAITING_FOR_OTHERS, "Change"]
 CHANGE_SETTLE_SECONDS = 0.5
 PASS_BUTTON = [*ACTION_BUTTONS, "Focus"]
 FLEE_BUTTON = [*ACTION_BUTTONS, "Flee"]
-MESSAGE_BOXES = ([*PLANNING_PHASE, "MessageBoxModalWindow"], ["MessageBoxModalWindow"])
+MESSAGE_BOX = "MessageBoxModalWindow"
+MESSAGE_BOXES = ([*PLANNING_PHASE, MESSAGE_BOX], [MESSAGE_BOX])
+MESSAGE_BOX_SEARCH_DEPTH = 4
 BOX_CAPTION = ["messageBoxBG", "messageBoxLayout", "TextArea", "CaptionText"]
 BOX_YES = ["messageBoxBG", "messageBoxLayout", "AdjustmentWindow", "Layout", "centerButton"]
 FLEE_WORD = "flee"
-RETURN_TO_COMBAT = "return to combat"
 CONFIRMED = "confirmed"
 BATTLE_END_CONFIRM_SECONDS = 1.0
 DUEL_CIRCLE_EXIT_SECONDS = 2.0
@@ -252,7 +255,8 @@ async def play_round(combat, policy: CombatPolicy, can_flee: bool = True) -> dic
         entry["returned to combat"] = returned
     if not view.cards:
         await pass_round(combat)
-        entry["action"] = "pass: the hand read empty"
+        entry["action"] = (f"pass: the hand read empty; on top: {await visible_children(combat.client, [])}, in the "
+                           f"world view: {await visible_children(combat.client, ['WorldView'])}")
         return entry
     choice = policy.choose(view)
     acting_since = datetime.datetime.now().replace(microsecond=0)
@@ -321,26 +325,41 @@ async def reopen_card_choice(client) -> bool:
     return True
 
 
-async def message_box(client) -> tuple[list[str], str] | None:
-    """The message box showing, in the battle's planning phase or on top, as (its path, its caption), else None.
-    In battle the game shows its boxes under WorldView/PlanningPhase, not on top."""
-    for box in MESSAGE_BOXES:
-        if await showing(client, box):
-            caption = await text_of(client, [*box, *BOX_CAPTION])
-            return box, caption.replace("<center>", "").replace("</center>", "").replace("<br>", " ").strip()
+async def message_box(client) -> tuple[object, str] | None:
+    """The message box showing, as (its window, its caption), else None. In battle the game shows its boxes under
+    WorldView/PlanningPhase, not on top; any other visible one within MESSAGE_BOX_SEARCH_DEPTH levels is found too.
+    While the wizard was idle in another player's fight the game kept the planning window hidden, so a box under
+    it could not show, and none was found at those two places."""
+    for path in MESSAGE_BOXES:
+        if await showing(client, path):
+            box = await window_at(client.root_window, path)
+            return box, await caption_of(box)
+    for box in await visible_named(client.root_window, MESSAGE_BOX, MESSAGE_BOX_SEARCH_DEPTH):
+        return box, await caption_of(box)
     return None
 
 
+async def caption_of(box) -> str:
+    caption = await text_under(box, BOX_CAPTION)
+    return caption.replace("<center>", "").replace("</center>", "").replace("<br>", " ").strip()
+
+
 async def return_to_combat(client) -> str | None:
-    """Answer the game's "You Are Idle. Would you like to return to combat?" box with its button, and say so; None
-    when it is not showing. The game asks after a round in which the wizard's choice did not reach it, then passes
-    for the wizard every round until answered, hiding the hand."""
+    """Answer the game's idle box ("You Are Idle", "Would you like to return to combat?") with its button, and say
+    so; None when it is not showing. Until answered the game passes for the wizard every round and keeps the
+    planning window hidden: after joining another player's fight, the client's log showed "MSG_CombatAFK" at the
+    start of all nine rounds, no move from the wizard, and its hand read empty from round 5. Its one button,
+    "Return", is looked for where the flee box has Yes; when it is not there, what the box shows is reported."""
     showing_box = await message_box(client)
-    if showing_box is None or RETURN_TO_COMBAT not in showing_box[1].lower():
+    if showing_box is None or not is_idle_box(showing_box[1]):
         return None
-    await click(client, [*showing_box[0], *BOX_YES])
+    box, caption = showing_box
+    button = await or_default(window_at(box, BOX_YES), None)
+    if button is None:
+        return f"found {caption!r} but no button at {'/'.join(BOX_YES)}; it shows {await visible_tree_under(box, 6)}"
+    await click_window(client, button)
     await asyncio.sleep(CHANGE_SETTLE_SECONDS)
-    return f"answered {showing_box[1]!r}"
+    return f"answered {caption!r}"
 
 
 async def flee_button_enabled(client) -> bool:
@@ -370,7 +389,10 @@ async def flee(combat) -> str:
     box, caption = showing_box
     if FLEE_WORD not in caption.lower():
         return f"a message box that does not mention fleeing was left alone: {caption!r}"
-    await click(client, [*box, *BOX_YES])
+    button = await or_default(window_at(box, BOX_YES), None)
+    if button is None:
+        return f"found {caption!r} but no button at {'/'.join(BOX_YES)}; it shows {await visible_tree_under(box, 6)}"
+    await click_window(client, button)
     return f"{CONFIRMED} {caption!r}"
 
 

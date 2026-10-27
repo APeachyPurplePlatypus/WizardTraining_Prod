@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from wizwalker import HookAlreadyActivated
 
+from .screen import or_default
 from .session import HOOK_TIMEOUT_SECONDS
 
 POTION_BUTTON = ["WorldView", "windowHUD", "btnPotions"]
@@ -42,8 +43,12 @@ async def showing(client, path: list[str]) -> bool:
 
 
 async def text_of(client, path: list[str]) -> str:
+    return await text_under(client.root_window, path)
+
+
+async def text_under(parent, path: list[str]) -> str:
     try:
-        window = await window_at(client.root_window, path)
+        window = await window_at(parent, path)
         if window is None:
             return ""
         return await window.maybe_text() or ""
@@ -88,8 +93,14 @@ async def answer_known_popup(client) -> str | None:
 
 
 async def visible_tree(client, path: list[str], depth: int = 3, limit: int = 40) -> list[str]:
-    """The visible windows under `path`, up to `depth` levels down and `limit` in all, as "parent/child" paths with
-    their text after a colon when they have any: what the screen shows, for a report."""
+    """`visible_tree_under` the window at `path`, or [] when there is none."""
+    parent = await or_default(window_at(client.root_window, path), None)
+    return [] if parent is None else await visible_tree_under(parent, depth, limit)
+
+
+async def visible_tree_under(parent, depth: int = 3, limit: int = 40) -> list[str]:
+    """The visible windows under `parent`, up to `depth` levels down and `limit` in all, as "parent/child" paths
+    with their text after a colon when they have any: what the screen shows, for a report."""
     found = []
 
     async def walk(window, prefix: str, levels: int):
@@ -104,19 +115,8 @@ async def visible_tree(client, path: list[str], depth: int = 3, limit: int = 40)
             if levels > 1:
                 await walk(child, f"{name}/", levels - 1)
 
-    parent = await or_default(window_at(client.root_window, path), None)
-    if parent is not None:
-        await walk(parent, "", depth)
+    await walk(parent, "", depth)
     return found
-
-
-async def or_default(coro, default):
-    """`coro`'s result, or `default` when it raises: one window that cannot be read, such as one without text, once
-    ended a whole walk with nothing to show."""
-    try:
-        return await coro
-    except Exception:
-        return default
 
 
 async def visible_children(client, path: list[str]) -> list[str]:

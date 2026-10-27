@@ -125,6 +125,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **The idle box is looked for wherever it shows.**
+  - **What:** the battle code looks for a message box under the planning phase and on top as before, then for any visible `MessageBoxModalWindow` within four levels of the root (`screen.visible_named`). The idle box is told by either of its lines, "You Are Idle" or "Would you like to return to combat?" (`screen.is_idle_box`), and answered with its one button, "Return", where the flee box has Yes. When the button is not there, the round event says what the box shows. A round passed because the hand read empty now lists the visible windows on top and in the world view.
+  - **Why:** the wizard joined another player's fight with two Fire Elf Pathfinders. The client's log shows "MSG_CombatAFK" from the moment it joined and at the start of all nine rounds, the planning window kept hidden, and no move from the wizard; from round 5 its hand read empty, and it passed while its health went from 832 to 443. The idle box was never found: the code looked for it under the planning window, hidden all along, and on top, and recognised it only by "return to combat". The game's language file shows it is a message box titled "You Are Idle", with the one button "Return" (`GUI_ReturnToCombat`).
+  - **Not verified yet:** in the game: where the box shows and where its button is.
+
 - **Other players' fights are seen.**
   - **What:** a fight in progress is recognised by its "Duel Circle" entity (`targets.is_duel_circle`), the name Deimos looks for, as well as `CombatSigil_Object`. Enemies within 700 units of one (`targets.DUEL_CIRCLE_RADIUS`, was 500) count as seated in it: fighters sit about 600 units from the centre.
   - **Why:** routes were meant to keep 900 units from fights in progress, and walks to stop for "a duel is near the path ahead". Neither ever happened: in 35 runs no duel circle was found and none of 578 enemies seen was marked in a duel. `CombatSigil_Object` had been seen once, 3,500 units off in Unicorn Way. In Firecat Alley the wizard walked straight into another player's fight with a Haunted Minion, under way for 49 seconds, and joined it in round 3. The client's log puts the wizard's seat 599 units from that fight's centre, as Deimos expects (590 to 610).
