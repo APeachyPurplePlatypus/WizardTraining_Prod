@@ -23,6 +23,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Changed
 
+- **The run stops before the main quest leaves the world.**
+  - **What:** when the active main quest's goal is in another world (the first part of the zone path, such as `Krokotopia` after `WizardCity`), the run stops and says so, instead of travelling there. `--leave-world` (`Limits.stay_in_world=False`) follows the main quest anyway.
+  - **Why:** the operator's rule: "before you move on to the next world, you must complete all available side quests in current world, as a general rule. There might be times where this is not always possible." The framework does not do side quests yet, so it stops at the boundary and leaves them to the operator, rather than leaving the world with them undone.
+- **Longer battles.** The battle code now gives up after 30 rounds or 15 minutes, up from 12 rounds and 10 minutes. The rematch with The Harvest Lord took 11 rounds and almost four minutes. At 12 rounds the battle code stops and leaves the fight to the operator, which in an unattended run means an idle wizard in battle.
+
 - **Answering the Endorse a Wizard window with Friendly.**
   - **What:** the window is now answered with its Friendly button (`WorldView/EndorsementWindow/MainLayout/FriendlyWindow/FriendlyButton`) instead of being closed. If that button is missing, the window is closed as before. The event log says "endorsed the other wizard as Friendly" and never the player's name.
   - **Why:** the operator asked: "endorse a wizard pop up again, always say friendly". The window appeared again after a shared battle. Friendly is the kindest of the three choices (Friendly, Savvy, Helpful) to give someone the wizard knows nothing else about. `docs/safety.md` says how to decline instead.

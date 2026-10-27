@@ -1,12 +1,24 @@
 import unittest
 
 from wizardtraining.progress import (APPROACH_MARGIN, ENEMY_NEAR_PATH, ENEMY_PATH_CLEARANCE, MEANINGFUL_TRAVEL_DISTANCE,
-                                     Limits, PlannedRoute, RunRecord, StopRun, check_limits, needs_rest, progressed,
-                                     remember_obstacles, should_drink_potion, stalled, travel_outcome, wanted_wisp)
+                                     Limits, PlannedRoute, RunRecord, StopRun, check_limits, leaves_world, needs_rest,
+                                     progressed, remember_obstacles, should_drink_potion, stalled, travel_outcome,
+                                     wanted_wisp, world_of)
 
 
 def record(**limits) -> RunRecord:
     return RunRecord(limits=Limits(**limits))
+
+
+class WorldTest(unittest.TestCase):
+    def test_the_world_is_the_first_part_of_the_zone(self):
+        self.assertEqual(world_of("WizardCity/WC_Streets/WC_Triton"), "WizardCity")
+        self.assertIsNone(world_of(""))
+
+    def test_a_goal_in_another_world_leaves_it(self):
+        self.assertTrue(leaves_world("WizardCity/WC_Hub", "Krokotopia/KT_Hub"))
+        self.assertFalse(leaves_world("WizardCity/WC_Hub", "WizardCity/WC_Streets/Interiors/WC_Triton_T1"))
+        self.assertFalse(leaves_world("WizardCity/WC_Hub", ""))
 
 
 class LimitsTest(unittest.TestCase):

@@ -23,6 +23,16 @@ POTION_BELOW_FRACTION = 0.4
 MANA_BELOW_FRACTION = 0.5
 
 
+def world_of(zone: str | None) -> str | None:
+    """The world a zone belongs to: the first part of its path, "WizardCity" for "WizardCity/WC_Streets/WC_Triton"."""
+    return zone.split("/", 1)[0] if zone else None
+
+
+def leaves_world(here: str | None, destination: str | None) -> bool:
+    """True when a goal's zone is in another world than the wizard's."""
+    return bool(here and destination) and world_of(here) != world_of(destination)
+
+
 class StopRun(Exception):
     """Ends the run. The message is the reason given in the report."""
 
@@ -41,6 +51,7 @@ class Limits:
     max_obstacles_per_zone: int = 40
     max_zone_changes_without_quest_change: int = 10
     max_menu_choices_without_quest_change: int = 3
+    stay_in_world: bool = True
 
 
 @dataclass

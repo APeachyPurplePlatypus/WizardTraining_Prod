@@ -34,9 +34,9 @@ from .keys import tap
 from .movement import KeysIgnored, face, travel
 from .navigation import load_planner
 from .policy import LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, SpellTypePolicy
-from .progress import (DUEL_NEAR_PATH, ENEMY_NEAR_PATH, PATH_THREATS, Limits, PlannedRoute, RunRecord, StopRun,
-                       check_limits, needs_rest, progressed, remember_obstacles, should_drink_potion, stalled,
-                       travel_outcome, wanted_wisp)
+from .progress import (DUEL_NEAR_PATH, ENEMY_NEAR_PATH, Limits, PATH_THREATS, PlannedRoute, RunRecord, StopRun,
+                       check_limits, leaves_world, needs_rest, progressed, remember_obstacles, should_drink_potion,
+                       stalled, travel_outcome, wanted_wisp, world_of)
 from .quests import arrow_shows_no_target, game_language, open_goals, read_quest_arrow, read_quests
 from .reports import plain, save_report
 from .routes import DUEL_CIRCLE_NO_GO, Hazards, RoutePlanner
@@ -362,6 +362,11 @@ class QuestLoop:
         self.record.quest = {"name": quest["name_key"], "title": quest.get("title"), "goal": goal["type"],
                              "goal_id": goal.get("id"),
                              "goal_zone": goal["destination_zone"], "arrow": plain(arrow)}
+        here = await self.client.zone_name()
+        if self.record.limits.stay_in_world and leaves_world(here, goal["destination_zone"]):
+            raise StopRun(f"the main quest {quest.get('title') or quest['name_key']} moves on to "
+                          f"{world_of(goal['destination_zone'])}; the side quests of {world_of(here)} come first, "
+                          "and the framework does not do side quests yet; left for the operator")
         if goal["destination_zone"] not in ("", await self.client.zone_name()):
             return await self.waypoint_turn(arrow, goal)
         handler = self.goal_handlers().get(goal["type"])

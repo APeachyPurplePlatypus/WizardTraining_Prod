@@ -32,6 +32,9 @@ def main(argv=None) -> int:
     play.add_argument("--approve-quest", action="append", default=[], metavar="TITLE",
                       help="a quest title an NPC's menu may offer that you have checked is a main quest; repeatable, "
                            "earlier titles are preferred")
+    play.add_argument("--leave-world", action="store_true",
+                      help="follow the main quest into the next world; by default the run stops first, because "
+                           "the side quests of the current world come first")
     play.add_argument("--use-potions", action="store_true",
                       help="drink health potions the wizard already has when health is low out of battle; "
                            "potions are never bought")
@@ -51,7 +54,8 @@ def main(argv=None) -> int:
         return 1 if "error" in report else 0
 
     from .loop import play as play_quests
-    limits = Limits(target_level=args.level, minutes=args.minutes, max_battles=args.battles)
+    limits = Limits(target_level=args.level, minutes=args.minutes, max_battles=args.battles,
+                    stay_in_world=not args.leave_world)
     offers = MainQuestsOnly(approved_titles=args.approve_quest)
     report, path = asyncio.run(play_quests(settings, limits, offer_policy=offers, use_potions=args.use_potions))
     print(f"stopped: {report['stopped']}\nreport: {path}")
