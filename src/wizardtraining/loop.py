@@ -53,7 +53,7 @@ from .state import attempt, battle_showing, free_to_move, health_fraction, mana_
 from .placed import gate_toward, objects_for_goal
 from .targets import (bystanders, enemies_to_route_around, in_grace_after_battle, keeps_blocking,
                       next_area_to_explore, others, quest_targets, safe_wisps, summary, too_close, WISP_REACH)
-from .teleports import LEFT_ZONE, NO_EFFECT, TeleportVolume, describe_outcome
+from .teleports import LEFT_ZONE, NO_EFFECT, TeleportVolume, describe_outcome, volume_at
 from .ui import POTION_BUTTON, answer_known_popup, click, visible_children
 
 TARGET_REACH = 1200.0
@@ -579,7 +579,9 @@ class QuestLoop:
         return active
 
     async def bounty_turn(self, arrow, goal: dict) -> dict:
-        """Walk toward the arrow around other enemies, then walk into a target enemy near the arrow."""
+        """Walk toward the arrow around other enemies, then walk into a target enemy near the arrow. An arrow at a
+        door with no target in reach leads through it: in the Witch's house, the bounty's arrow pointed at the exit,
+        the wizard "arrived" at it each turn, and the run stopped for turns without progress."""
         enemies = await nearby_enemies(self.client)
         targets = quest_targets(enemies, arrow)
         in_reach = [target for target in targets if target["distance"] <= TARGET_REACH]
@@ -587,6 +589,10 @@ class QuestLoop:
             result = await approach(self.client, in_reach[0])
             did = f"approached {in_reach[0]['name']}"
             return progressed(did) if result["ok"] else stalled(did, reason=result.get("reason"))
+        door = volume_at([volume for volume, _ in (await self.planner()).teleports], xy(arrow))
+        if door is not None and flat_distance(await self.client.body.position(), arrow) <= ARROW_ARRIVE_RADIUS:
+            self.events.emit("door", f"the bounty's arrow points at {door.name}, with no target in reach; going through")
+            return await self.zone_door_turn(XYZ(door.x, door.y, door.z))
 
         async def target_in_reach():
             here = quest_targets(await nearby_enemies(self.client), arrow)

@@ -26,6 +26,7 @@ VOLUME_NAME_PREFIX = b"TeleportVol_"
 ENTER_EVENT_PREFIX = b"Enter_"
 X_OFFSET, Y_OFFSET, Z_OFFSET, RADIUS_OFFSET = 8, 20, 32, 60
 LEFT_ZONE, NO_EFFECT = "left the zone", "no effect"
+DOOR_MARGIN = 150.0
 
 
 @dataclass(frozen=True)
@@ -39,6 +40,14 @@ class TeleportVolume:
     @property
     def point(self) -> Point:
         return self.x, self.y
+
+
+def volume_at(volumes: list[TeleportVolume], point, margin: float = DOOR_MARGIN) -> TeleportVolume | None:
+    """The teleport volume whose edge is within `margin` of `point`, the nearest if several, else None. A quest
+    arrow there points through a door: in the Witch's house, the arrow of a bounty on Magmamen outside pointed at
+    the house's exit."""
+    near = [volume for volume in volumes if math.dist(volume.point, (point[0], point[1])) <= volume.radius + margin]
+    return min(near, key=lambda volume: math.dist(volume.point, (point[0], point[1])), default=None)
 
 
 def parse_teleport_volumes(data: bytes) -> list[TeleportVolume]:

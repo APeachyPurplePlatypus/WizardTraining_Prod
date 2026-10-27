@@ -2,7 +2,7 @@ import struct
 import unittest
 
 from wizardtraining.teleports import (LEFT_ZONE, NO_EFFECT, TeleportVolume, choose_crossing, describe_outcome,
-                                      parse_teleport_volumes)
+                                      parse_teleport_volumes, volume_at)
 
 
 def volume_bytes(name: str, x: float, y: float, z: float, radius: float, *, enter_event: bool = False) -> bytes:
@@ -72,6 +72,15 @@ class CrossingTest(unittest.TestCase):
         self.assertEqual(describe_outcome(0), "landed in walkable piece 0")
         self.assertEqual(describe_outcome(None), "landed outside the known walkable area")
         self.assertEqual(describe_outcome(LEFT_ZONE), LEFT_ZONE)
+
+
+class DoorTest(unittest.TestCase):
+    def test_finds_the_volume_an_arrow_points_at(self):
+        exit_volume = TeleportVolume("TeleportVol_ToStreet5", 760.0, 30.0, 0.0, 100.0)
+        far = TeleportVolume("TeleportVol_Up", 5000.0, 0.0, 0.0, 100.0)
+        self.assertEqual(volume_at([far, exit_volume], (677.9, 28.2)), exit_volume)
+        self.assertIsNone(volume_at([far, exit_volume], (400.0, 28.2)))
+        self.assertIsNone(volume_at([], (677.9, 28.2)))
 
 
 if __name__ == "__main__":
