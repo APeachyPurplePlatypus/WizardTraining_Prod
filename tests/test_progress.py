@@ -1,9 +1,10 @@
 import unittest
 
-from wizardtraining.progress import (APPROACH_MARGIN, ENEMY_NEAR_PATH, ENEMY_PATH_CLEARANCE, MEANINGFUL_TRAVEL_DISTANCE,
-                                     LimitReached, Limits, PlannedRoute, RunRecord, StopRun, check_limits, leaves_world,
-                                     nav_did_better, progressed, remember_obstacles, should_drink_potion,
-                                     stalled, travel_outcome, wanted_wisp, world_of)
+from wizardtraining.progress import (APPROACH_MARGIN, ENEMY_NEAR_PATH, ENEMY_PATH_CLEARANCE, ENGAGE_MANA_FRACTION,
+                                     MEANINGFUL_TRAVEL_DISTANCE, LimitReached, Limits, PlannedRoute, RunRecord, StopRun,
+                                     check_limits, leaves_world, mana_for_a_fight, nav_did_better, progressed,
+                                     remember_obstacles, should_drink_potion, stalled, travel_outcome, wanted_wisp,
+                                     world_of)
 
 
 def record(**limits) -> RunRecord:
@@ -167,12 +168,20 @@ class PlannedRouteTest(unittest.TestCase):
 
 
 class WispTest(unittest.TestCase):
-    def test_health_comes_before_mana(self):
+    def test_very_low_health_then_low_mana_then_middling_health(self):
         self.assertEqual(wanted_wisp(0.3, 0.1), "health")
+        self.assertEqual(wanted_wisp(0.5, 0.1), "mana")
         self.assertEqual(wanted_wisp(0.9, 0.1), "mana")
+        self.assertEqual(wanted_wisp(0.5, 0.9), "health")
         self.assertIsNone(wanted_wisp(0.9, 0.3))
         self.assertIsNone(wanted_wisp(0.9, 0.9))
         self.assertIsNone(wanted_wisp(None, None))
+
+    def test_a_fight_needs_mana(self):
+        self.assertFalse(mana_for_a_fight(1 / 30))
+        self.assertFalse(mana_for_a_fight(ENGAGE_MANA_FRACTION - 0.01))
+        self.assertTrue(mana_for_a_fight(ENGAGE_MANA_FRACTION))
+        self.assertTrue(mana_for_a_fight(None))
 
 
 class PotionTest(unittest.TestCase):

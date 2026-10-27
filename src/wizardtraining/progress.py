@@ -25,6 +25,7 @@ HEALTH_WISP_BELOW_FRACTION = 0.65
 WISP_ANY_DIRECTION_BELOW_FRACTION = 0.35
 POTION_BELOW_FRACTION = 0.4
 MANA_BELOW_FRACTION = 0.2
+ENGAGE_MANA_FRACTION = 0.4
 
 
 def world_of(zone: str | None) -> str | None:
@@ -154,14 +155,23 @@ def check_limits(record: RunRecord, *, seconds_left: float, stop_requested: bool
 
 
 def wanted_wisp(health: float | None, mana: float | None) -> str | None:
-    """"health" below HEALTH_WISP_BELOW_FRACTION, else "mana" below MANA_BELOW_FRACTION, else None. Low mana leaves
-    the wizard only free wand spells, which made each Triton Avenue battle long and costly. But a mana wisp gave
-    only +3 of 28, and used-up ones still show as entities, so mana wisps are sought only when mana is low."""
-    if health is not None and health < HEALTH_WISP_BELOW_FRACTION:
+    """"health" below WISP_ANY_DIRECTION_BELOW_FRACTION, then "mana" below MANA_BELOW_FRACTION, then "health" below
+    HEALTH_WISP_BELOW_FRACTION, else None. Every spell costs a mana per pip, wand spells too, so a wizard out of
+    mana can neither attack nor heal: low mana comes before middling health. A mana wisp gave only +3 of 28, and
+    used-up ones still show as entities, so mana wisps are sought only when mana is low."""
+    if health is not None and health < WISP_ANY_DIRECTION_BELOW_FRACTION:
         return "health"
     if mana is not None and mana < MANA_BELOW_FRACTION:
         return "mana"
+    if health is not None and health < HEALTH_WISP_BELOW_FRACTION:
+        return "health"
     return None
+
+
+def mana_for_a_fight(mana: float | None) -> bool:
+    """At least ENGAGE_MANA_FRACTION of the mana pool, or mana unknown. A Warhorn fight took 6 to 10 mana of 30,
+    and with 1 mana the wizard walked into General Akilles and his Cyclops and could only pass."""
+    return mana is None or mana >= ENGAGE_MANA_FRACTION
 
 
 def should_drink_potion(fraction: float | None, charges) -> bool:

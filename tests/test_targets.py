@@ -54,6 +54,11 @@ class TargetsTest(unittest.TestCase):
         anywhere = safe_wisps(wisps, me=(0, 0), enemies=[], duel_circles=[])
         self.assertEqual({wisp["id"] for wisp in anywhere}, {"behind", "ahead", "aside"})
 
+    def test_reach_can_be_widened(self):
+        far = [{"id": "far", "position": (WISP_REACH * 3, 0)}]
+        self.assertEqual(safe_wisps(far, me=(0, 0), enemies=[], duel_circles=[]), [])
+        self.assertEqual(len(safe_wisps(far, me=(0, 0), enemies=[], duel_circles=[], reach=math.inf)), 1)
+
     def test_next_area_to_explore_is_the_nearest_not_yet_explored(self):
         points = [((0, 5000), 0), ((0, 1000), 0), ((0, 3000), 1)]
         self.assertEqual(next_area_to_explore(points, me=(0, 0)), ((0, 1000), 0))

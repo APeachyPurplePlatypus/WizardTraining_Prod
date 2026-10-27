@@ -6,6 +6,12 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Added
 
+- **No fight the quest asks for without the mana for it.**
+  - **What:** before walking to or into a bounty goal's enemies, the wizard needs 40% of its mana (`progress.ENGAGE_MANA_FRACTION`). Below that, `mana_turn` fetches the nearest safe mana wisp in the zone, however far. With none, it walks back to where it entered the zone and waits there, a minute at a time (`MANA_WAIT_SECONDS`), for mana to come back, logging a "mana" event each time. Out of battle, low mana (below 20%) now comes before middling health when choosing a wisp, and a mana wisp counts in any direction.
+  - **Why:** every spell costs a mana per pip, wand spells too: the round log shows Scarab, Imp and Frost Beetle from the starter wand each taking 1 mana. The pool is 30 at level 8; a Warhorn fight took 6 to 10, mana comes back slowly, and potions are never bought. With 1 mana the wizard walked into General Akilles and his Cyclops, could not flee, and was defeated.
+  - **Waiting is for mana only.** Health is never waited for, as the operator asked; it comes from wisps, heals and potions. Waiting for mana is the one way left to get it back without buying anything, so it is flagged here for the operator to confirm.
+  - **Not verified yet:** in the game.
+
 - **Runs end in a zone without enemies.**
   - **What:** the target level and the time, turn and battle limits are now `LimitReached`, a planned end. At one, the run logs it and plays on, for up to 15 minutes (`loop.FINISH_SAFELY_MINUTES`), until it is out of battle in a zone whose files show no enemy patrols and with no enemy nearby (`QuestLoop.safe_here`, which the gear turn uses too). Then it stops, saying so. The STOP file and the stops that mean something is wrong still stop at once.
   - **Why:** the operator: "ur in a fight because you didnt go to a safe area". A run stopped in Cyclops Lane left the wizard standing among the enemies, and one walked into it. The level-10 stop would have ended the same way wherever the last fight happened.

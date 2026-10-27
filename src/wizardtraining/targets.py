@@ -62,14 +62,15 @@ def detour(me, via, heading) -> float:
     return flat_distance(me, via) + flat_distance(via, heading) - flat_distance(me, heading)
 
 
-def safe_wisps(wisps: list[dict], *, me, enemies: list[dict], duel_circles, tried=(), heading=None) -> list[dict]:
-    """Wisps within WISP_REACH, nearest first, leaving out ones already tried, ones with an enemy within
+def safe_wisps(wisps: list[dict], *, me, enemies: list[dict], duel_circles, tried=(), heading=None,
+               reach: float = WISP_REACH) -> list[dict]:
+    """Wisps within `reach`, nearest first, leaving out ones already tried, ones with an enemy within
     WISP_ENEMY_CLEARANCE, and ones inside someone else's duel circle. With a `heading` (where the quest goes
     next), only wisps on the way, at most WISP_DETOUR out of it: turning back for any wisp in reach walked the
     wizard back and forth along Cyclops Lane, into fights with enemies the quest did not ask for."""
     def safe(wisp):
         return (wisp["id"] not in tried
-                and flat_distance(me, wisp["position"]) <= WISP_REACH
+                and flat_distance(me, wisp["position"]) <= reach
                 and (heading is None or detour(me, wisp["position"], heading) <= WISP_DETOUR)
                 and all(flat_distance(enemy["position"], wisp["position"]) >= WISP_ENEMY_CLEARANCE for enemy in enemies)
                 and all(flat_distance(circle, wisp["position"]) >= DUEL_CIRCLE_RADIUS for circle in duel_circles))
