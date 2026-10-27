@@ -31,7 +31,7 @@ These come from one character's first unattended play, level 1 to level 5 in Wiz
 - **Offer pages have DECLINE.** On them, Space presses ACCEPT. Side-quest offers said so in their text, and are now declined. Main-quest dialogs seen so far had no DECLINE button.
 - **Talk to the right NPC.** With several NPCs nearby, X went to the wrong one. The wizard now walks within 80 units of the arrow's NPC with the prompt showing.
 - **Counters.** One NPC stood in a booth the wizard could not walk around. X is now accepted when the prompt shows and the nearest friendly NPC is the one at the arrow; it worked from 266 units away.
-- **Doors.** A waypoint goal still open with the wizard at its arrow is a door. The zone change starts a few seconds after walking in, so the loop pushes in and waits up to 15 s.
+- **Doors.** A waypoint goal still open with the wizard at its arrow is a door. The zone change starts a few seconds after walking in, so the loop pushes in and waits up to 15 s. Towers and dungeons open only with X once the interact prompt shows; walking into them does nothing.
 - **"Arrived" is not progress.** Counting arrival where the wizard already stood as progress kept one run looping for 200 turns. Progress now needs real movement or a state change.
 
 ## Fighting

@@ -25,7 +25,7 @@ from wizwalker import XYZ, Keycode
 from .combat import approach, fight
 from .config import Settings
 from .dialog import (DIALOG_FINISHED, FOLLOW_UP_WAIT_SECONDS, NPC_ARRIVE_DISTANCE, OFFER_LEFT_FOR_OPERATOR,
-                     choose_service, close_enough, dialog_open, leave_services, near_npc, read_conversation, service_options,
+                     TALK_KEY_SECONDS, choose_service, close_enough, dialog_open, leave_services, near_npc, read_conversation, service_options,
                      services_open, talk, use_object, wait_for_dialog)
 from .entities import HEALTH_WISP, MANA_WISP, nearby_enemies, step_away, surroundings, wisps
 from .events import EventLog, describe_battle, describe_changes, describe_round, enemy_names, health_text
@@ -524,18 +524,24 @@ class QuestLoop:
                                       avoid=await nearby_enemies(self.client))
 
     async def zone_door_turn(self, door) -> dict:
-        """Walk into the door, then give the zone change a few seconds to start."""
+        """Walk into the door, then give the zone change a few seconds to start. Towers and dungeons open only
+        with X: when the interact prompt shows at the door, press X once."""
         zone = await self.client.zone_name()
         turn = await face(self.client, door)
         if not turn["ok"]:
             return stalled("could not face the zone door", reason=turn["reason"])
         await tap(self.client, Keycode.W, DOOR_PUSH_SECONDS)
+        pressed_x = False
         deadline = time.monotonic() + DOOR_WAIT_SECONDS
         while time.monotonic() < deadline and not self.settings.stop_requested():
             if await attempt(self.client.is_loading()) is True or await attempt(self.client.zone_name()) != zone:
-                return progressed("walked through a zone door")
+                return progressed("walked through a zone door", pressed_x=pressed_x)
+            if not pressed_x and await attempt(self.client.is_in_npc_range()) is True:
+                await tap(self.client, Keycode.X, TALK_KEY_SECONDS)
+                pressed_x = True
+                self.events.emit("door", "the interact prompt showed at the door; pressed X to enter")
             await asyncio.sleep(DOOR_POLL_SECONDS)
-        return stalled("walked into a zone door, but the zone did not change")
+        return stalled("walked into a zone door, but the zone did not change", pressed_x=pressed_x)
 
     def arrival_check(self, arrow):
         async def arrived():

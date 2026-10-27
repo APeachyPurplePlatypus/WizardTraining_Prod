@@ -4,6 +4,12 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ## Unreleased
 
+### Added
+
+- **Entering towers and dungeons with X.**
+  - **What:** at a door, the loop walks in as before. If the interact prompt shows, it presses X once, then waits for the zone change. The turn record says whether X was pressed.
+  - **Why:** "The Enemy Revealed" leads into a building on Triton's upper level. Walking into its door did nothing, and the run stopped on turns without progress. The operator pointed out that towers and dungeons are entered by pressing X. X is already one of the allowed keys.
+
 ### Changed
 
 - **Enemies are always avoided.**
