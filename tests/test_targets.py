@@ -4,7 +4,8 @@ import unittest
 from wizardtraining.routes import ENEMY_KEEP_OUT
 from wizardtraining.targets import (AFTER_BATTLE_GRACE_SECONDS, ENEMY_CLEARANCE, WISP_DETOUR, WISP_REACH,
                                     back_away, bystanders, detour, enemies_to_route_around, in_grace_after_battle,
-                                    is_duel_circle, is_dungeon_entrance, keeps_blocking, measured,
+                                    is_duel_circle, is_dungeon_entrance, keeps_blocking, leads_to_another_zone,
+                                    measured,
                                     next_area_to_explore, others, quest_targets,
                                     refill_reach, safe_wisps, threat_centre, too_close)
 
@@ -111,6 +112,18 @@ class TargetsTest(unittest.TestCase):
         self.assertTrue(back_away(0.1, 2 * math.pi - 0.1))
         self.assertFalse(back_away(1.0, 1.0 + math.pi))
         self.assertFalse(back_away(0.0, 2.0))
+
+
+class LeadsToAnotherZoneTest(unittest.TestCase):
+    def test_a_goal_naming_another_zone_is_a_door(self):
+        goal = {"type": "waypoint", "destination_zone": "WizardCity/WC_Streets/Interiors/WC_HauntedCave_T1"}
+        self.assertTrue(leads_to_another_zone(goal, "WizardCity/WC_Streets/WC_HauntedCave"))
+
+    def test_an_explore_goal_naming_none_or_this_zone_is_a_spot_to_walk_to(self):
+        self.assertFalse(leads_to_another_zone({"type": "waypoint", "destination_zone": ""}, "WizardCity/WC_NightSide"))
+        self.assertFalse(leads_to_another_zone({"type": "waypoint", "destination_zone": None}, "WizardCity/WC_NightSide"))
+        self.assertFalse(leads_to_another_zone({"type": "waypoint", "destination_zone": "WizardCity/WC_NightSide"},
+                                               "WizardCity/WC_NightSide"))
 
 
 if __name__ == "__main__":

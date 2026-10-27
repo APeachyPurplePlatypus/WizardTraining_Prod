@@ -60,8 +60,8 @@ from .session import NoClient, attached, hooks_ready
 from .state import attempt, battle_showing, free_to_move, health_fraction, mana_fraction, snapshot
 from .placed import gate_toward, objects_for_goal
 from .targets import (bystanders, enemies_to_route_around, in_grace_after_battle, keeps_blocking,
-                      next_area_to_explore, others, quest_targets, refill_reach, safe_wisps, summary, too_close,
-                      WISP_REACH)
+                      leads_to_another_zone, next_area_to_explore, others, quest_targets, refill_reach, safe_wisps,
+                      summary, too_close, WISP_REACH)
 from .teleports import LEFT_ZONE, NO_EFFECT, TeleportVolume, describe_outcome, volume_at
 from .trainer import OPENED_DIALOG, OPENED_MENU, close_training, learn_free_spells, open_training, open_with_professor
 from .training import GATE, SCHOOLS, TRAINER, School, in_dungeon, spells_to_learn, way_to_school
@@ -667,7 +667,7 @@ class QuestLoop:
             turn = await self.refill_turn(refill, state)
             if turn is not None:
                 return turn
-        if goal["destination_zone"] not in ("", await self.client.zone_name()):
+        if leads_to_another_zone(goal, await self.client.zone_name()):
             return await self.waypoint_turn(arrow, goal)
         handler = self.goal_handlers().get(goal["type"])
         if handler is None:
@@ -965,17 +965,22 @@ class QuestLoop:
                                       also=self.arrival_check(arrow), avoid=await nearby_enemies(self.client))
 
     async def waypoint_turn(self, arrow, goal: dict) -> dict:
-        """Walk to the arrow of a goal in another zone. A waypoint still open once the wizard stands at its arrow is
-        a door: walk in. Towers and dungeons open with X wherever their interact prompt shows, which can be well
-        short of the arrow, so within PROMPT_DOOR_REACH of it the prompt is answered with X, and the walk stops as
+        """Walk to the arrow of a goal in another zone, or of an "Explore" goal that names none (walk to the spot, and
+        only if the goal is still open when the wizard stands there, treat it as a door). A waypoint still open once
+        the wizard stands at its arrow is a door: walk in. Towers and dungeons open with X wherever their interact
+        prompt shows, which can be well short of the arrow, so within PROMPT_DOOR_REACH of it the prompt is answered with X, and the walk stops as
         soon as it shows. Sapphyra's Tower's door stands in a fenced courtyard the wizard cannot walk into; its
         prompt showed at the fence all the while the run stood there, until it stopped for turns without
         progress (the operator: "the prompt to press X has been open since you got stuck"). The way in was the
         tower's entrance semicircle ("Teleport Semi Circle 4 Player Generic"), outside the fence: when one is loaded
         within PROMPT_DOOR_REACH of the arrow, the wizard walks to it, then steps in and presses X."""
+        here = await self.client.body.position()
+        exploring = not leads_to_another_zone(goal, await self.client.zone_name())
+        if exploring and flat_distance(here, arrow) > WAYPOINT_ARRIVE_RADIUS:
+            return await self.travel_turn("explore toward the waypoint", arrow, arrive_radius=WAYPOINT_ARRIVE_RADIUS,
+                                          avoid=await nearby_enemies(self.client))
         if await self.door_prompt_near(arrow):
             return await self.enter_with_x_turn()
-        here = await self.client.body.position()
         if flat_distance(here, arrow) <= WAYPOINT_ARRIVE_RADIUS:
             return await self.zone_door_turn(arrow)
 

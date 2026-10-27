@@ -35,6 +35,13 @@ def is_dungeon_entrance(name: str) -> bool:
     return DUNGEON_ENTRANCE_NAME in name
 
 
+def leads_to_another_zone(goal: dict, zone: str) -> bool:
+    """The goal names a zone other than `zone`, so its waypoint is a door. An "Explore" goal names none: "Take a Walk
+    on the Nightside" asked the wizard to walk to a spot in the Nightside, 1,500 units from where it stood, while
+    a dungeon entrance stood 1,770 units from that spot; the wizard walked to the entrance again and again."""
+    return goal.get("destination_zone") not in ("", None, zone)
+
+
 def is_duel_circle(name: str) -> bool:
     """A fight in progress shows as a "Duel Circle" entity at its centre, the name Deimos looks for
     (`nearest_duel_circle_distance_and_xyz` in Deimos.py), with its fighters seated about 600 units round it:
