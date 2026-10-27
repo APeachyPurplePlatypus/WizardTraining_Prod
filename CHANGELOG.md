@@ -25,6 +25,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **A tower's door is entered with X wherever its prompt shows.**
+  - **What:** on a goal in another zone, when the interact prompt shows within 2,500 units of the quest arrow (`loop.PROMPT_DOOR_REACH`), the wizard presses X and waits for the zone to change (`QuestLoop.enter_with_x_turn`); the walk toward the arrow stops as soon as the prompt shows.
+  - **Why:** "A Brief History of the Spiral" sends the wizard into Sapphyra's Tower in Olde Town. The arrow points at the door volume inside a fenced courtyard the wizard cannot walk into; X was taken only at the arrow, so the run tried teleporters and a step over the fence and stopped for turns without progress. The operator: "u have to press X since it is a tower, like a dungion" and "the prompt to press X has been open since you got stuck". Read at the fence: the prompt showing, 1,732 units from the door.
+  - **Not verified yet:** the entry itself, in the game.
+
 - **Readings that are lists are no longer turned into text.**
   - **What:** the spell check and the enemy watch while settling into a zone read their lists through `screen.or_default`, which keeps the value, instead of `state.attempt`, which makes it plain for a report (`reports.plain`) and so turns a list into its text.
   - **Why:** the first run with the spell log logged nothing: the learned spells came back as the text "[1496157882, 74836240, ...]", which is not a list, and the check gave up quietly. The same mistake meant that the watch of enemies while settling into a zone, added in 0.2.0 ("enemies watched before the first route out of a door"), never recorded one: that part of 0.2.0 did not work.

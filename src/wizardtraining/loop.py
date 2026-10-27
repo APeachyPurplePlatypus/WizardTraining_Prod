@@ -65,6 +65,8 @@ from .ui import POTION_BUTTON, answer_known_popup, click, message_box, visible_c
 TARGET_REACH = 1200.0
 ARROW_ARRIVE_RADIUS = 250.0
 WAYPOINT_ARRIVE_RADIUS = 150.0
+PROMPT_DOOR_REACH = 2500.0
+INTERACT_PROMPT = "interact prompt"
 LOADING_WAIT_SECONDS = 3.0
 DOOR_PUSH_SECONDS = 0.8
 DOOR_WAIT_SECONDS = 15.0
@@ -851,11 +853,41 @@ class QuestLoop:
                                       also=self.arrival_check(arrow), avoid=await nearby_enemies(self.client))
 
     async def waypoint_turn(self, arrow, goal: dict) -> dict:
-        """Walk to the arrow. A waypoint still open once the wizard stands at its arrow is a door: walk in."""
+        """Walk to the arrow of a goal in another zone. A waypoint still open once the wizard stands at its arrow is
+        a door: walk in. Towers and dungeons open with X wherever their interact prompt shows, which can be well
+        short of the arrow, so within PROMPT_DOOR_REACH of it the prompt is answered with X, and the walk stops as
+        soon as it shows. Sapphyra's Tower's door stands in a fenced courtyard the wizard cannot walk into; its
+        prompt showed at the fence all the while the run stood there, until it stopped for turns without
+        progress (the operator: "the prompt to press X has been open since you got stuck")."""
+        if await self.door_prompt_near(arrow):
+            return await self.enter_with_x_turn()
         if flat_distance(await self.client.body.position(), arrow) <= WAYPOINT_ARRIVE_RADIUS:
             return await self.zone_door_turn(arrow)
+
+        async def prompt_shows():
+            return INTERACT_PROMPT if await self.door_prompt_near(arrow) else None
+
         return await self.travel_turn("travel to waypoint", arrow, arrive_radius=WAYPOINT_ARRIVE_RADIUS,
-                                      avoid=await nearby_enemies(self.client))
+                                      also=prompt_shows, avoid=await nearby_enemies(self.client))
+
+    async def door_prompt_near(self, arrow) -> bool:
+        """The interact prompt shows within PROMPT_DOOR_REACH of a door's arrow."""
+        return (flat_distance(await self.client.body.position(), arrow) <= PROMPT_DOOR_REACH
+                and await attempt(self.client.is_in_npc_range()) is True)
+
+    async def enter_with_x_turn(self) -> dict:
+        """Press X at a door's interact prompt and give the zone change a few seconds to start."""
+        zone = await self.client.zone_name()
+        await tap(self.client, Keycode.X, TALK_KEY_SECONDS)
+        self.events.emit("door", "the interact prompt showed near a door into another zone; pressed X to enter")
+        deadline = time.monotonic() + DOOR_WAIT_SECONDS
+        while time.monotonic() < deadline and not self.settings.stop_requested():
+            if await attempt(self.client.is_loading()) is True or await attempt(self.client.zone_name()) != zone:
+                return progressed("entered with X at the interact prompt")
+            if await dialog_open(self.client):
+                return progressed("pressed X at the interact prompt: a dialog opened")
+            await asyncio.sleep(DOOR_POLL_SECONDS)
+        return stalled("pressed X at the interact prompt, but the zone did not change")
 
     async def gap_turn(self, step: GapStep, zone: str, planner: RoutePlanner) -> dict:
         """Walk to the edge of the wizard's walkable piece where the goal's comes nearest (`RoutePlanner.gap_step`),
