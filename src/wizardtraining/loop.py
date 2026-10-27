@@ -68,6 +68,7 @@ ARROW_ARRIVE_RADIUS = 250.0
 WAYPOINT_ARRIVE_RADIUS = 150.0
 PROMPT_DOOR_REACH = 2500.0
 NPC_PROMPT_RANGE = 400.0
+NOT_A_DOOR_RADIUS = 600.0
 ENTRANCE_ARRIVE_RADIUS = 80.0
 INTERACT_PROMPT = "interact prompt"
 LOADING_WAIT_SECONDS = 3.0
@@ -122,6 +123,7 @@ class QuestLoop:
         self._finishing_since: float | None = None
         self.approaches = ApproachLog()
         self._sighted_at = 0.0
+        self._not_doors: list[tuple[str, tuple[float, float]]] = []
         self._spells_checked_at: float | None = None
         self._spell_catalog: SpellCatalog | None = None
         self.spell_log = SpellLog(settings.runtime_folder)
@@ -894,12 +896,19 @@ class QuestLoop:
         here = await self.client.body.position()
         if flat_distance(here, arrow) > PROMPT_DOOR_REACH or await attempt(self.client.is_in_npc_range()) is not True:
             return False
+        zone = await self.client.zone_name()
+        if any(where == zone and flat_distance(here, spot) <= NOT_A_DOOR_RADIUS for where, spot in self._not_doors):
+            return False
         npc = await or_default(nearest_npc(self.client), None)
         return npc is None or flat_distance(here, npc) > NPC_PROMPT_RANGE
 
     async def enter_with_x_turn(self) -> dict:
-        """Press X at a door's interact prompt and give the zone change a few seconds to start."""
+        """Press X at a door's interact prompt and give the zone change a few seconds to start. When a dialog opens
+        instead, the prompt was a person's: prompts within NOT_A_DOOR_RADIUS of that spot are not taken for a door
+        again this run. By Olde Town's gate to Triton Lane, an NPC out of NPC_PROMPT_RANGE gave a side quest, and
+        then the wizard pressed X at him again after every dialog until the run was stopped."""
         zone = await self.client.zone_name()
+        here = await self.client.body.position()
         await tap(self.client, Keycode.X, TALK_KEY_SECONDS)
         self.events.emit("door", "the interact prompt showed near a door into another zone; pressed X to enter")
         deadline = time.monotonic() + DOOR_WAIT_SECONDS
@@ -907,6 +916,10 @@ class QuestLoop:
             if await attempt(self.client.is_loading()) is True or await attempt(self.client.zone_name()) != zone:
                 return progressed("entered with X at the interact prompt")
             if await dialog_open(self.client):
+                self._not_doors.append((zone, xy(here)))
+                self.events.emit("door", f"X at the interact prompt opened a dialog, not a door; prompts within "
+                                         f"{NOT_A_DOOR_RADIUS:.0f} units of ({here.x:.0f}, {here.y:.0f}) are not taken "
+                                         "for a door again")
                 return progressed("pressed X at the interact prompt: a dialog opened")
             await asyncio.sleep(DOOR_POLL_SECONDS)
         return stalled("pressed X at the interact prompt, but the zone did not change")
