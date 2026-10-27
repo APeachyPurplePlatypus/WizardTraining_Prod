@@ -40,6 +40,7 @@ PHASE_POLL_SECONDS = 0.5
 CARDS_DRAW_SECONDS = 0.5
 EMPTY_HAND_READS = 6
 PAUSE_BETWEEN_CAST_CLICKS_SECONDS = 0.5
+CAST_TAKES_WITHIN_SECONDS = 3.0
 FLEE_CONFIRM_WAIT_SECONDS = 1.0
 PLANNING = ["WorldView", "PlanningPhase", "Alignment", "PlanningPhaseSubWindow"]
 ACTION_BUTTONS = [*PLANNING, "SpellSelection", "ActionButtons"]
@@ -255,6 +256,10 @@ async def play_round(combat, policy: CombatPolicy, can_flee: bool = True) -> dic
         card = view.cards[choice.card]
         target = f"{choice.target} {view.enemies[choice.enemy].name}" if choice.target == "enemy" else choice.target
         entry["action"] = f"cast {card.name}{f' ({card.school})' if card.school else ''} on {target}"
+        if not await cast_taken(combat.client):
+            _, me, cards, enemies = await read_round(combat)
+            await cards[choice.card].cast(cast_target(choice, me, enemies), sleep_time=PAUSE_BETWEEN_CAST_CLICKS_SECONDS)
+            entry["action"] += " (cast again: the first did not take)"
     entry["acting_since"] = acting_since.isoformat(timespec="seconds")
     return entry
 
@@ -265,6 +270,18 @@ def note_moves_sent(rounds: list[dict]) -> None:
     starts = [datetime.datetime.fromisoformat(entry["acting_since"]) for entry in acted]
     for entry, sent in zip(acted, moves_by_round(starts, client_log_tail(Path(get_wiz_install())))):
         entry["sent"] = sent
+
+
+async def cast_taken(client) -> bool:
+    """Within CAST_TAKES_WITHIN_SECONDS the duel leaves planning, as it does at once when the wizard is alone in
+    battle, or the planning window says it is waiting for others. About one cast in four spent no mana and did
+    nothing, most often the first of a battle: the client's log shows no move sent for it."""
+    deadline = time.monotonic() + CAST_TAKES_WITHIN_SECONDS
+    while time.monotonic() < deadline:
+        if await duel_phase(client) is not DuelPhase.planning or await showing(client, WAITING_FOR_OTHERS):
+            return True
+        await asyncio.sleep(PHASE_POLL_SECONDS)
+    return False
 
 
 async def pass_round(combat) -> None:

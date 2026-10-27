@@ -109,6 +109,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **A cast that did not take is cast again.**
+  - **What:** after casting, the battle code waits up to 3 seconds (`combat.CAST_TAKES_WITHIN_SECONDS`) for the duel to leave planning, as it does at once when the wizard battles alone, or for the planning window to say it is waiting for other players. When neither happens, it reads the hand again and casts the same card once more, and the round event says "cast again: the first did not take".
+  - **Why:** of 110 casts followed by another round, 25 spent no mana and did nothing. Seven were the first cast of a battle, and the client's log for the latest shows no move sent and the planning window in another selection state (0, not 8) for that round; the second round's cast worked. The rest followed clicks on Flee. The wizard lost a round to its enemies each time.
+  - **Not verified yet:** in the game.
+
 - **A spell the wizard can pay for before fleeing, and whether each move took.**
   - **What:** the flee rule now waits until no castable attack in hand costs at most the mana left (a mana a pip), so with 1 mana a 1-pip spell is still played. Once a battle is over, each round's entry records the moves the client logged after the wizard acted (`connection.moves_by_round`, from `Bin/WizardClient.log`), and the battle event names any round in which the game logged no move. It is read after the battle because the client writes its log in buffered blocks, up to a minute behind: read a second after each cast, a cast that took showed as "no move". A flee click that brings no confirmation box now reports the planning window's visible parts (`ui.visible_tree`).
   - **Why:** a Cyclops Legionnaire was down to 60 health and a 1-pip Fire Cat in hand would surely have finished it, but with 1 mana the policy clicked Flee. The client's log shows that the click sent no move: the round ran out its 30-second timer, and from then on the planning window stayed in another selection state, in which the next two Fire Cat casts sent no move at all. Mana stayed at 1, the Cyclops at 60, and the wizard was defeated. Every flee so far has ended this way.
