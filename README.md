@@ -62,7 +62,7 @@ Every run saves a JSON report in the runtime folder, and its `stopped` field say
 
 ## Building on it
 
-Read [docs/architecture.md](docs/architecture.md) for how a turn works, [docs/safety.md](docs/safety.md) for the rules, and [docs/lessons-learned.md](docs/lessons-learned.md) for the pitfalls already paid for.
+Read [docs/architecture.md](docs/architecture.md) for how a turn works, [docs/safety.md](docs/safety.md) for the rules, [docs/game-data.md](docs/game-data.md) for the game data you can read, and [docs/lessons-learned.md](docs/lessons-learned.md) for the pitfalls already paid for.
 
 ### Rules it keeps
 

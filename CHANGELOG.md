@@ -6,6 +6,10 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Added
 
+- **A map of the game data you can read (`docs/game-data.md`).**
+  - **What:** the live memory reads the framework uses (WizWalker 1.8.2 names), those available but not used yet (an enemy's level, school and boss status outside battle; caster stats; spell effects; the duel), and the zone files with their parsers.
+  - **Why:** the operator pointed out that WizWalker shows what game data is available for solving problems. Most fixes in this release replaced a guess with a read: patrol paths instead of exploring, teleport volumes instead of walking at walls, wards and resistances instead of the first card in hand. The map makes the next read easy to find.
+
 - **Cards chosen by each enemy's shields, wards, traps and resistances.**
   - **What:** each round, the battle code reads every card's magic school and pip cost, and two things about every enemy. One is its shields, wards and traps: "modify incoming damage" hanging effects, for one school or universal. The other is its own resistance or weakness to each school, from its stats (`dmg_reduce_percent` by school plus `dmg_reduce_percent_all`, as Deimos's damage maths reads them). The default policy attacks with the affordable card whose school lands best on the target. So it never plays a Myth card into a Myth ward while another attack is in hand, and it prefers a school the enemy is weak to, or one it has a trap for. On a tie it keeps the first card in hand, as before. The event log shows each enemy's modifiers and resistances ("The Harvest Lord 335 (Myth -50%; resists Myth 30%)"), and each cast's school.
   - **Why:** the operator watched the wizard play a Myth card on The Harvest Lord while he had a Myth ward, and pointed out that schools are weak and strong against some enemies. The game holds both: WizWalker reads a combatant's hanging effects and stats, and Deimos's damage maths applies them by school, with 80289 as the universal school. The wizard lost that fight, the first defeat of the level-10 runs.
