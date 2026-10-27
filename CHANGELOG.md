@@ -59,6 +59,8 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **A zone read during loading no longer breaks the report.** The zone reads as empty for a moment during some loading screens. The loop recorded an "arrival" in that empty zone, and saving the report then failed, because JSON keys could not be sorted with an empty one among zone names; the report of that run was lost. Arrivals now need a zone name, and reports turn every key into text before sorting.
+
 - **A short settle after arriving in a zone.** The loop now waits 1.5 s on its first turn in a zone before acting. Each turn record in the report also holds the zone, position, goal and quest arrow. Twice the wizard entered the Myth school and was back in Ravenwood within three seconds, on a "travel to waypoint" turn, as if the goal were still in another zone. The likeliest cause is a zone or quest-arrow reading that had not caught up after loading; the third entry, a few seconds later, stayed and finished the talk. The new turn fields will show whether that was it.
 
 - **A door just come through stays out of routes.**

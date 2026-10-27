@@ -157,7 +157,8 @@ class QuestLoop:
             self.events.emit(kind, text)
         if self._last_state is not None and state["zone"] != self._last_state["zone"]:
             self.motion.forget()
-        if self._last_state is not None and state["zone"] != self._last_state["zone"] and isinstance(state["position"], dict):
+        arrived = self._last_state is not None and state["zone"] != self._last_state["zone"]
+        if arrived and isinstance(state["zone"], str) and isinstance(state["position"], dict):
             self.record.arrivals[state["zone"]] = {"from": self._last_state["zone"],
                                                    "position": (state["position"]["x"], state["position"]["y"])}
         self._last_state, self._last_quest = state, dict(self.record.quest or {})
