@@ -21,6 +21,7 @@ The framework acts in a live online game, on a real account, among real players.
 
 - **Duel circles are no-go areas.** Routes keep 900 units away from them, and straight lines through them are refused. Enemies standing in one are never targets.
 - **No chat, no trades, no following.**
+- **Endorsements are Friendly.** After another player shares a battle, the game asks to endorse them, and the window holds the keyboard until answered. The framework answers Friendly, never reads the player's name, and logs only that it endorsed. To decline instead, point the "Endorse a Wizard" entry of `ui.KNOWN_POPUPS` at the close button.
 
 ## The game client
 

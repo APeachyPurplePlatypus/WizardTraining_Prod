@@ -12,6 +12,10 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Changed
 
+- **Answering the Endorse a Wizard window with Friendly.**
+  - **What:** the window is now answered with its Friendly button (`WorldView/EndorsementWindow/MainLayout/FriendlyWindow/FriendlyButton`) instead of being closed. If that button is missing, the window is closed as before. The event log says "endorsed the other wizard as Friendly" and never the player's name.
+  - **Why:** the operator asked: "endorse a wizard pop up again, always say friendly". The window appeared again after a shared battle. Friendly is the kindest of the three choices (Friendly, Savvy, Helpful) to give someone the wizard knows nothing else about. `docs/safety.md` says how to decline instead.
+
 - **Enemies are always avoided.**
   - **What:** the wizard steps away from every enemy that comes within 450 units, every time, unless the quest needs the fight: the targets of a defeat goal are still walked into. The dodge limit, which made the wizard walk on past enemies after three step-aways in a minute, is gone. When enemies keep blocking the way (three step-aways in a minute), the wizard now stands back for up to eight seconds and lets them walk on along their patrol, stepping away again if one comes close, and then plans again. The run's step-away limit (40) stops a wait that never ends and leaves it for the operator.
   - **Why:** the operator's rule is to avoid enemies always, unless the quest or dungeon requires the fight to move forward. With the dodge limit, the level-6 wizard walked on past two level-12 Red Banshees on Triton's upper level. Enemies patrol, so a blocked way usually clears if the wizard waits.
@@ -68,6 +72,7 @@ Every change, enhancement or addition is listed with its rationale, so later con
 - **Closing the Endorse a Wizard window.**
   - **What:** before each turn, and before concluding that a popup holds the keyboard, the loop closes known popups with their own close button. So far that's only the "Endorse a Wizard" window (`WorldView/EndorsementWindow/CloseEndorsementWindowButton`). It never picks an endorsement, and the event log never records the other player's name. Unknown popups still stop the run.
   - **Why:** after another player joined one of the wizard's battles, the game asked to endorse them. The window held the keyboard, and the run stopped on ignored turn keys. It's the same window the operator closed by hand after a restart. Closing it declines an optional social action; nothing is sent to anyone.
+  - **Replaced before release** by "Answering the Endorse a Wizard window with Friendly".
 
 - **Targets for goals the quest arrow doesn't point at.**
   - **What:** when the arrow reads (0, 0, 0), the loop now looks for the goal's target itself. It tries placed objects first: the zone's `gamedata.bin` gives every placed object's template and position (`placed.py`), and the goal's client tags name the objects it needs, so the loop walks to the nearest unused match. Otherwise it tries enemies: each goal now carries the language codes its text fills in for the item and the enemy, and each tracked enemy carries its template's display code, so the loop walks to the nearest loaded enemy whose code the goal names. A used object isn't visited again, and the event log says which target was chosen.

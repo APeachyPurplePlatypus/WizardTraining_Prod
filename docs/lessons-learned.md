@@ -47,7 +47,7 @@ These come from one character's first unattended play, level 1 to level 5 in Wiz
 
 ## Popups
 
-- **The Endorse Wizard window held the keyboard** after a game restart: A, D and W did nothing. The loop now stops with that diagnosis (`movement.KeysIgnored`) when the first A tap changes nothing while it should be free to move.
+- **The Endorse Wizard window held the keyboard** after a game restart: A, D and W did nothing. The loop now stops with that diagnosis (`movement.KeysIgnored`) when the first A tap changes nothing while it should be free to move. It answers the window before each turn: its buttons are `MainLayout/FriendlyWindow/FriendlyButton`, `KnowledgeableWindow/KnowledgeableButton` (shown as "Savvy") and `HelpfulWindow/HelpfulButton`, and `NameText` holds the other player's name.
 
 ## Screenshots
 

@@ -13,9 +13,12 @@ from wizwalker import HookAlreadyActivated
 from .session import HOOK_TIMEOUT_SECONDS
 
 POTION_BUTTON = ["WorldView", "windowHUD", "btnPotions"]
-CLOSABLE_POPUPS = {
-    "Endorse a Wizard": (["WorldView", "EndorsementWindow"],
-                         ["WorldView", "EndorsementWindow", "CloseEndorsementWindowButton"]),
+ENDORSEMENT_WINDOW = ["WorldView", "EndorsementWindow"]
+KNOWN_POPUPS = {
+    "Endorse a Wizard": (ENDORSEMENT_WINDOW,
+                         [*ENDORSEMENT_WINDOW, "MainLayout", "FriendlyWindow", "FriendlyButton"],
+                         [*ENDORSEMENT_WINDOW, "CloseEndorsementWindowButton"],
+                         "endorsed the other wizard as Friendly"),
 }
 
 
@@ -68,14 +71,19 @@ async def click_window(client, window) -> None:
         await client.mouse_handler.click_window(window)
 
 
-async def close_known_popup(client) -> str | None:
-    """Close the first showing popup in CLOSABLE_POPUPS with its own close button, and return its name.
-    These ask for an optional choice, such as endorsing another player after a shared battle, and hold the
-    keyboard until closed. Closing declines; nothing is sent. Unknown popups are left alone."""
-    for name, (window, close_button) in CLOSABLE_POPUPS.items():
+async def answer_known_popup(client) -> str | None:
+    """Answer the first showing popup in KNOWN_POPUPS and say what was done. These hold the keyboard until
+    answered. The Endorse a Wizard window, shown after another player shared a battle, is answered Friendly,
+    as the operator asked; the other player's name is never read. When the answer button is missing, the
+    popup is closed with its own close button instead. Unknown popups are left alone."""
+    for name, (window, answer, close_button, answered) in KNOWN_POPUPS.items():
         if await showing(client, window):
-            await click(client, close_button)
-            return name
+            try:
+                await click(client, answer)
+                return answered
+            except LookupError:
+                await click(client, close_button)
+                return f"closed the {name} window"
     return None
 
 
