@@ -63,7 +63,8 @@ async def services_open(client) -> bool:
 
 
 async def service_options(client) -> list[tuple[str, object]]:
-    """The menu's options as (label, button). Quest options are labelled with the quest's title."""
+    """The menu's options as (label, button). Quest options are labelled with the quest's title. A label that cannot
+    be read is empty: a school professor's spell-training option is one, and reading it crashed the loop."""
     options = []
     layout = await window_at(client.root_window, SERVICES_OPTIONS)
     if layout is None:
@@ -73,7 +74,8 @@ async def service_options(client) -> list[tuple[str, object]]:
             continue
         for part in await option.children():
             if await part.name() == SERVICES_OPTION_BUTTON and await part.is_visible():
-                options.append(((await part.maybe_text() or "").strip(), part))
+                label = await attempt(part.maybe_text())
+                options.append(((label if isinstance(label, str) and not label.startswith("<unavailable") else "").strip(), part))
     return options
 
 
