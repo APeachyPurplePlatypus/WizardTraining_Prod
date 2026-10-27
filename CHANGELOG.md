@@ -122,6 +122,8 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **Talking from where the approach is blocked.** When the wizard can get no closer to a quest NPC (its last two steps within 5 units of each other) and the interact prompt shows within 200 units (`dialog.BLOCKED_TALK_DISTANCE`), it presses X there. After General Akilles, the next goal of "Akilles' Deal" was an NPC standing 164 units up, with no walkable ground at that height in the zone's nav data: every step stopped 102 units away with the prompt showing, the rule asked for 80, and the run stopped for turns without progress. If X reaches another NPC, the goal stays open and the existing rule for that applies. Not verified yet in the game, and not unit-tested: `dialog.py` reads the game.
+
 - **A cast that did not take is cast again.**
   - **What:** after casting, the battle code waits up to 3 seconds (`combat.CAST_TAKES_WITHIN_SECONDS`) for the duel to leave planning, as it does at once when the wizard battles alone, or for the planning window to say it is waiting for other players. When neither happens, it reads the hand again and casts the same card once more, and the round event says "cast again: the first did not take".
   - **Why:** of 110 casts followed by another round, 25 spent no mana and did nothing. Seven were the first cast of a battle, and the client's log for the latest shows no move sent and the planning window in another selection state (0, not 8) for that round; the second round's cast worked. The rest followed clicks on Flee. The wizard lost a round to its enemies each time.

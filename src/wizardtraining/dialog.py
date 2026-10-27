@@ -51,6 +51,8 @@ NUDGE_LONGEST_SECONDS = 0.15
 NUDGE_SETTLE_SECONDS = 0.5
 PROMPT_TRUST_DISTANCE = 600.0
 SAME_NPC_DISTANCE = 150.0
+BLOCKED_TALK_DISTANCE = 200.0
+STALLED_NUDGE_DISTANCE = 5.0
 
 
 async def dialog_open(client) -> bool:
@@ -131,10 +133,17 @@ async def walk_up_to(client, position, within: float = TALK_DISTANCE, *, trust_p
 
 
 def close_enough(nudges: list[dict]) -> bool:
+    """The prompt is for this one; or the wizard is within `within` with a prompt showing; or it can get no closer
+    (the last two nudges within STALLED_NUDGE_DISTANCE of each other) and a prompt shows within
+    BLOCKED_TALK_DISTANCE. A Cyclops Lane quest NPC stands 164 units up, with no walkable ground there: every
+    nudge stopped 102 units away, with the prompt showing, and the run stopped for turns without progress."""
     if not nudges:
         return False
     last = nudges[-1]
-    return last["prompt_for_this_one"] or (last["distance"] <= last["within"] and last["in_range"] is True)
+    if last["prompt_for_this_one"] or (last["distance"] <= last["within"] and last["in_range"] is True):
+        return True
+    return (len(nudges) >= 2 and abs(nudges[-2]["distance"] - last["distance"]) <= STALLED_NUDGE_DISTANCE
+            and last["distance"] <= BLOCKED_TALK_DISTANCE and last["in_range"] is True)
 
 
 async def read_pages(client, record: dict, texts: list[str], offers: OfferPolicy) -> str:
