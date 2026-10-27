@@ -3,7 +3,7 @@ import unittest
 from wizardtraining.progress import (APPROACH_MARGIN, ENEMY_NEAR_PATH, ENEMY_PATH_CLEARANCE, ENGAGE_HEALTH_FRACTION,
                                      ENGAGE_MANA_FRACTION, MEANINGFUL_TRAVEL_DISTANCE, LimitReached, Limits,
                                      PlannedRoute, RunRecord, StopRun, check_limits, health_for_a_fight, leaves_world,
-                                     mana_for_a_fight, nav_did_better, progressed, remember_obstacles,
+                                     mana_for_a_fight, mana_to_travel, nav_did_better, progressed, remember_obstacles,
                                      short_for_a_fight, should_drink_potion, stalled, topped_up, travel_outcome,
                                      wanted_wisp, world_of)
 
@@ -189,6 +189,11 @@ class WispTest(unittest.TestCase):
         self.assertFalse(health_for_a_fight(ENGAGE_HEALTH_FRACTION - 0.01))
         self.assertTrue(health_for_a_fight(ENGAGE_HEALTH_FRACTION))
         self.assertTrue(health_for_a_fight(None))
+
+    def test_too_little_mana_to_travel_among_enemies(self):
+        self.assertFalse(mana_to_travel(3 / 32))
+        self.assertTrue(mana_to_travel(7 / 32))
+        self.assertTrue(mana_to_travel(None))
 
     def test_waiting_for_mana_goes_on_until_nearly_full(self):
         self.assertFalse(topped_up(12 / 30))

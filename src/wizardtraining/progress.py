@@ -183,6 +183,13 @@ def health_for_a_fight(health: float | None) -> bool:
     return health is None or health >= ENGAGE_HEALTH_FRACTION
 
 
+def mana_to_travel(mana: float | None) -> bool:
+    """At least MANA_BELOW_FRACTION of the pool, or unknown. Below it the wizard refills mana before any goal, not
+    only before a fight the quest asks for: walking to a Firecat Alley waypoint with 3 of 32, any fight on the way
+    would be lost, and the zones that give mana back are next door."""
+    return mana is None or mana >= MANA_BELOW_FRACTION
+
+
 def topped_up(mana: float | None) -> bool:
     """Mana is at least TOP_UP_MANA_FRACTION of the pool, or unknown. Waiting for mana goes on until then, not just
     to ENGAGE_MANA_FRACTION: the zones that give mana back are a walk from the fights, and a Warhorn fight took 6

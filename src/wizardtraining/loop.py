@@ -41,7 +41,8 @@ from .movement import KeysIgnored, Reroute, face, travel
 from .navigation import load_planner
 from .policy import LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, SpellTypePolicy
 from .progress import (DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY, ENEMY_NEAR_PATH, LimitReached, Limits, PATH_THREATS,
-                       PlannedRoute, RunRecord, StopRun, check_limits, leaves_world, mana_for_a_fight, nav_did_better,
+                       PlannedRoute, RunRecord, StopRun, check_limits, leaves_world, mana_for_a_fight, mana_to_travel,
+                       nav_did_better,
                        progressed, remember_obstacles, short_for_a_fight, should_drink_potion, stalled, topped_up,
                        travel_outcome, wanted_wisp, WISP_ANY_DIRECTION_BELOW_FRACTION, world_of)
 from .quests import arrow_shows_no_target, game_language, open_goals, read_quest_arrow, read_quests
@@ -472,11 +473,11 @@ class QuestLoop:
                           "switch the active quest yet; left for the operator")
         if topped_up(mana_fraction(state)):
             self._topping_up_in = None
-        short = short_for_a_fight(health_fraction(state), mana_fraction(state))
-        if short is None and self._topping_up_in == state["zone"]:
-            short = "mana"
-        if goal["type"] in FIGHT_GOALS and short is not None:
-            turn = await self.refill_turn(short, state)
+        refill = short_for_a_fight(health_fraction(state), mana_fraction(state)) if goal["type"] in FIGHT_GOALS else None
+        if refill is None and (self._topping_up_in == state["zone"] or not mana_to_travel(mana_fraction(state))):
+            refill = "mana"
+        if refill is not None:
+            turn = await self.refill_turn(refill, state)
             if turn is not None:
                 return turn
         if goal["destination_zone"] not in ("", await self.client.zone_name()):
