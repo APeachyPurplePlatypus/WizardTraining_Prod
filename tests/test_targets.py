@@ -1,9 +1,11 @@
 import math
 import unittest
 
-from wizardtraining.targets import (ENEMY_CLEARANCE, WISP_REACH, back_away, bystanders, keeps_blocking, measured,
-                                    next_area_to_explore, others, quest_targets, safe_wisps, threat_centre,
-                                    too_close)
+from wizardtraining.routes import ENEMY_KEEP_OUT
+from wizardtraining.targets import (AFTER_BATTLE_GRACE_SECONDS, ENEMY_CLEARANCE, WISP_REACH,
+                                    back_away, bystanders, enemies_to_route_around, in_grace_after_battle,
+                                    keeps_blocking, measured, next_area_to_explore, others, quest_targets,
+                                    safe_wisps, threat_centre, too_close)
 
 
 def enemy(id_, name, x, y):
@@ -52,6 +54,17 @@ class TargetsTest(unittest.TestCase):
         points = [((0, 5000), 0), ((0, 1000), 0), ((0, 3000), 1)]
         self.assertEqual(next_area_to_explore(points, me=(0, 0), prefer={1}), ((0, 3000), 1))
         self.assertEqual(next_area_to_explore(points, me=(0, 0), explored=[(0, 3000)], prefer={1}), ((0, 1000), 0))
+
+    def test_routes_go_around_enemies_but_not_those_at_either_end(self):
+        enemies = [enemy(1, "Ghoul", 3000, 0), enemy(2, "Ghoul", 200, 0), enemy(3, "Ghoul", 6000, 300)]
+        around = enemies_to_route_around(enemies, me=(0, 0), destination=(6000, 0))
+        self.assertEqual([each["id"] for each in around], [1])
+        self.assertGreater(ENEMY_KEEP_OUT, ENEMY_CLEARANCE)
+
+    def test_grace_after_battle(self):
+        self.assertFalse(in_grace_after_battle(None, now=100))
+        self.assertTrue(in_grace_after_battle(100, now=100 + AFTER_BATTLE_GRACE_SECONDS - 0.1))
+        self.assertFalse(in_grace_after_battle(100, now=100 + AFTER_BATTLE_GRACE_SECONDS))
 
     def test_enemies_keep_blocking_after_three_recent_step_aways(self):
         self.assertFalse(keeps_blocking([10, 20], now=30))

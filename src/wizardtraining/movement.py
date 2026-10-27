@@ -26,7 +26,6 @@ from .keys import HeldKey, tap
 from .reports import plain
 from .routes import OBSTACLE_RADIUS, Hazards, RoutePlanner
 
-WALK_UNITS_PER_SECOND = 600.0
 SETTLE_SECONDS = 0.2
 MAX_TURN_TAPS = 25
 FIRST_TAP_SECONDS = 0.15

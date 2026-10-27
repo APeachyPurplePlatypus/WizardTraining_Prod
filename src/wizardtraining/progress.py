@@ -13,7 +13,8 @@ from dataclasses import asdict, dataclass, field
 
 ENEMY_NEAR_PATH = "an enemy is near the path ahead"
 DUEL_NEAR_PATH = "a duel is near the path ahead"
-PATH_THREATS = {ENEMY_NEAR_PATH, DUEL_NEAR_PATH}
+ENEMIES_IN_THE_WAY = "enemies leave no route"
+PATH_THREATS = {ENEMY_NEAR_PATH, DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY}
 STATE_CHANGING_INTERRUPTS = {"battle", "dialog", "loading", "target in reach", "arrived"}
 MEANINGFUL_TRAVEL_DISTANCE = 300.0
 ENEMY_PATH_CLEARANCE = 500.0
@@ -187,8 +188,9 @@ def remember_obstacles(record: RunRecord, zone: str, found: list) -> int:
 
 
 class PlannedRoute:
-    """How close each enemy was to a route when walking it began. The planner may accept passing an enemy
-    it could not avoid; only a new enemy, or one that has come closer since, is a threat to stop for.
+    """How close each enemy was expected to come to a route when walking it began, given where it was heading.
+    The planner may accept passing an enemy it could not avoid; only a new enemy, or one now expected to come
+    closer, is a threat to stop for.
     Without this, a watcher that stopped for every enemy near the path fought the planner and stood still."""
 
     def __init__(self):

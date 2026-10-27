@@ -54,6 +54,8 @@ Some zones' walkable areas come in separate pieces, such as Triton Avenue's lowe
 
 - **collision:** A* over Deimos's hex walk grid, built from the zone's collision.bcd. It is bounded by `MAX_GRID_NODES` and `PLANNING_SECONDS`, then string-pulled into straight legs that Deimos's `straight_path_walkable` accepts.
 - **nav:** A* over the zone.nav waypoint graph, string-pulled into legs that stay within one nav cell of a waypoint.
+Routes and the walking watcher look ahead. `motion.MotionTracker` turns the last second and a half of each enemy's positions into a velocity. A route may not come within 520 units of where a tracked enemy will be when the wizard gets there, which is assumed to be no further than four seconds of its current course. While walking, an enemy stops the trip only if its course will bring it close to the next stretch of the path.
+
 - **straight:** one leg, refused if it crosses a duel circle or passes close to an enemy. When walk data loaded, it is also refused if it is more dangerous than its ends, so it never cuts across a patrol path.
 
 `Hazards` adds cost near enemies (`ENEMY_AVOID_RADIUS`, `ENEMY_AVOID_WEIGHT`), and keeps merged legs `LEG_ENEMY_CLEARANCE` from enemies. It forbids duel circles (`DUEL_CIRCLE_NO_GO`) and recorded obstacles (`OBSTACLE_RADIUS`).

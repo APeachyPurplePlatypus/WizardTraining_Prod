@@ -11,12 +11,14 @@ from __future__ import annotations
 import math
 
 from .geometry import Point, angle_between, flat_distance, xy
+from .routes import ENEMY_KEEP_OUT
 
 DUEL_CIRCLE_RADIUS = 500.0
 QUEST_TARGET_ARROW_RADIUS = 700.0
 ENEMY_CLEARANCE = 450.0
 WISP_REACH = 2500.0
 WISP_ENEMY_CLEARANCE = 600.0
+AFTER_BATTLE_GRACE_SECONDS = 6.0
 DODGES_BEFORE_WAITING = 3
 DODGE_MEMORY_SECONDS = 60.0
 
@@ -78,6 +80,22 @@ def keeps_blocking(dodge_times: list[float], *, now: float) -> bool:
     """True once the wizard has stepped away DODGES_BEFORE_WAITING times in DODGE_MEMORY_SECONDS: enemies patrol
     the way ahead, and walking on as soon as they are out of reach only leads back into them."""
     return sum(1 for moment in dodge_times if now - moment <= DODGE_MEMORY_SECONDS) >= DODGES_BEFORE_WAITING
+
+
+def enemies_to_route_around(enemies: list[dict], *, me, destination) -> list[dict]:
+    """The enemies routes keep ENEMY_KEEP_OUT from. That is wider than ENEMY_CLEARANCE, at which the wizard steps
+    away, so a route never leads into a step-away. Left out: enemies already that close to the wizard, or no
+    route could leave them (stepping away handles those), and enemies that close to the destination, or an NPC
+    standing near an enemy could never be reached."""
+    return [enemy for enemy in enemies if flat_distance(me, enemy["position"]) > ENEMY_KEEP_OUT
+            and flat_distance(destination, enemy["position"]) > ENEMY_KEEP_OUT]
+
+
+def in_grace_after_battle(battle_ended_at: float | None, *, now: float) -> bool:
+    """Right after a battle the game does not pull the wizard into another for about ten seconds. The first
+    AFTER_BATTLE_GRACE_SECONDS of that are used to walk past enemies without avoiding them; the margin keeps
+    the wizard from being next to an enemy when the protection ends."""
+    return battle_ended_at is not None and now - battle_ended_at < AFTER_BATTLE_GRACE_SECONDS
 
 
 def threat_centre(close: list[dict]) -> Point:

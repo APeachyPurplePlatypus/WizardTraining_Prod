@@ -10,7 +10,9 @@ Grid and graph routes are searched with A*, then merged into as few straight leg
 allows ("string pulling"). Steps near enemies cost more, so routes keep to the parts of a street that
 enemies are not on, and merged legs keep LEG_ENEMY_CLEARANCE from them. Steps near the zone's enemy patrol
 paths cost more too (`patrols.PatrolMap`), so routes prefer the sidewalks enemies do not walk, and merging
-never makes a leg more dangerous than the steps it replaces. Duel circles, other players'
+never makes a leg more dangerous than the steps it replaces. Enemies with a track (`motion.Track`) are no-go
+areas ENEMY_KEEP_OUT wide where they will be when the wizard gets there, so a route passes behind an enemy
+walking away and keeps clear of where one is heading. Duel circles, other players'
 fights in progress, are no-go areas: walking into one joins that fight. So are obstacles: places where the
 wizard was blocked although the walk data said the way was clear.
 """
@@ -24,6 +26,7 @@ from dataclasses import dataclass, field, replace
 from typing import Callable
 
 from .geometry import Point, distance_to_segment, xy
+from .motion import WALK_UNITS_PER_SECOND
 from .teleports import TeleportVolume, choose_crossing
 
 COLLISION, NAV, STRAIGHT = "collision", "nav", "straight"
@@ -43,23 +46,26 @@ MAX_GRID_NODES = 60_000
 PLANNING_SECONDS = 4.0
 GOAL_PIECE_REACH = 600.0
 TELEPORT_CLEARANCE = 60.0
+ENEMY_KEEP_OUT = 520.0
 
 
 @dataclass(frozen=True)
 class Hazards:
     """Enemies to keep away from, and duel circles and obstacles never to enter, as (x, y) points. `keep_out` are
-    other no-go circles as ((x, y), radius): teleport volumes the walk is not going to."""
+    other no-go circles as ((x, y), radius): teleport volumes the walk is not going to. `tracks` are enemies
+    never to come within ENEMY_KEEP_OUT of, where they will be when the wizard gets there."""
     enemies: tuple[Point, ...] = ()
     duel_circles: tuple[Point, ...] = ()
     obstacles: tuple[Point, ...] = ()
     patrols: object = field(default=None, compare=False)
     keep_out: tuple[tuple[Point, float], ...] = ()
+    tracks: tuple = ()
 
     @classmethod
-    def of(cls, enemies=(), duel_circles=(), obstacles=(), patrols=None, keep_out=()) -> "Hazards":
+    def of(cls, enemies=(), duel_circles=(), obstacles=(), patrols=None, keep_out=(), tracks=()) -> "Hazards":
         return cls(tuple(xy(enemy) for enemy in enemies), tuple(xy(circle) for circle in duel_circles),
                    tuple(xy(obstacle) for obstacle in obstacles), patrols,
-                   tuple((xy(centre), radius) for centre, radius in keep_out))
+                   tuple((xy(centre), radius) for centre, radius in keep_out), tuple(tracks))
 
     def with_obstacles(self, obstacles) -> "Hazards":
         return replace(self, obstacles=self.obstacles + tuple(xy(obstacle) for obstacle in obstacles))
@@ -88,19 +94,37 @@ class Hazards:
         point = xy(point)
         return replace(self, obstacles=tuple(o for o in self.obstacles if math.dist(o, point) > radius))
 
-    def forbids(self, point: Point) -> bool:
+    def forbids(self, point: Point, seconds: float = 0.0) -> bool:
+        """Whether the wizard may not be at `point`, reached `seconds` from now."""
         return (any(math.dist(point, circle) < DUEL_CIRCLE_NO_GO for circle in self.duel_circles)
                 or any(math.dist(point, obstacle) < OBSTACLE_RADIUS for obstacle in self.obstacles)
-                or any(math.dist(point, centre) < radius for centre, radius in self.keep_out))
+                or any(math.dist(point, centre) < radius for centre, radius in self.keep_out)
+                or self.enemy_will_be_near(point, seconds))
 
-    def line_is_open(self, a: Point, b: Point) -> bool:
-        """The line enters no duel circle, obstacle or keep-out circle."""
+    def enemy_will_be_near(self, point: Point, seconds: float) -> bool:
+        return any(math.dist(point, track.at(seconds)) < ENEMY_KEEP_OUT for track in self.tracks)
+
+    def line_is_open(self, a: Point, b: Point, seconds: float = 0.0) -> bool:
+        """The line enters no duel circle, obstacle or keep-out circle, and no tracked enemy will be near it as
+        the wizard walks it, reaching `a` `seconds` from now."""
         return (all(distance_to_segment(circle, a, b) >= DUEL_CIRCLE_NO_GO for circle in self.duel_circles)
                 and all(distance_to_segment(obstacle, a, b) >= OBSTACLE_RADIUS for obstacle in self.obstacles)
-                and all(distance_to_segment(centre, a, b) >= radius for centre, radius in self.keep_out))
+                and all(distance_to_segment(centre, a, b) >= radius for centre, radius in self.keep_out)
+                and self.line_clear_of_tracks(a, b, seconds))
 
-    def line_is_safe(self, a: Point, b: Point) -> bool:
-        return (self.line_is_open(a, b)
+    def line_clear_of_tracks(self, a: Point, b: Point, seconds: float) -> bool:
+        if not self.tracks:
+            return True
+        length = math.dist(a, b)
+        samples = max(1, int(length // LINE_SAMPLE_SPACING))
+        for k in range(samples + 1):
+            point = (a[0] + (b[0] - a[0]) * k / samples, a[1] + (b[1] - a[1]) * k / samples)
+            if self.enemy_will_be_near(point, seconds + length * k / samples / WALK_UNITS_PER_SECOND):
+                return False
+        return True
+
+    def line_is_safe(self, a: Point, b: Point, seconds: float = 0.0) -> bool:
+        return (self.line_is_open(a, b, seconds)
                 and all(distance_to_segment(enemy, a, b) >= LEG_ENEMY_CLEARANCE for enemy in self.enemies))
 
 
@@ -138,7 +162,7 @@ class NavGraph:
                 return walk_back(came_from, current)
             for neighbour in self.adjacent[current]:
                 where = self.vertices[neighbour]
-                if hazards.forbids(where):
+                if hazards.forbids(where, seconds_to_reach(start, where)):
                     continue
                 total = cost[current] + math.dist(self.vertices[current], where) * hazards.step_cost(where)
                 if total < cost.get(neighbour, math.inf):
@@ -169,13 +193,28 @@ def grid_path(grid, start: Point, goal: Point, hazards: Hazards) -> list[Point] 
             if neighbour in settled or grid.walk_z(*neighbour) is None:
                 continue
             where = grid.to_world(*neighbour)
-            if hazards.forbids(where):
+            if hazards.forbids(where, seconds_to_reach(start, where)):
                 continue
             total = spent + grid.spacing * hazards.step_cost(where)
             if total < cost.get(neighbour, math.inf):
                 cost[neighbour], came_from[neighbour] = total, current
                 heapq.heappush(frontier, (total + math.dist(where, target_xy), total, neighbour))
     return None
+
+
+def seconds_to_reach(start: Point, point: Point) -> float:
+    """When the wizard reaches `point`, at the soonest: the straight-line distance at walking speed. Searches use
+    it to ask where enemies will be by then."""
+    return math.dist(start, point) / WALK_UNITS_PER_SECOND
+
+
+def arrival_times(points: list[Point]) -> list[float]:
+    """Seconds until the wizard reaches each point, walking them in order from the first."""
+    times, walked = [0.0], 0.0
+    for a, b in zip(points, points[1:]):
+        walked += math.dist(a, b)
+        times.append(walked / WALK_UNITS_PER_SECOND)
+    return times
 
 
 def walkable_cell_near(grid, point: Point):
@@ -292,18 +331,18 @@ class RoutePlanner:
             if cells is None:
                 return None
             points = [start, *cells, goal]
-            danger_ok = no_more_dangerous(points, hazards)
+            danger_ok, times = no_more_dangerous(points, hazards), arrival_times(points)
             return string_pull(points, lambda i, j: self.grid_line_walkable(points[i], points[j])
-                               and hazards.line_is_safe(points[i], points[j]) and danger_ok(i, j))
+                               and hazards.line_is_safe(points[i], points[j], times[i]) and danger_ok(i, j))
         if method == NAV:
             waypoints = self.nav_graph.path(start, goal, hazards)
             if waypoints is None:
                 return None
             points = [start, *(self.nav_graph.vertices[index] for index in waypoints), goal]
-            danger_ok = no_more_dangerous(points, hazards)
+            danger_ok, times = no_more_dangerous(points, hazards), arrival_times(points)
             return string_pull(points, lambda i, j: self.nav_graph.covers_line(points[i], points[j])
-                               and self.walls_allow(points[i], points[j]) and hazards.line_is_safe(points[i], points[j])
-                               and danger_ok(i, j))
+                               and self.walls_allow(points[i], points[j])
+                               and hazards.line_is_safe(points[i], points[j], times[i]) and danger_ok(i, j))
         if method == STRAIGHT:
             return [goal] if self.straight_line_ok(start, goal, hazards) else None
         raise ValueError(f"unknown route method {method!r}")

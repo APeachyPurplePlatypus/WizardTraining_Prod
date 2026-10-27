@@ -18,7 +18,8 @@ from wizwalker import Keycode
 from .entities import nearest_npc
 from .geometry import flat_distance
 from .keys import tap
-from .movement import WALK_UNITS_PER_SECOND, face_and_step
+from .motion import WALK_UNITS_PER_SECOND
+from .movement import face_and_step
 from .policy import ACCEPT, DECLINE, GO_BACK, OfferPolicy
 from .state import attempt
 from .ui import click, click_window, showing, text_of, window_at

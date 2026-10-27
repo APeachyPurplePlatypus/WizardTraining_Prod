@@ -32,20 +32,21 @@ from .events import EventLog, describe_battle, describe_changes, describe_round,
 from .geometry import distance_to_path, flat_distance, path_within
 from .keys import tap
 from .knowledge import Knowledge
+from .motion import MotionTracker, closest_approach
 from .movement import KeysIgnored, face, travel
 from .navigation import load_planner
 from .policy import LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, SpellTypePolicy
-from .progress import (DUEL_NEAR_PATH, ENEMY_NEAR_PATH, Limits, PATH_THREATS, PlannedRoute, RunRecord, StopRun,
-                       check_limits, leaves_world, needs_rest, progressed, remember_obstacles, should_drink_potion,
-                       stalled, travel_outcome, wanted_wisp, world_of)
+from .progress import (DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY, ENEMY_NEAR_PATH, Limits, PATH_THREATS, PlannedRoute,
+                       RunRecord, StopRun, check_limits, leaves_world, needs_rest, progressed, remember_obstacles,
+                       should_drink_potion, stalled, travel_outcome, wanted_wisp, world_of)
 from .quests import arrow_shows_no_target, game_language, open_goals, read_quest_arrow, read_quests
 from .reports import plain, save_report
 from .routes import DUEL_CIRCLE_NO_GO, Hazards, RoutePlanner
 from .session import NoClient, attached, hooks_ready
 from .state import attempt, battle_showing, free_to_move, health_fraction, mana_fraction, snapshot
 from .placed import gate_toward, objects_for_goal
-from .targets import (bystanders, keeps_blocking, next_area_to_explore, others, quest_targets, safe_wisps, summary,
-                      too_close)
+from .targets import (bystanders, enemies_to_route_around, in_grace_after_battle, keeps_blocking,
+                      next_area_to_explore, others, quest_targets, safe_wisps, summary, too_close)
 from .teleports import LEFT_ZONE, NO_EFFECT, TeleportVolume, describe_outcome
 from .ui import POTION_BUTTON, answer_known_popup, click, visible_children
 
@@ -59,6 +60,7 @@ DOOR_POLL_SECONDS = 0.5
 WATCHED_PATH_LENGTH = 2000.0
 BARELY_MOVED_DISTANCE = 100.0
 ENEMY_PASS_WAIT_SECONDS = 1.5
+ENEMIES_IN_THE_WAY_WAIT_SECONDS = 4.0
 DEFEATED_HEALTH_FRACTION = 0.05
 LOWEST_HEALTH_FRACTION_TO_KEEP_QUESTING = 0.35
 REST_POLL_SECONDS = 10.0
@@ -88,6 +90,8 @@ class QuestLoop:
         self._potion_failed = False
         self._object_in_use = None
         self._dodges: list[float] = []
+        self._battle_ended_at: float | None = None
+        self.motion = MotionTracker()
         self.events = events or EventLog()
         self._last_state = self._last_quest = None
         self.settings = settings
@@ -146,6 +150,8 @@ class QuestLoop:
     def note_changes(self, state: dict) -> None:
         for kind, text in describe_changes(self._last_state, state, self._last_quest, self.record.quest):
             self.events.emit(kind, text)
+        if self._last_state is not None and state["zone"] != self._last_state["zone"]:
+            self.motion.forget()
         if self._last_state is not None and state["zone"] != self._last_state["zone"] and isinstance(state["position"], dict):
             self.record.arrivals[state["zone"]] = {"from": self._last_state["zone"],
                                                    "position": (state["position"]["x"], state["position"]["y"])}
@@ -200,6 +206,7 @@ class QuestLoop:
         battle = await fight(self.client, self.combat_policy,
                              on_round=lambda entry: self.events.emit("round", describe_round(entry)))
         self.record.battle_log.append(battle)
+        self._battle_ended_at = time.monotonic()
         after = await snapshot(self.client)
         fraction = health_fraction(after)
         defeated = after["zone"] != before["zone"] or (fraction is not None and fraction <= DEFEATED_HEALTH_FRACTION)
@@ -274,9 +281,8 @@ class QuestLoop:
         wisp = candidates[0]
         start = await self.client.body.position()
         planner = await self.planner()
-        hazards = Hazards.of(enemies=[enemy["position"] for enemy in enemies], duel_circles=circles,
-                             obstacles=self.record.obstacles.get(state["zone"], []), patrols=planner.patrols,
-                             keep_out=planner.teleports_to_keep_out_of(start, wisp["position"], WISP_ARRIVE_RADIUS))
+        hazards, _ = self.hazards_for(planner, state["zone"], start, wisp["position"], WISP_ARRIVE_RADIUS,
+                                      avoid=enemies, duel_circles=circles)
         trip = await travel(self.client, planner, wisp["position"], arrive_radius=WISP_ARRIVE_RADIUS,
                             watch=self.watcher(), hazards=hazards)
         await asyncio.sleep(WISP_SETTLE_SECONDS)
@@ -579,13 +585,18 @@ class QuestLoop:
         if crossing is not None:
             return await self.teleport_turn(crossing, zone, planner)
         _, duel_circles = await surroundings(self.client)
-        hazards = Hazards.of(enemies=[enemy["position"] for enemy in avoid], duel_circles=duel_circles,
-                             obstacles=self.record.obstacles.get(zone, []), patrols=planner.patrols,
-                             keep_out=planner.teleports_to_keep_out_of(start, destination, arrive_radius))
+        hazards, around = self.hazards_for(planner, zone, start, destination, arrive_radius, avoid=avoid,
+                                           duel_circles=duel_circles)
         trip = await travel(self.client, planner, destination, arrive_radius=arrive_radius,
                             watch=self.watcher(also=also, ignore=ignore), hazards=hazards)
         moved = flat_distance(start, await self.client.body.position())
-        if trip["reason"] in PATH_THREATS and moved < BARELY_MOVED_DISTANCE:
+        if trip["reason"] == "every route method failed" and around and moved < BARELY_MOVED_DISTANCE:
+            trip["reason"] = ENEMIES_IN_THE_WAY
+            self.record.immobile_threat_stops_in_a_row += 1
+            self.events.emit("walk", f"{did}: {len(around)} enemies leave no route that keeps away from where "
+                                     f"they are going; waiting {ENEMIES_IN_THE_WAY_WAIT_SECONDS:.0f} s for them to move")
+            await asyncio.sleep(ENEMIES_IN_THE_WAY_WAIT_SECONDS)
+        elif trip["reason"] in PATH_THREATS and moved < BARELY_MOVED_DISTANCE:
             self.record.immobile_threat_stops_in_a_row += 1
             await asyncio.sleep(ENEMY_PASS_WAIT_SECONDS)
         else:
@@ -607,8 +618,11 @@ class QuestLoop:
         self.events.emit("teleporter", f"the target is in another walkable area of {zone}; walking into "
                                        f"{volume.name} at ({volume.x:.0f}, {volume.y:.0f})")
         before = await self.client.body.position()
+        _, duel_circles = await surroundings(self.client)
+        hazards, _ = self.hazards_for(planner, zone, before, volume.point, volume.radius / 3,
+                                      avoid=await nearby_enemies(self.client), duel_circles=duel_circles)
         trip = await travel(self.client, planner, volume.point, arrive_radius=volume.radius / 3,
-                            watch=self.watcher(also=self.jump_check()), hazards=Hazards.of(patrols=planner.patrols))
+                            watch=self.watcher(also=self.jump_check()), hazards=hazards)
         reached = trip["result"] == "arrived" or trip["reason"] in (TELEPORTED, "loading")
         if not reached:
             moved = flat_distance(before, await self.client.body.position())
@@ -653,6 +667,19 @@ class QuestLoop:
         here = await self.client.body.position()
         return planner.piece_of((here.x, here.y))
 
+    def hazards_for(self, planner: RoutePlanner, zone: str, start, destination, arrive_radius: float, *,
+                    avoid, duel_circles) -> tuple[Hazards, list[dict]]:
+        """Everything a walk from `start` to `destination` keeps away from, and the enemies it routes around
+        where they will be (none in the grace after a battle)."""
+        now = time.monotonic()
+        self.motion.observe(avoid, now)
+        around = [] if self.in_grace_after_battle() else enemies_to_route_around(avoid, me=start, destination=destination)
+        hazards = Hazards.of(enemies=[enemy["position"] for enemy in avoid], duel_circles=duel_circles,
+                             obstacles=self.record.obstacles.get(zone, []), patrols=planner.patrols,
+                             keep_out=planner.teleports_to_keep_out_of(start, destination, arrive_radius),
+                             tracks=[self.motion.track(enemy, now) for enemy in around])
+        return hazards, around
+
     def watcher(self, *, also=None, ignore=()):
         """Runs on every walking tick: stop for the STOP file, a battle, loading, a dialog or `also()`; step
         away from a close enemy; and end the trip when an enemy or a duel is near the next stretch of the
@@ -674,7 +701,9 @@ class QuestLoop:
             if also is not None and (reason := await also()):
                 return reason
             enemies, duel_circles = await surroundings(self.client)
-            threats = others(enemies, ignore)
+            now = time.monotonic()
+            self.motion.observe(enemies, now)
+            threats = [] if self.in_grace_after_battle() else others(enemies, ignore)
             if close := too_close(threats):
                 await self.step_away_from(close, "while walking", ignore=ignore)
                 return "stepped away from an enemy"
@@ -682,13 +711,17 @@ class QuestLoop:
             if any(distance_to_path(circle, stretch) < DUEL_CIRCLE_NO_GO for circle in duel_circles):
                 return DUEL_NEAR_PATH
             if route.is_new(path_ahead):
-                route.remember_clearances({enemy["id"]: distance_to_path(enemy["position"], path_ahead)
+                route.remember_clearances({enemy["id"]: closest_approach(self.motion.track(enemy, now), path_ahead)
                                            for enemy in threats}, path_ahead)
-            if any(route.threatens(enemy["id"], distance_to_path(enemy["position"], stretch)) for enemy in threats):
+            if any(route.threatens(enemy["id"], closest_approach(self.motion.track(enemy, now), stretch))
+                   for enemy in threats):
                 return ENEMY_NEAR_PATH
             return None
 
         return watch
+
+    def in_grace_after_battle(self) -> bool:
+        return in_grace_after_battle(self._battle_ended_at, now=time.monotonic())
 
     async def step_away_from(self, close: list[dict], when: str, ignore=()) -> None:
         """Every enemy that comes close is stepped away from: enemies are always avoided, unless the quest needs
