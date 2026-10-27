@@ -2,8 +2,8 @@ import math
 import unittest
 from types import SimpleNamespace
 
-from wizardtraining.geometry import (angle_between, distance_to_path, distance_to_segment, flat_distance, path_within,
-                                     point_toward, xy)
+from wizardtraining.geometry import (angle_between, distance_to_path, distance_to_segment, flat_distance, path_beyond,
+                                     path_within, point_toward, xy)
 
 
 class GeometryTest(unittest.TestCase):
@@ -35,6 +35,14 @@ class GeometryTest(unittest.TestCase):
     def test_path_within_cuts_the_path_at_the_length(self):
         self.assertEqual(path_within([(0, 0), (10, 0), (10, 10)], 15), [(0, 0), (10, 0), (10.0, 5.0)])
         self.assertEqual(path_within([(0, 0), (10, 0)], 50), [(0, 0), (10, 0)])
+
+
+class PathBeyondTest(unittest.TestCase):
+    def test_the_rest_of_a_path_after_a_length(self):
+        path = [(0, 0), (1000, 0), (1000, 1000)]
+        self.assertEqual(path_beyond(path, 500), [(500, 0), (1000, 0), (1000, 1000)])
+        self.assertEqual(path_beyond(path, 1500), [(1000, 500), (1000, 1000)])
+        self.assertEqual(path_beyond(path, 5000), [(1000, 1000)])
 
 
 if __name__ == "__main__":

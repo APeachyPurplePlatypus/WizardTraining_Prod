@@ -1,12 +1,36 @@
 import unittest
 
-from wizardtraining.progress import (APPROACH_MARGIN, ENEMY_NEAR_PATH, ENEMY_PATH_CLEARANCE, MEANINGFUL_TRAVEL_DISTANCE,
-                                     Limits, PlannedRoute, RunRecord, StopRun, check_limits, needs_rest, progressed,
-                                     remember_obstacles, stalled, travel_outcome)
+from wizardtraining.progress import (APPROACH_MARGIN, ENEMY_NEAR_PATH, ENEMY_PATH_CLEARANCE, ENGAGE_HEALTH_FRACTION,
+                                     ENGAGE_MANA_FRACTION, MEANINGFUL_TRAVEL_DISTANCE, LimitReached, Limits,
+                                     PlannedRoute, RunRecord, StopRun, check_limits, health_for_a_fight, leaves_world,
+                                     mana_for_a_fight, mana_to_travel, nav_did_better, progressed, remember_obstacles,
+                                     safe_to_stand, short_for_a_fight, should_drink_potion, stalled, topped_up,
+                                     travel_outcome,
+                                     wanted_wisp, world_of)
 
 
 def record(**limits) -> RunRecord:
     return RunRecord(limits=Limits(**limits))
+
+
+class NavDidBetterTest(unittest.TestCase):
+    def test_collision_stuck_then_nav_walked_on(self):
+        self.assertTrue(nav_did_better([{"method": "collision", "result": "failed"},
+                                        {"method": "nav", "result": "interrupted"}]))
+        self.assertFalse(nav_did_better([{"method": "collision", "result": "no route"},
+                                         {"method": "nav", "result": "arrived"}]))
+        self.assertFalse(nav_did_better([{"method": "collision", "result": "arrived"}]))
+
+
+class WorldTest(unittest.TestCase):
+    def test_the_world_is_the_first_part_of_the_zone(self):
+        self.assertEqual(world_of("WizardCity/WC_Streets/WC_Triton"), "WizardCity")
+        self.assertIsNone(world_of(""))
+
+    def test_a_goal_in_another_world_leaves_it(self):
+        self.assertTrue(leaves_world("WizardCity/WC_Hub", "Krokotopia/KT_Hub"))
+        self.assertFalse(leaves_world("WizardCity/WC_Hub", "WizardCity/WC_Streets/Interiors/WC_Triton_T1"))
+        self.assertFalse(leaves_world("WizardCity/WC_Hub", ""))
 
 
 class LimitsTest(unittest.TestCase):
@@ -35,6 +59,18 @@ class LimitsTest(unittest.TestCase):
         with self.assertRaisesRegex(StopRun, "stepped away"):
             self.check(run)
 
+    def test_planned_limits_may_finish_safely_but_the_stop_file_and_trouble_may_not(self):
+        with self.assertRaises(LimitReached):
+            self.check(record(), seconds_left=0)
+        run = record(max_battles=1)
+        run.battles = 1
+        with self.assertRaises(LimitReached):
+            self.check(run)
+        for run, stop_requested in ((record(), True), (record(max_step_aways=0), False)):
+            with self.assertRaises(StopRun) as caught:
+                self.check(run, stop_requested=stop_requested)
+            self.assertNotIsInstance(caught.exception, LimitReached)
+
     def test_turns_without_progress_stop_the_run_and_progress_resets_the_count(self):
         run = record(max_turns_without_progress=2)
         run.record_turn(stalled("a"))
@@ -44,6 +80,38 @@ class LimitsTest(unittest.TestCase):
         run.record_turn(stalled("d"))
         with self.assertRaisesRegex(StopRun, "without progress"):
             self.check(run)
+
+
+class DoorLoopTest(unittest.TestCase):
+    def test_zone_changes_count_until_the_quest_goal_changes(self):
+        run = record(max_zone_changes_without_quest_change=2)
+        for zone in ("Hub", "Shops", "Hub"):
+            run.note_place(zone, ("quest", 1))
+        check_limits(run, seconds_left=60, stop_requested=False)
+        run.note_place("Shops", ("quest", 1))
+        with self.assertRaisesRegex(StopRun, "back and forth"):
+            check_limits(run, seconds_left=60, stop_requested=False)
+        run.note_place("Shops", ("quest", 2))
+        self.assertEqual(run.zone_changes_without_quest_change, 0)
+
+    def test_staying_in_one_zone_is_not_a_zone_change(self):
+        run = record()
+        for _ in range(5):
+            run.note_place("Hub", ("quest", 1))
+        self.assertEqual(run.zone_changes_without_quest_change, 0)
+
+
+class MenuLoopTest(unittest.TestCase):
+    def test_menu_choices_count_until_the_quest_goal_changes(self):
+        run = record(max_menu_choices_without_quest_change=2)
+        run.note_menu_choice(("quest", (1,)))
+        run.note_menu_choice(("quest", (1,)))
+        check_limits(run, seconds_left=60, stop_requested=False)
+        run.note_menu_choice(("quest", (1,)))
+        with self.assertRaisesRegex(StopRun, "menu kept reopening"):
+            check_limits(run, seconds_left=60, stop_requested=False)
+        run.note_menu_choice(("quest", (2,)))
+        self.assertEqual(run.menu_choices_without_quest_change, 1)
 
 
 class TravelOutcomeTest(unittest.TestCase):
@@ -101,11 +169,54 @@ class PlannedRouteTest(unittest.TestCase):
         self.assertFalse(route.threatens("new", ENEMY_PATH_CLEARANCE))
 
 
-class RestTest(unittest.TestCase):
-    def test_rests_below_the_threshold_only(self):
-        self.assertTrue(needs_rest(0.5))
-        self.assertFalse(needs_rest(0.9))
-        self.assertFalse(needs_rest(None))
+class WispTest(unittest.TestCase):
+    def test_very_low_health_then_low_mana_then_middling_health(self):
+        self.assertEqual(wanted_wisp(0.3, 0.1), "health")
+        self.assertEqual(wanted_wisp(0.5, 0.1), "mana")
+        self.assertEqual(wanted_wisp(0.9, 0.1), "mana")
+        self.assertEqual(wanted_wisp(0.5, 0.9), "health")
+        self.assertIsNone(wanted_wisp(0.9, 0.3))
+        self.assertIsNone(wanted_wisp(0.9, 0.9))
+        self.assertIsNone(wanted_wisp(None, None))
+
+    def test_a_fight_needs_mana(self):
+        self.assertFalse(mana_for_a_fight(1 / 30))
+        self.assertFalse(mana_for_a_fight(ENGAGE_MANA_FRACTION - 0.01))
+        self.assertTrue(mana_for_a_fight(ENGAGE_MANA_FRACTION))
+        self.assertTrue(mana_for_a_fight(None))
+
+    def test_a_fight_needs_health(self):
+        self.assertFalse(health_for_a_fight(1 / 801))
+        self.assertFalse(health_for_a_fight(ENGAGE_HEALTH_FRACTION - 0.01))
+        self.assertTrue(health_for_a_fight(ENGAGE_HEALTH_FRACTION))
+        self.assertTrue(health_for_a_fight(None))
+
+    def test_too_little_mana_to_travel_among_enemies(self):
+        self.assertFalse(mana_to_travel(3 / 32))
+        self.assertTrue(mana_to_travel(7 / 32))
+        self.assertTrue(mana_to_travel(None))
+
+    def test_waiting_for_mana_goes_on_until_nearly_full(self):
+        self.assertFalse(topped_up(12 / 30))
+        self.assertFalse(topped_up(26 / 30))
+        self.assertTrue(topped_up(27 / 30))
+        self.assertTrue(topped_up(None))
+
+    def test_health_comes_before_mana_for_a_fight(self):
+        self.assertEqual(short_for_a_fight(1 / 801, 22 / 30), "health")
+        self.assertEqual(short_for_a_fight(1 / 801, 0.0), "health")
+        self.assertEqual(short_for_a_fight(1.0, 1 / 30), "mana")
+        self.assertIsNone(short_for_a_fight(ENGAGE_HEALTH_FRACTION, ENGAGE_MANA_FRACTION))
+        self.assertIsNone(short_for_a_fight(None, None))
+
+
+class PotionTest(unittest.TestCase):
+    def test_drinks_only_when_low_with_a_full_charge(self):
+        self.assertTrue(should_drink_potion(99 / 624, 1.0))
+        self.assertFalse(should_drink_potion(0.5, 1.0))
+        self.assertFalse(should_drink_potion(0.1, 0.6))
+        self.assertFalse(should_drink_potion(0.1, "<unavailable: ReadingError>"))
+        self.assertFalse(should_drink_potion(None, 1.0))
 
 
 class ReportTest(unittest.TestCase):
@@ -113,6 +224,15 @@ class ReportTest(unittest.TestCase):
         report = record(target_level=7).as_report()
         self.assertIs(report["simulated"], False)
         self.assertEqual(report["limits"]["target_level"], 7)
+
+
+
+class SafeToStandTest(unittest.TestCase):
+    def test_a_zone_where_enemies_were_met_is_never_safe_to_stand_in(self):
+        firecat = "WizardCity/WC_Streets/WC_Firecat"
+        self.assertFalse(safe_to_stand(firecat, [firecat], enemies_in_sight=0))
+        self.assertTrue(safe_to_stand("WizardCity/WC_Streets/WC_OldeTown", [firecat], enemies_in_sight=0))
+        self.assertFalse(safe_to_stand("WizardCity/WC_Streets/WC_OldeTown", [firecat], enemies_in_sight=1))
 
 
 if __name__ == "__main__":

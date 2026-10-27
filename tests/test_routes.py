@@ -1,8 +1,13 @@
 import math
 import unittest
 
-from wizardtraining.routes import (COLLISION, DUEL_CIRCLE_NO_GO, LEG_ENEMY_CLEARANCE, NAV, OBSTACLE_RADIUS, STRAIGHT,
-                                   Hazards, NavGraph, RoutePlanner, grid_path, string_pull)
+from wizardtraining.patrols import PatrolMap
+from wizardtraining.routes import (COLLISION, DUEL_CIRCLE_NO_GO, GOAL_PIECE_REACH, LEG_ENEMY_CLEARANCE, NAV,
+                                   NAV_CELL_REACH,
+                                   OBSTACLE_RADIUS, STRAIGHT, Hazards, NavGraph, RoutePlanner, grid_path,
+                                   no_more_dangerous, string_pull)
+from wizardtraining.motion import Track
+from wizardtraining.teleports import TeleportVolume
 
 SPACING = 100.0
 
@@ -58,6 +63,21 @@ class HazardsTest(unittest.TestCase):
         self.assertFalse(hazards.forbids((DUEL_CIRCLE_NO_GO + 1, 0)))
         self.assertFalse(hazards.line_is_open((-2000, 0), (2000, 0)))
 
+    def test_a_walk_beginning_near_a_duel_may_only_lead_away(self):
+        hazards = Hazards.of(duel_circles=[(0, 0)], start=(800, 0))
+        self.assertFalse(hazards.forbids((900, 0)))
+        self.assertFalse(hazards.forbids((800, 300)))
+        self.assertTrue(hazards.forbids((600, 0)))
+        self.assertTrue(Hazards.of(duel_circles=[(0, 0)], start=(5000, 0)).forbids((DUEL_CIRCLE_NO_GO - 1, 0)))
+
+    def test_routes_out_from_beside_a_duel(self):
+        grid = SquareWalkGrid(60)
+        circle, start, goal = (3000, 3000), (3700, 3000), (5500, 3000)
+        cells = grid_path(grid, start, goal, Hazards.of(duel_circles=[circle], start=start))
+        self.assertIsNotNone(cells)
+        self.assertTrue(all(math.dist(cell, circle) >= 650 for cell in cells))
+        self.assertIsNone(grid_path(grid, start, goal, Hazards.of(duel_circles=[circle])))
+
     def test_obstacles_are_no_go_and_block_lines(self):
         hazards = Hazards.of(obstacles=[(0, 0)])
         self.assertTrue(hazards.forbids((OBSTACLE_RADIUS - 1, 0)))
@@ -72,15 +92,39 @@ class HazardsTest(unittest.TestCase):
         self.assertTrue(hazards.line_is_safe((-1000, -100), (-900, -100)))
 
 
+class NavGraphTest(unittest.TestCase):
+    def test_a_line_is_covered_only_where_waypoints_are_near(self):
+        graph = square_nav_graph(3)
+        self.assertTrue(graph.covers_line((0, 0), (960, 0)))
+        self.assertTrue(graph.near_a_waypoint((480 + NAV_CELL_REACH - 1, 0)))
+        self.assertFalse(graph.near_a_waypoint((-NAV_CELL_REACH - 1, 0)))
+        self.assertFalse(graph.covers_line((0, 0), (0, -2000)))
+
+    def test_matches_comparing_with_every_waypoint(self):
+        graph = square_nav_graph(4)
+        for x in range(-400, 2000, 37):
+            for y in range(-400, 2000, 53):
+                expected = min(math.dist((x, y), vertex) for vertex in graph.vertices) <= NAV_CELL_REACH
+                self.assertEqual(graph.near_a_waypoint((x, y)), expected, (x, y))
+
+
 class StringPullTest(unittest.TestCase):
     def test_merges_points_a_straight_line_can_join(self):
         points = [(0, 0), (1, 0), (2, 0), (3, 0)]
-        self.assertEqual(string_pull(points, lambda a, b: True), [(3, 0)])
+        self.assertEqual(string_pull(points, lambda i, j: True), [(3, 0)])
 
     def test_keeps_corners_a_straight_line_cannot_cut(self):
         points = [(0, 0), (1, 0), (1, 1)]
-        cuts_corner = lambda a, b: a[0] == b[0] or a[1] == b[1]
+        cuts_corner = lambda i, j: points[i][0] == points[j][0] or points[i][1] == points[j][1]
         self.assertEqual(string_pull(points, cuts_corner), [(1, 0), (1, 1)])
+
+    def test_merging_never_cuts_across_a_patrol(self):
+        patrols = PatrolMap()
+        patrols.add_segment((500, -300), (500, 300))
+        hazards = Hazards.of(patrols=patrols)
+        detour = [(0, 0), (0, 1200), (1000, 1200), (1000, 0)]
+        legs = string_pull(detour, no_more_dangerous(detour, hazards))
+        self.assertEqual(legs, [(0, 1200), (1000, 1200), (1000, 0)])
 
 
 class GridPathTest(unittest.TestCase):
@@ -97,6 +141,13 @@ class GridPathTest(unittest.TestCase):
         cells = grid_path(grid, (0, 0), (2900, 0), Hazards.of(duel_circles=[circle]))
         self.assertEqual(cells[-1], (2900, 0))
         self.assertTrue(all(math.dist(cell, circle) >= DUEL_CIRCLE_NO_GO for cell in cells))
+
+    def test_bends_away_from_patrol_paths(self):
+        grid = SquareWalkGrid(30)
+        patrols = PatrolMap()
+        patrols.add_segment((1500, -500), (1500, 500))
+        cells = grid_path(grid, (0, 0), (2900, 0), Hazards.of(patrols=patrols))
+        self.assertGreater(min(patrols.distance(cell, 3000) for cell in cells), 400)
 
     def test_bends_away_from_enemies(self):
         grid = SquareWalkGrid(30)
@@ -115,6 +166,8 @@ class RoutePlannerTest(unittest.TestCase):
         planner = RoutePlanner("zone", walk_grid=SquareWalkGrid(3), grid_line_walkable=lambda a, b: True,
                                nav_graph=square_nav_graph(2))
         self.assertEqual(planner.methods(), [COLLISION, NAV, STRAIGHT])
+        planner.nav_first = True
+        self.assertEqual(planner.methods(), [NAV, COLLISION, STRAIGHT])
 
     def test_nav_route_ends_at_the_goal_and_avoids_a_duel(self):
         planner = RoutePlanner("zone", nav_graph=square_nav_graph(6))
@@ -144,6 +197,98 @@ class RoutePlannerTest(unittest.TestCase):
         self.assertEqual(legs[-1], (1000, 0))
         self.assertTrue(all(hazards.line_is_open(a, b) for a, b in zip(path, path[1:])))
         self.assertIsNone(RoutePlanner("zone").route(STRAIGHT, (0, 0), (1000, 0), hazards))
+
+    def test_a_door_in_a_wall_belongs_to_the_piece_beside_it(self):
+        lower, upper = (0, 0), (10_000, 0)
+
+        def piece_of(point, reach=150):
+            distances = {0: math.dist(point, lower), 1: math.dist(point, upper)}
+            nearest = min(distances, key=distances.get)
+            return nearest if distances[nearest] - 1000 <= reach else None
+
+        planner = RoutePlanner("zone")
+        planner.piece_of = piece_of
+        up = TeleportVolume("Tele Up", 500, 0, 0, 100)
+        planner.teleports = [(up, 0)]
+        door_in_a_wall = (upper[0] + 1000 + GOAL_PIECE_REACH - 100, 0)
+        self.assertIsNone(piece_of(door_in_a_wall))
+        self.assertEqual(planner.crossing(lower, door_in_a_wall, {}), up)
+        self.assertIsNone(planner.crossing(lower, (upper[0] + 1000 + GOAL_PIECE_REACH + 100, 0), {}))
+
+    def test_straight_leg_keeps_clear_of_enemies(self):
+        planner = RoutePlanner("zone")
+        self.assertIsNone(planner.route(STRAIGHT, (0, 0), (5000, 0), Hazards.of(enemies=[(2500, 200)])))
+        self.assertEqual(planner.route(STRAIGHT, (0, 0), (5000, 0), Hazards.of(enemies=[(2500, 2000)])), [(5000, 0)])
+
+    def test_straight_leg_never_cuts_across_a_patrol_when_walk_data_loaded(self):
+        patrols = PatrolMap.from_paths({1: (2500, -3000, 0), 2: (2500, 3000, 0)}, {"Path 10_Screamer": [1, 2]})
+        hazards = Hazards.of(patrols=patrols)
+        with_walk_data = RoutePlanner("zone", walk_grid=SquareWalkGrid(3), grid_line_walkable=lambda a, b: False)
+        self.assertIsNone(with_walk_data.route(STRAIGHT, (0, 0), (5000, 0), hazards))
+        self.assertEqual(with_walk_data.route(STRAIGHT, (0, 0), (1000, 0), hazards), [(1000, 0)])
+        self.assertEqual(RoutePlanner("zone").route(STRAIGHT, (0, 0), (5000, 0), hazards), [(5000, 0)])
+
+    def test_no_crossing_to_a_goal_the_wizards_piece_reaches(self):
+        planner = RoutePlanner("zone")
+        planner.piece_of = lambda point, reach=150: 1 if point[1] < -2000 else 0
+        planner.piece_reaches = lambda piece, point, reach: piece == 0 and point[1] > -2300
+        planner.teleports = [(TeleportVolume("to IceSchool", 3605, 3662, 0, 142), 0)]
+        self.assertIsNone(planner.crossing((0, 0), (22, -2170), {}))
+        self.assertEqual(planner.crossing((0, 0), (22, -4000), {}).name, "to IceSchool")
+
+    def test_no_crossing_where_the_nav_graph_walks(self):
+        planner = RoutePlanner("zone", nav_graph=square_nav_graph(3))
+        planner.piece_of = lambda point, reach=150: 1 if point[1] > 800 else 0
+        planner.teleports = [(TeleportVolume("to IceSchool", 900, 0, 0, 142), 0)]
+        self.assertIsNone(planner.crossing((0, 0), (960, 960), {}))
+        self.assertEqual(planner.crossing((0, 0), (960, 5000), {}).name, "to IceSchool")
+
+    def test_routes_keep_out_of_teleport_volumes(self):
+        planner = RoutePlanner("zone", walk_grid=SquareWalkGrid(20), grid_line_walkable=lambda a, b: True)
+        jeweler = TeleportVolume("WC_Shop Jewelry", 1000, 0, 0, 100)
+        planner.teleports = [(jeweler, 0)]
+        keep_out = planner.teleports_to_keep_out_of((0, 0), (1900, 0), 40)
+        self.assertEqual(keep_out, [((1000, 0), 160)])
+        legs = planner.route(COLLISION, (0, 0), (1900, 0), Hazards.of(keep_out=keep_out))
+        path = [(0, 0), *legs]
+        self.assertTrue(all(Hazards.of(keep_out=keep_out).line_is_open(a, b) for a, b in zip(path, path[1:])))
+
+    def test_the_volume_walked_to_or_from_is_not_kept_out(self):
+        planner = RoutePlanner("zone")
+        door = TeleportVolume("Tower Exit", 1000, 0, 0, 100)
+        planner.teleports = [(door, 0)]
+        self.assertEqual(planner.teleports_to_keep_out_of((0, 0), (1000, 50), 40), [])
+        self.assertEqual(planner.teleports_to_keep_out_of((1050, 0), (5000, 0), 40), [])
+
+    def test_a_door_just_come_through_is_kept_out_without_the_margin(self):
+        planner = RoutePlanner("zone")
+        planner.teleports = [(TeleportVolume("Myth School Exit", 1000, 0, 0, 100), 0)]
+        self.assertEqual(planner.teleports_to_keep_out_of((1130, 0), (5000, 0), 40), [((1000, 0), 129.0)])
+
+    def test_nav_routes_never_start_at_a_forbidden_waypoint(self):
+        graph = square_nav_graph(3)
+        hazards = Hazards.of(keep_out=[((0, 0), 100)])
+        self.assertNotEqual(graph.vertices[graph.path((10, 10), (960, 960), hazards)[0]], (0, 0))
+        self.assertIsNone(graph.path((0, 0), (960, 960), Hazards.of(keep_out=[((480, 480), 2000)])))
+
+    def test_volumes_on_another_level_are_not_kept_out(self):
+        planner = RoutePlanner("zone")
+        planner.piece_of = lambda point, reach=150: 0
+        planner.teleports = [(TeleportVolume("Tele Down", 1000, 0, 0, 100), 1)]
+        self.assertEqual(planner.teleports_to_keep_out_of((0, 0), (5000, 0), 40), [])
+
+    def test_reroute_plans_the_way_ahead_again_and_keeps_the_rest(self):
+        planner = RoutePlanner("zone", walk_grid=SquareWalkGrid(40), grid_line_walkable=lambda a, b: True)
+        path_ahead = [(0, 0), (3900, 0), (3900, 3900)]
+        legs = planner.reroute(path_ahead, Hazards.of(tracks=[Track((1200, 0))]))
+        self.assertEqual(legs[-2:], [(3900, 0), (3900, 3900)])
+        walked = [(0, 0), *legs]
+        joint = walked.index((2500.0, 0.0))
+        self.assertTrue(all(Hazards.of(tracks=[Track((1200, 0))]).line_is_open(a, b)
+                            for a, b in zip(walked[:joint], walked[1:joint + 1])))
+
+    def test_no_reroute_without_walk_data(self):
+        self.assertIsNone(RoutePlanner("zone").reroute([(0, 0), (3000, 0)], Hazards()))
 
     def test_unknown_method_is_an_error(self):
         with self.assertRaises(ValueError):

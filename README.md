@@ -12,12 +12,12 @@ It comes out of one character's unattended run from level 1 to level 5 in Wizard
 - **Moves like a player:** turns with A/D and walks with W, steering on the move under a 20 Hz watcher. No teleport, no speed changes, no writes to position or facing.
 - **Plans routes** over the zone's walk data: Deimos's collision walk grid, then the zone.nav waypoint graph, then a straight line. Routes cost more near enemies and never cross another player's duel circle.
 - **Plays main quests:** goal types bounty, persona (talk), waypoint (including doors to other zones) and usage (use an object). Follow-up dialogs hand out the next main quest.
-- **Fights** with a replaceable combat policy. The default heals when low, otherwise casts the first affordable attack.
+- **Fights** with a replaceable combat policy. The default heals when low, saving pips for a heal it cannot afford yet; otherwise it casts the affordable attack whose school the target's shields, wards, traps and resistances let through best.
 - **Stops for the operator** whenever it is unsure: a non-main quest, an unknown goal type, an optional quest offer, a defeat, a popup holding the keyboard, turns without progress, or any limit.
 
 ## Status
 
-Version 0.1.0. Tested on Windows 11 with one character in Wizard City (Unicorn Way, the Commons) on 2026-10-26, with WizWalker 1.8.2 as vendored in Deimos at commit `d7ef56eb`. The game updates often, and memory layouts and window paths can change with it. See [CHANGELOG.md](CHANGELOG.md) for what each release changed and why.
+Version 0.2.0. Played on Windows 11 with one character from level 5 to 10 in Wizard City (the Commons, Olde Town, Unicorn Way, Triton Avenue, Cyclops Lane, Firecat Alley and their houses and towers) on 2026-10-26 and 27, with WizWalker 1.8.2 as vendored in Deimos at commit `d7ef56eb`. The game updates often, and memory layouts and window paths can change with it. See [CHANGELOG.md](CHANGELOG.md) for what each release changed and why.
 
 ## Setup
 
@@ -34,6 +34,16 @@ $env:WIZARDTRAINING_DEIMOS = "$PWD\Deimos-Wizard101"
 
 - **WizWalker** comes from the copy vendored in Deimos (`libs/wizwalker`), which tracks the current game better than the old PyPI release.
 - **Deimos** is not installed as a package. `WIZARDTRAINING_DEIMOS` points at the checkout so the collision route method can use its walk grid (`src/collision.py`, `src/collision_math.py`), which needs numpy and shapely. Without it, routes use the zone.nav graph.
+- **Placed objects (optional, recommended).** Tents, trees and crates are not in a zone's `collision.bcd`, so routes walk into them. Deimos can read their footprints from the game's models if `katsuba` 0.4, `wiztype` and Deimos's own `kinif` are installed. `kinif` is a Rust extension with no published wheel: build it with [rustup](https://rustup.rs) (the GNU toolchain needs no Visual Studio) and `maturin`:
+
+  ```powershell
+  .venv\Scripts\python -m pip install "katsuba==0.4.0" "wiztype>=0.1.12" "maturin>=1,<2"
+  cd Deimos-Wizard101\libs\kinif
+  ..\..\..\.venv\Scripts\maturin build --release --target x86_64-pc-windows-gnu -i ..\..\..\.venv\Scripts\python.exe
+  ..\..\..\.venv\Scripts\python -m pip install (Get-ChildItem target\wheels\kinif-*.whl)
+  ```
+
+  The first time, `wiztype` reads a type list from the running game client (read-only, about 20 s) and caches it for that game version. Without these packages, the framework works as before.
 - **Reports** go to `./runtime`, or to the folder in `WIZARDTRAINING_RUNTIME`.
 
 ## Use
@@ -46,7 +56,10 @@ python -m wizardtraining play --level 7 --minutes 25 --battles 20
 ```
 
 - `probe` reads once without sending keys. Run it first.
-- `play` plays main quests until the level, the time or the battle limit is reached, or until something needs you.
+- `play` plays main quests until the level, the time or the battle limit is reached, or until something needs you. At a level, time or battle limit it plays on, for up to 15 minutes, until no enemy is nearby, so the wizard is not left idle where a passing enemy can pull it into a fight. The STOP file stops it at once. With `--side-quests` it accepts every quest offer, side quests included, and plays whichever quest is active. It also stops before the main quest leads to another world, because the current world's side quests come first; `--leave-world` follows the main quest anyway.
+- `--approve-quest "<title>"` lets it accept a quest an NPC's menu offers by title, once you have checked it is a main quest.
+- `--use-potions` lets it drink health potions it already has when health is low out of battle. It never buys any.
+- `--wear-gear` lets it wear the best gear in its backpack. It checks after each level-up or new loot, and only with no enemy nearby, because the spellbook stays open a few seconds per item. What counts as best is `gear.py`: max health first, then max mana, then resistance to every school, then the wizard's own school's damage and accuracy. It equips only hats, robes, shoes, athames, amulets and rings; wands, decks, pets and mounts are left alone. It never sells, recycles or throws anything away.
 
 To stop a run, run this from a second terminal:
 
@@ -56,11 +69,11 @@ python -m wizardtraining stop
 
 Do not use Ctrl+C, close the window, or kill the process. A run that dies without removing its hooks leaves them patched into the game, and nothing can hook again until the game is restarted.
 
-Every run saves a JSON report in the runtime folder. The report's `stopped` field says why the run ended.
+Every run saves a JSON report in the runtime folder, and its `stopped` field says why the run ended. While it runs, `events-<started>.jsonl` in the same folder records each battle, round, walk, rest, dialog and zone, level or quest change as it happens, so you can follow it from facts.
 
 ## Building on it
 
-Read [docs/architecture.md](docs/architecture.md) for how a turn works, [docs/safety.md](docs/safety.md) for the rules, and [docs/lessons-learned.md](docs/lessons-learned.md) for the pitfalls already paid for.
+Read [docs/architecture.md](docs/architecture.md) for how a turn works, [docs/safety.md](docs/safety.md) for the rules, [docs/game-data.md](docs/game-data.md) for the game data you can read, and [docs/lessons-learned.md](docs/lessons-learned.md) for the pitfalls already paid for.
 
 ### Rules it keeps
 

@@ -11,18 +11,42 @@ from __future__ import annotations
 import datetime
 from dataclasses import asdict, dataclass, field
 
+from .routes import COLLISION, NAV
+
 ENEMY_NEAR_PATH = "an enemy is near the path ahead"
 DUEL_NEAR_PATH = "a duel is near the path ahead"
-PATH_THREATS = {ENEMY_NEAR_PATH, DUEL_NEAR_PATH}
+ENEMIES_IN_THE_WAY = "enemies leave no route"
+PATH_THREATS = {ENEMY_NEAR_PATH, DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY}
 STATE_CHANGING_INTERRUPTS = {"battle", "dialog", "loading", "target in reach", "arrived"}
 MEANINGFUL_TRAVEL_DISTANCE = 300.0
 ENEMY_PATH_CLEARANCE = 500.0
 APPROACH_MARGIN = 150.0
-REST_BELOW_FRACTION = 0.65
+HEALTH_WISP_BELOW_FRACTION = 0.65
+WISP_ANY_DIRECTION_BELOW_FRACTION = 0.35
+POTION_BELOW_FRACTION = 0.4
+MANA_BELOW_FRACTION = 0.2
+ENGAGE_MANA_FRACTION = 0.4
+ENGAGE_HEALTH_FRACTION = 0.6
+TOP_UP_MANA_FRACTION = 0.9
+
+
+def world_of(zone: str | None) -> str | None:
+    """The world a zone belongs to: the first part of its path, "WizardCity" for "WizardCity/WC_Streets/WC_Triton"."""
+    return zone.split("/", 1)[0] if zone else None
+
+
+def leaves_world(here: str | None, destination: str | None) -> bool:
+    """True when a goal's zone is in another world than the wizard's."""
+    return bool(here and destination) and world_of(here) != world_of(destination)
 
 
 class StopRun(Exception):
     """Ends the run. The message is the reason given in the report."""
+
+
+class LimitReached(StopRun):
+    """A planned end: the target level, or the time, turn or battle limit. Unlike the other stops, which say
+    something is wrong or the operator asked, the run may play on a little to end somewhere safe."""
 
 
 @dataclass
@@ -37,6 +61,9 @@ class Limits:
     max_loading_waits_in_a_row: int = 40
     max_immobile_threat_stops_in_a_row: int = 8
     max_obstacles_per_zone: int = 40
+    max_zone_changes_without_quest_change: int = 10
+    max_menu_choices_without_quest_change: int = 3
+    stay_in_world: bool = True
 
 
 @dataclass
@@ -52,8 +79,12 @@ class RunRecord:
     step_aways: list = field(default_factory=list)
     battle_log: list[dict] = field(default_factory=list)
     dialog_log: list[dict] = field(default_factory=list)
-    zones_without_regeneration: list[str] = field(default_factory=list)
+    nav_first_zones: list[str] = field(default_factory=list)
     obstacles: dict[str, list] = field(default_factory=dict)
+    zone_changes_without_quest_change: int = 0
+    last_place: tuple | None = None
+    menu_choices_without_quest_change: int = 0
+    last_menu_goal: tuple | None = None
     planner_status: dict[str, dict] = field(default_factory=dict)
     quest: dict | None = None
     hooks: dict | None = None
@@ -63,10 +94,38 @@ class RunRecord:
     stopped: str | None = None
     traceback: str | None = None
     hooks_removed: bool | str | None = None
+    events_file: str | None = None
+    talks_leaving_goal_open: dict[str, int] = field(default_factory=dict)
+    teleport_outcomes: dict[str, dict[str, object]] = field(default_factory=dict)
+    tried_wisps: dict[str, float] = field(default_factory=dict)
+    visited_objects: list[str] = field(default_factory=list)
+    arrivals: dict[str, dict] = field(default_factory=dict)
+    explored: dict[str, list] = field(default_factory=dict)
+    zones_with_enemies: list[str] = field(default_factory=list)
+    path_sightings: dict[str, dict[str, int]] = field(default_factory=dict)
+    path_views: dict[str, dict[str, int]] = field(default_factory=dict)
 
     def record_turn(self, turn: dict) -> None:
         self.turns.append(turn)
         self.turns_without_progress = 0 if turn["progress"] else self.turns_without_progress + 1
+
+    def note_place(self, zone, quest_goal) -> None:
+        """Count zone changes since the quest goal last changed. Doors count as progress, so a wizard
+        walking back and forth through the same doors would otherwise never trip a limit."""
+        if self.last_place is not None:
+            last_zone, last_goal = self.last_place
+            if quest_goal != last_goal:
+                self.zone_changes_without_quest_change = 0
+            elif zone != last_zone:
+                self.zone_changes_without_quest_change += 1
+        self.last_place = (zone, quest_goal)
+
+    def note_menu_choice(self, quest_goal) -> None:
+        """Count NPC-menu choices made while the quest goal stays the same. Dialogs count as progress, so a
+        menu that reopens after every conversation would otherwise never trip a limit."""
+        same_goal = self.last_menu_goal == quest_goal
+        self.menu_choices_without_quest_change = self.menu_choices_without_quest_change + 1 if same_goal else 1
+        self.last_menu_goal = quest_goal
 
     def as_report(self) -> dict:
         return {"source": "wizwalker", "simulated": False, **asdict(self)}
@@ -85,19 +144,82 @@ def check_limits(record: RunRecord, *, seconds_left: float, stop_requested: bool
     if stop_requested:
         raise StopRun("stop requested (STOP file)")
     if seconds_left <= 0:
-        raise StopRun("time limit reached")
+        raise LimitReached("time limit reached")
     if len(record.turns) >= limits.max_turns:
-        raise StopRun("turn limit reached")
+        raise LimitReached("turn limit reached")
     if record.battles >= limits.max_battles:
-        raise StopRun("battle limit reached")
+        raise LimitReached("battle limit reached")
     if record.turns_without_progress >= limits.max_turns_without_progress:
         raise StopRun("several turns without progress")
     if len(record.step_aways) >= limits.max_step_aways:
         raise StopRun("stepped away from enemies too often")
+    if record.zone_changes_without_quest_change > limits.max_zone_changes_without_quest_change:
+        raise StopRun("changed zones many times without the quest changing; possibly going back and forth through doors")
+    if record.menu_choices_without_quest_change > limits.max_menu_choices_without_quest_change:
+        raise StopRun("an NPC's menu kept reopening without the quest changing; left for the operator")
 
 
-def needs_rest(fraction: float | None) -> bool:
-    return fraction is not None and fraction < REST_BELOW_FRACTION
+def wanted_wisp(health: float | None, mana: float | None) -> str | None:
+    """"health" below WISP_ANY_DIRECTION_BELOW_FRACTION, then "mana" below MANA_BELOW_FRACTION, then "health" below
+    HEALTH_WISP_BELOW_FRACTION, else None. Every spell costs a mana per pip, wand spells too, so a wizard out of
+    mana can neither attack nor heal: low mana comes before middling health. A mana wisp gave only +3 of 28, and
+    used-up ones still show as entities, so mana wisps are sought only when mana is low."""
+    if health is not None and health < WISP_ANY_DIRECTION_BELOW_FRACTION:
+        return "health"
+    if mana is not None and mana < MANA_BELOW_FRACTION:
+        return "mana"
+    if health is not None and health < HEALTH_WISP_BELOW_FRACTION:
+        return "health"
+    return None
+
+
+def mana_for_a_fight(mana: float | None) -> bool:
+    """At least ENGAGE_MANA_FRACTION of the mana pool, or mana unknown. A Warhorn fight took 6 to 10 mana of 30,
+    and with 1 mana the wizard walked into General Akilles and his Cyclops and could only pass."""
+    return mana is None or mana >= ENGAGE_MANA_FRACTION
+
+
+def health_for_a_fight(health: float | None) -> bool:
+    """At least ENGAGE_HEALTH_FRACTION of max health, or health unknown. Won fights at level 8 cost up to 435
+    health of 717, and a wizard logged back in with 1 health was defeated in its first round."""
+    return health is None or health >= ENGAGE_HEALTH_FRACTION
+
+
+def safe_to_stand(zone, zones_with_enemies, enemies_in_sight: int) -> bool:
+    """Whether the wizard may stand still here: no enemy in sight, in a zone where none has ever been met. A street
+    can have none loaded for a moment: at level 10 the run stopped in Firecat Alley with none in sight, and left
+    the wizard idle where they patrol."""
+    return zone not in zones_with_enemies and enemies_in_sight == 0
+
+
+def mana_to_travel(mana: float | None) -> bool:
+    """At least MANA_BELOW_FRACTION of the pool, or unknown. Below it the wizard refills mana before any goal, not
+    only before a fight the quest asks for: walking to a Firecat Alley waypoint with 3 of 32, any fight on the way
+    would be lost, and the zones that give mana back are next door."""
+    return mana is None or mana >= MANA_BELOW_FRACTION
+
+
+def topped_up(mana: float | None) -> bool:
+    """Mana is at least TOP_UP_MANA_FRACTION of the pool, or unknown. Waiting for mana goes on until then, not just
+    to ENGAGE_MANA_FRACTION: the zones that give mana back are a walk from the fights, and a Warhorn fight took 6
+    to 10 of 30."""
+    return mana is None or mana >= TOP_UP_MANA_FRACTION
+
+
+def short_for_a_fight(health: float | None, mana: float | None) -> str | None:
+    """"health" or "mana", whichever is too low for a fight the quest asks for, else None. Health comes first: a
+    fight at 1 health is lost in a round whatever the mana, and a health wisp gives about a quarter of it back."""
+    if not health_for_a_fight(health):
+        return "health"
+    if not mana_for_a_fight(mana):
+        return "mana"
+    return None
+
+
+def should_drink_potion(fraction: float | None, charges) -> bool:
+    """Below POTION_BELOW_FRACTION with a full charge left. Potions are scarce, so a merely tired wizard rests."""
+    return (fraction is not None and fraction < POTION_BELOW_FRACTION
+            and isinstance(charges, (int, float)) and not isinstance(charges, bool) and charges >= 1)
 
 
 def travel_outcome(did: str, stop_reason: str | None, moved: float, record: RunRecord, *,
@@ -113,6 +235,13 @@ def travel_outcome(did: str, stop_reason: str | None, moved: float, record: RunR
     return stalled(did, new_obstacles=new_obstacles, **details)
 
 
+def nav_did_better(attempts: list[dict]) -> bool:
+    """A trip where the collision route got stuck on the way and the nav route then walked on: the collision
+    data misses something there."""
+    results = {attempt["method"]: attempt.get("result") for attempt in attempts}
+    return results.get(COLLISION) == "failed" and results.get(NAV) in ("arrived", "interrupted")
+
+
 def remember_obstacles(record: RunRecord, zone: str, found: list) -> int:
     """Keep newly found obstacles for the zone, up to Limits.max_obstacles_per_zone. Returns how many were kept."""
     known = record.obstacles.setdefault(zone, [])
@@ -123,8 +252,9 @@ def remember_obstacles(record: RunRecord, zone: str, found: list) -> int:
 
 
 class PlannedRoute:
-    """How close each enemy was to a route when walking it began. The planner may accept passing an enemy
-    it could not avoid; only a new enemy, or one that has come closer since, is a threat to stop for.
+    """How close each enemy was expected to come to a route when walking it began, given where it was heading.
+    The planner may accept passing an enemy it could not avoid; only a new enemy, or one now expected to come
+    closer, is a threat to stop for.
     Without this, a watcher that stopped for every enemy near the path fought the planner and stood still."""
 
     def __init__(self):

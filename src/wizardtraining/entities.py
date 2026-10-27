@@ -6,24 +6,27 @@ placeholders without NPC data, so enemies are recognisable only nearby.
 
 Each entity is classified once and remembered by address and name. The game reuses addresses, notably
 after a zone change, which also clears what is remembered. Later checks re-read only names and
-positions. A duel circle (CombatSigil_Object) is someone's fight in progress; walking into one joins it.
+positions. A duel circle (`targets.is_duel_circle`) is someone's fight in progress; walking into one joins it.
 """
 
 from __future__ import annotations
 
 import time
 
+from wizwalker import Keycode
 from wizwalker.constants import Primitive
 
 from .geometry import flat_distance
-from .movement import face_and_step
-from .targets import escape_point, measured
+from .keys import tap
+from .movement import bearing_to
+from .targets import back_away, is_duel_circle, measured, threat_centre
 
-DUEL_CIRCLE_NAME = "CombatSigil_Object"
 NPC_BEHAVIOR_ENEMY_FLAG_OFFSET = 288
 ENTITY_LIST_REFRESH_SECONDS = 0.5
-STEP_AWAY_SECONDS = 0.6
+STEP_AWAY_SECONDS = 0.8
 ENEMY, NPC, DUEL_CIRCLE, OTHER = "enemy", "npc", "duel circle", "other"
+HEALTH_WISP, MANA_WISP = "health wisp", "mana wisp"
+WISP_NAME_PARTS = {"wisphealth": HEALTH_WISP, "wispmana": MANA_WISP}
 
 
 async def npc_enemy_flag(entity) -> bool | None:
@@ -38,10 +41,23 @@ async def npc_enemy_flag(entity) -> bool | None:
 
 
 async def classify(entity, name: str) -> str:
-    if name == DUEL_CIRCLE_NAME:
+    if is_duel_circle(name):
         return DUEL_CIRCLE
+    for part, kind in WISP_NAME_PARTS.items():
+        if part in name.lower():
+            return kind
     flag = await npc_enemy_flag(entity)
     return OTHER if flag is None else (ENEMY if flag else NPC)
+
+
+async def display_code(entity) -> str | None:
+    """The language code of an entity's display name, such as "WizardMobs_00000331" (Scarlet Screamer).
+    Quest goals name their enemies with the same codes."""
+    try:
+        template = await entity.object_template()
+        return (await template.display_name() or None) if template is not None else None
+    except Exception:
+        return None
 
 
 class EntityTracker:
@@ -50,6 +66,7 @@ class EntityTracker:
     def __init__(self, client):
         self._client = client
         self._kinds: dict[tuple[int, str], str] = {}
+        self._display_codes: dict[tuple[int, str], str | None] = {}
         self._zone = None
         self._tracked = []
         self._refreshed_at = 0.0
@@ -60,7 +77,7 @@ class EntityTracker:
         self._refreshed_at = time.monotonic()
         zone = await self._client.zone_name()
         if zone != self._zone:
-            self._zone, self._kinds = zone, {}
+            self._zone, self._kinds, self._display_codes = zone, {}, {}
         tracked = []
         for entity in await self._client.get_base_entity_list():
             try:
@@ -70,6 +87,8 @@ class EntityTracker:
             key = (entity.base_address, name)
             if key not in self._kinds:
                 self._kinds[key] = await classify(entity, name)
+                if self._kinds[key] == ENEMY:
+                    self._display_codes[key] = await display_code(entity)
             if self._kinds[key] != OTHER:
                 tracked.append((entity, self._kinds[key], name))
         self._tracked = tracked
@@ -91,11 +110,17 @@ class EntityTracker:
             if kind == DUEL_CIRCLE:
                 circles.append(where)
             else:
-                enemies.append({"id": entity.base_address, "entity": entity, "name": name, "position": where})
+                enemies.append({"id": entity.base_address, "entity": entity, "name": name, "position": where,
+                                "display_code": self._display_codes.get((entity.base_address, name))})
         return enemies, circles
 
     async def npc_positions(self) -> list:
         return [where for _, _, _, where in await self._located({NPC})]
+
+    async def wisps(self, kind: str) -> list[dict]:
+        """Health or mana wisps currently loaded: red ones restore health, blue ones mana, when touched."""
+        return [{"id": entity.base_address, "name": name, "position": where}
+                for entity, _, name, where in await self._located({kind})]
 
 
 def tracker_for(client) -> EntityTracker:
@@ -116,6 +141,10 @@ async def nearby_enemies(client) -> list[dict]:
     return enemies
 
 
+async def wisps(client, kind: str) -> list[dict]:
+    return await tracker_for(client).wisps(kind)
+
+
 async def nearest_npc(client):
     """Position of the friendly NPC closest to the wizard, or None."""
     me = await client.body.position()
@@ -123,5 +152,11 @@ async def nearest_npc(client):
     return min(npcs, key=lambda where: flat_distance(me, where), default=None)
 
 
-async def step_away(client, close: list[dict]) -> None:
-    await face_and_step(client, escape_point(await client.body.position(), close), STEP_AWAY_SECONDS)
+async def step_away(client, close: list[dict]) -> str:
+    """Move away from close enemies without turning first: backward with S if they are in front, forward with
+    W if they are behind. A 180-degree turn with A and D takes almost 2 s, long enough for a chasing enemy to
+    catch the wizard, while S moves as fast as W. Returns the key used."""
+    facing = await client.body.yaw()
+    key = Keycode.S if back_away(await bearing_to(client, threat_centre(close)), facing) else Keycode.W
+    await tap(client, key, STEP_AWAY_SECONDS)
+    return key.name

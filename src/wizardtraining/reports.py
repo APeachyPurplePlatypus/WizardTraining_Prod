@@ -28,5 +28,16 @@ def save_report(kind: str, report: dict, folder: Path) -> Path:
     folder.mkdir(parents=True, exist_ok=True)
     stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     path = folder / f"{kind}-{stamp}.json"
-    path.write_text(json.dumps(report, indent=2, sort_keys=True, default=plain) + "\n", encoding="utf-8")
+    path.write_text(json.dumps(with_text_keys(report), indent=2, sort_keys=True, default=plain) + "\n",
+                    encoding="utf-8")
     return path
+
+
+def with_text_keys(value):
+    """`value` with every dict key as text, so the keys can be sorted: a zone read as None during loading
+    once became a key among zone names, and saving the report failed."""
+    if isinstance(value, dict):
+        return {str(key): with_text_keys(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [with_text_keys(item) for item in value]
+    return value
