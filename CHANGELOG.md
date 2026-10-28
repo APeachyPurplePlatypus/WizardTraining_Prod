@@ -208,6 +208,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **A level's "From <place>" volume is its way off, judged by height** (`teleports.exit_by_height`).
+  - **What:** when a walk's destination is 500 or more away in height, the wizard walks into the nearest teleport volume named for leaving a place ("... From Kraken Isle") at its own height (within 300), within 4,000, unless that volume was already seen to leave the zone or do nothing. Its landing is learned as for any teleport.
+  - **Why:** the walk data is flat, so Kraken Isle, 1,300 below Triton Avenue's street, read as part of the street; every route to the hand-in NPC failed while the isle's own exit stood nearby (18:12 to 18:16). The coordinator suggested it.
+  - **Verified:** offline (`tests/test_teleports.py`).
+
 - **A walk may start inside a still enemy's keep-out, and a mark that traps the wizard is forgotten** (`routes.Hazards.enemy_keep_out`, `QuestLoop.forget_a_trapping_mark`).
   - **What:** a route beginning within ENEMY_KEEP_OUT of a tracked enemy may lead away from it, as from a duel circle. And when no route leads anywhere from the wizard's own mark (every method failed, or enemies left none, and it barely moved, within 600 of the mark), the mark is forgotten, so a Recall does not bring it back and a trip to the Commons walks back instead.
   - **Why:** a refill mark was set where the Kraken fight ended, on Kraken Isle, whose way off the planner could not place; each walk strategy that went to the Commons recalled straight back onto the isle, and the run stopped (18:09 to 18:12). The coordinator asked for a general rule.

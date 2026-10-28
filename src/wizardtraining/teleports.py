@@ -132,3 +132,26 @@ def known_chain(volumes: list[tuple[TeleportVolume, int | None]], outcomes: dict
                 came_from[landed] = (volume, piece)
                 frontier.append(landed)
     return []
+
+
+EXIT_WORD = "from "
+LEVEL_CHANGE = 500.0
+SAME_LEVEL = 300.0
+EXIT_REACH = 4000.0
+
+
+def exit_by_height(volumes: list[TeleportVolume], start, destination, outcomes: dict[str, object]) -> TeleportVolume | None:
+    """A way off the level the wizard is on, when the destination is on another one (heights LEVEL_CHANGE or more
+    apart): the nearest volume named for leaving a place ("... From Kraken Isle") at the wizard's height (within
+    SAME_LEVEL), within EXIT_REACH, and not already seen to leave the zone or do nothing; else None. The walk data is
+    flat, so a raised or sunken place can read as part of the level above or below it: on Kraken Isle, 1,300 below
+    Triton Avenue's street, every route to the street failed, while "Teleport location From Kraken Isle" is its
+    way off (18:12)."""
+    if abs(start.z - destination.z) < LEVEL_CHANGE:
+        return None
+    exits = [volume for volume in volumes
+             if EXIT_WORD in volume.name.lower() and abs(volume.z - start.z) <= SAME_LEVEL
+             and math.dist(volume.point, (start.x, start.y)) <= EXIT_REACH
+             and outcomes.get(volume.name) not in (LEFT_ZONE, NO_EFFECT)]
+    return min(exits, key=lambda volume: math.dist(volume.point, (start.x, start.y)), default=None)
+

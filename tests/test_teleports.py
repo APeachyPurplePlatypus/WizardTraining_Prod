@@ -83,5 +83,31 @@ class DoorTest(unittest.TestCase):
         self.assertIsNone(volume_at([], (677.9, 28.2)))
 
 
+
+class ExitByHeightTest(unittest.TestCase):
+    """Kraken Isle, 1,300 below Triton Avenue's street, left by "Teleport location From Kraken Isle" (18:12)."""
+
+    def setUp(self):
+        from wizwalker import XYZ
+        from wizardtraining.teleports import TeleportVolume
+        self.isle_exit = TeleportVolume("TeleportVol_Teleport location From Kraken Isle", -13961.0, -142.0, -1994.0, 171.0)
+        self.tele_up = TeleportVolume("TeleportVol_Teleport location (Tele Up)", -16336.0, 1176.0, -1400.0, 200.0)
+        self.on_the_isle = XYZ(-13180.0, 780.0, -1994.0)
+        self.npc_on_the_street = XYZ(-11139.0, -867.0, -675.0)
+
+    def test_the_way_off_a_level_is_its_from_volume(self):
+        from wizardtraining.teleports import exit_by_height
+        self.assertEqual(exit_by_height([self.tele_up, self.isle_exit], self.on_the_isle, self.npc_on_the_street, {}),
+                         self.isle_exit)
+
+    def test_none_on_the_same_level_or_once_seen_to_do_nothing(self):
+        from wizwalker import XYZ
+        from wizardtraining.teleports import NO_EFFECT, exit_by_height
+        same_level = XYZ(-13500.0, 1300.0, -1994.0)
+        self.assertIsNone(exit_by_height([self.isle_exit], self.on_the_isle, same_level, {}))
+        self.assertIsNone(exit_by_height([self.isle_exit], self.on_the_isle, self.npc_on_the_street,
+                                         {self.isle_exit.name: NO_EFFECT}))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -82,7 +82,7 @@ from .targets import (area_in_zone, essence_enemy, fought_in, found_in, is_essen
                       leads_to_another_zone, named_enemies_not_in_a_duel, next_area_to_explore, others, quest_targets,
                       refill_reach, safe_wisps,
                       summary, too_close, WISP_REACH)
-from .teleports import LEFT_ZONE, NO_EFFECT, TeleportVolume, describe_outcome, volume_at
+from .teleports import LEFT_ZONE, NO_EFFECT, TeleportVolume, describe_outcome, exit_by_height, volume_at
 from .trainer import OPENED_DIALOG, OPENED_MENU, close_training, learn_free_spells, open_training, open_with_professor
 from .training import (COMMONS, GATE, SCHOOLS, TRAINER, School, in_dungeon, in_tower, travel_buttons_allowed, spells_to_learn, way_to_school, way_toward_zone,
                        zone_for_area)
@@ -2948,6 +2948,11 @@ class QuestLoop:
             return await self.gap_turn(way, zone, planner)
         if way is not None:
             return await self.teleport_turn(way, zone, planner)
+        if (exit_volume := exit_by_height([volume for volume, _ in planner.teleports], start, destination,
+                                          self.record.teleport_outcomes.get(zone, {}))) is not None:
+            self.events.emit("walk", f"{did}: the destination is {destination.z - start.z:+.0f} away in height; walking "
+                                     f"into {exit_volume.name}, this level's way off")
+            return await self.teleport_turn(exit_volume, zone, planner)
         if (foot := await self.ramp_foot(planner, start, destination)) is not None:
             self.events.emit("walk", f"{did}: no collision route onto the destination's level; walking to the "
                                      f"ramp at ({foot.x:.0f}, {foot.y:.0f}) on the nav graph's route, then planning again")
