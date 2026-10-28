@@ -91,6 +91,7 @@ TARGET_REACH = 1200.0
 ARROW_ARRIVE_RADIUS = 250.0
 WAYPOINT_ARRIVE_RADIUS = 150.0
 EXPLORE_ARRIVE_RADIUS = 40.0
+EXPLORE_FAILED_WALKS_TO_SKIP = 3
 PROMPT_DOOR_REACH = 2500.0
 NPC_PROMPT_RANGE = 400.0
 NOT_A_DOOR_RADIUS = 600.0
@@ -187,6 +188,7 @@ class QuestLoop:
         self._trip_distances: dict[str, float] = {}
         self._search_point_failures: dict[tuple, int] = {}
         self._obstacles_forgotten_at: set[tuple] = set()
+        self._explore_failures: dict[str, int] = {}
         self._stalled_trips: dict[str, int] = {}
         self._level_table: dict[int, int] | None = None
         self._experience: tuple[int, int] | None = None
@@ -1178,6 +1180,8 @@ class QuestLoop:
                 return XYZ(gate.x, gate.y, gate.z)
             return None
         if (spot := explore_spot(planner.placed_objects, goal)) is not None:
+            if self._explore_failures.get(f"{spot.x:.0f},{spot.y:.0f}", 0) >= EXPLORE_FAILED_WALKS_TO_SKIP:
+                return None
             self.events.emit("target", f"no quest arrow; the goal explores {zone}: going to its spot, "
                                        f"{spot.template} at ({spot.x:.0f}, {spot.y:.0f})")
             return XYZ(spot.x, spot.y, spot.z)
@@ -1770,6 +1774,16 @@ class QuestLoop:
         if must_come_back and self._marked_in != zone:
             return None
         return await self.go_home_for(stat, state)
+
+    def note_a_failed_explore_walk(self, spot) -> None:
+        """A walk to an Explore spot that failed every route method; after EXPLORE_FAILED_WALKS_TO_SKIP of them the
+        spot's goal is left for this run and the others go on (`target_without_arrow`). The Commons Smith stands at
+        height 253, where the collision data found no route and the nav graph's walk stuck at (-1012, 851) (17:05)."""
+        key = f"{spot.x:.0f},{spot.y:.0f}"
+        self._explore_failures[key] = self._explore_failures.get(key, 0) + 1
+        if self._explore_failures[key] == EXPLORE_FAILED_WALKS_TO_SKIP:
+            self.events.emit("quest", f"the spot at ({spot.x:.0f}, {spot.y:.0f}) could not be walked to "
+                                      f"{EXPLORE_FAILED_WALKS_TO_SKIP} times; its goal is left for this run")
 
     def forget_learned_obstacles_here(self, zone: str, where) -> None:
         """Every route method failed and the wizard barely moved, with no enemy or players' fight to blame: drop the
@@ -2657,8 +2671,11 @@ class QuestLoop:
         exploring = not leads_to_another_zone(goal, await self.client.zone_name())
         if exploring and flat_distance(here, arrow) > WAYPOINT_ARRIVE_RADIUS:
             radius = EXPLORE_ARRIVE_RADIUS if goal.get("name_key") == EXPLORE_GOAL else WAYPOINT_ARRIVE_RADIUS
-            return await self.travel_turn("explore toward the waypoint", arrow, arrive_radius=radius,
+            turn = await self.travel_turn("explore toward the waypoint", arrow, arrive_radius=radius,
                                           avoid=await nearby_enemies(self.client))
+            if goal.get("name_key") == EXPLORE_GOAL and turn.get("trip", {}).get("reason") == "every route method failed":
+                self.note_a_failed_explore_walk(arrow)
+            return turn
         if await self.door_prompt_near(arrow):
             return await self.enter_with_x_turn()
         if flat_distance(here, arrow) <= WAYPOINT_ARRIVE_RADIUS:

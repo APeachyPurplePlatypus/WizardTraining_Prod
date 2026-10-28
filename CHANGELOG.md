@@ -217,6 +217,7 @@ Every change, enhancement or addition is listed with its rationale, so later con
   - **What:** when the quest arrow shows nothing, a goal named `WizardQuestGoals_Explore` in the wizard's zone targets that zone's one placed `ExploreObject`; reaching it walks the wizard into the trigger volume that completes the goal.
   - **Why:** "Find the Smiths" ("Find all the Smiths for Zeke in Wizard City") has ten such waypoint goals, one per zone, with no tags, so the tag match that found Triton's Cogs had nothing to go on. Each zone's `volumes.xml` holds a "<zone> Smith" volume, and it sits on the zone's only `ExploreObject_WC` in all ten zones (read offline from the game files; the goal list read from memory while the run was stopped). The operator: "the smiths quest is similar to cogs. No quest finder, but you should be able to find the game data".
   - **Live:** the Shopping District Smith was found (16:54). The goal stayed open with the wizard within 150 of the spot and closed on the push into it that follows, so the walk to an Explore spot now aims for 40 (`loop.EXPLORE_ARRIVE_RADIUS`).
+  - **And:** a spot that three walks in a row could not reach (every route method failed) has its goal left for the run, and the other goals go on: the Commons Smith stands at height 253, where the collision data found no route and the nav graph's walk stuck (17:05).
   - **Verified:** offline (`tests/test_placed.py`).
 
 - **A quest page that does not open no longer stops the run** (`questbook.open_quest_page`, `QuestLoop.clearing_turn`).
