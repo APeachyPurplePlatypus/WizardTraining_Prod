@@ -70,6 +70,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **A strategy that heals earlier no longer passes round after round to save pips for a heal.**
+  - **What:** pips are saved for a heal only in danger (below 40% health, or within reach of the enemies' saved-up hit), whatever the strategy's heal line. Between 40% and "heal earlier"'s 60%, a castable heal is still cast first; without one, the wizard attacks.
+  - **Why:** at 23:03 to 23:05, playing "heal earlier" against two Nirini Sentries, the wizard passed for Pixie at 49%, healed, fell below 60% again and passed again, while the last Sentry stood at 220 health for eight rounds.
+  - **Verified:** offline (`tests/test_policy.py`: at 539 of 1102 with Pixie out of reach it attacks, at 321 it saves pips). In the game: not yet.
+
 - **After a defeat the wizard refills health before walking anywhere, and a restarted run keeps the combat strategy the defeat changed to.**
   - **What:** below 40% health (`progress.health_to_travel`), health is refilled before any goal outside a tower or dungeon, not only before a fight the quest asks for, as mana already was. The combat strategy a defeat changed to, and the strategies already lost with against each group of enemies, are kept in the knowledge file (`Knowledge.combat_strategy`, `combat_strategies_tried`), so a run started again plays by the same strategy.
   - **Why:** at 22:55 two Flame Servants in the Pyramid's Chamber defeated the wizard; it woke in the Krokotopia hub with 1 health and walked straight back toward them, at 55 of 1102, since its goal was a talk with the assistant behind them, not a fight. And the strategy the defeat changed to ("heal earlier") lived only in the run, so restarting the run would have fought the same enemies with the one that lost. The operator: "you should be trying different strategies if something isn't working".

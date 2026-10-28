@@ -148,7 +148,10 @@ class SpellTypePolicy:
     hand on a tie. It knows nothing of blades.
 
     It plays by a `strategies.CombatStrategy`, which the loop changes after a lost fight: when to heal, how big an
-    enemy's saved-up hit is counted, which enemy is attacked first, and whether pips are saved for a bigger card."""
+    enemy's saved-up hit is counted, which enemy is attacked first, and whether pips are saved for a bigger card.
+    Pips are saved for a heal only in danger (below LOW_HEALTH_FRACTION, or within reach of a big hit), whatever the
+    strategy's heal line: playing "heal earlier" (below 60%) against two Nirini Sentries, the wizard passed for Pixie
+    at 49%, healed, fell below 60% again, and passed again, while the last Sentry stood at 220 for eight rounds."""
 
     def __init__(self, strategy: CombatStrategy = COMBAT_STRATEGIES[0]):
         self.strategy = strategy
@@ -169,7 +172,8 @@ class SpellTypePolicy:
                 return Cast(heal, "self")
             if big_hit and (stun := stun_on_the_most_dangerous(view)) is not None:
                 return stun
-            if (worth_saving_for := heal_worth_saving_for(view)) is not None:
+            in_danger = big_hit or (fraction is not None and fraction < LOW_HEALTH_FRACTION)
+            if in_danger and (worth_saving_for := heal_worth_saving_for(view)) is not None:
                 return stun_on_the_most_dangerous(view) or Pass(f"saving pips for {worth_saving_for.name} "
                                                                 f"({worth_saving_for.pips} pips)")
         if not view.enemies:

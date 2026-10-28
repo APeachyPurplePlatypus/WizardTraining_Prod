@@ -35,6 +35,16 @@ class StrategyPolicyTest(unittest.TestCase):
         self.assertEqual(SpellTypePolicy(COMBAT_STRATEGIES[2]).choose(view([BOLT], enemies=boss_and_guard)),
                          Cast(0, "enemy", 0))
 
+    def test_heal_earlier_attacks_rather_than_passing_for_a_heal_out_of_danger(self):
+        from wizardtraining.strategies import COMBAT_STRATEGIES
+        pixie = Card("Pixie", "Heal", False, "Life", pips=2)
+        beetle = Card("Frost Beetle", "Damage", True, "Ice", pips=1)
+        sentry = (Combatant("Nirini Sentry", 220, pips=1),)
+        half = view([beetle, pixie], health=539, max_health=1102, enemies=sentry, pips=1)
+        self.assertEqual(SpellTypePolicy(COMBAT_STRATEGIES[1]).choose(half), Cast(0, "enemy", 0))
+        low = view([beetle, pixie], health=321, max_health=1102, enemies=sentry, pips=1)
+        self.assertIsInstance(SpellTypePolicy(COMBAT_STRATEGIES[1]).choose(low), Pass)
+
     def test_save_pips_for_bigger_cards_passes_for_a_two_pip_wait(self):
         from wizardtraining.strategies import COMBAT_STRATEGIES
         beetle = Card("Frost Beetle", "Damage", True, "Ice", pips=1)
