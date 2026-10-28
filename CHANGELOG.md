@@ -4,6 +4,13 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ## Unreleased
 
+### Fixed
+
+- **A door at the arrow of a goal in an instance is gone through refilled, though no walk has come out of it yet** (`QuestLoop.door_destination_here`, `QuestLoop.enter_with_x_turn`).
+  - **What:** when the doors learned walking do not know a door, the zone of the goal whose arrow it stands at stands for where it leads, so a goal zone named as an instance (`progress.is_an_instance`) asks for the full refill before X, as a known instance door does. Not for "Explore" goals, whose arrow is in the zone the wizard is in.
+  - **Why:** "Curfew!"'s door under Triton Avenue had never been walked out of, so it counted as unknown and asked only that the wizard not be low; the wizard went into WC_Triton_Underwater_T2 at 721 of 1195 health and 78 mana after two costly fights (18:55), though the goal's own zone named it an instance, where health does not come back.
+  - **Verified:** offline (the suite); in the game: the next door to an instance goal.
+
 ## 0.3.0 (2026-10-28)
 
 ### Added

@@ -2777,7 +2777,7 @@ class QuestLoop:
                 self.note_a_failed_explore_walk(arrow)
             return turn
         if await self.door_prompt_near(arrow):
-            return await self.enter_with_x_turn()
+            return await self.enter_with_x_turn(None if exploring else goal.get("destination_zone"))
         if flat_distance(here, arrow) <= WAYPOINT_ARRIVE_RADIUS:
             if exploring:
                 self.try_the_spot(arrow)
@@ -2842,15 +2842,16 @@ class QuestLoop:
         self.events.emit("travel", f"marked the door in {zone} before entering {goal_zone}, to recall to after a "
                                    "defeat or on the way back")
 
-    async def enter_with_x_turn(self) -> dict:
+    async def enter_with_x_turn(self, goal_zone: str | None = None) -> dict:
         """Press X at a door's interact prompt and give the zone change a few seconds to start. When a dialog opens
         instead, the prompt was a person's: prompts within NOT_A_DOOR_RADIUS of that spot are not taken for a door
         again this run. By Olde Town's gate to Triton Lane, an NPC out of NPC_PROMPT_RANGE gave a side quest, and
-        then the wizard pressed X at him again after every dialog until the run was stopped."""
+        then the wizard pressed X at him again after every dialog until the run was stopped. `goal_zone` is the zone
+        of the goal whose arrow this door stands at, when that goal is in another zone."""
         zone = await self.client.zone_name()
         here = await self.client.body.position()
         action = prompt_action(await or_default(interact_prompt_text(self.client), ""))
-        if (refill := await self.refill_before_entering(action, zone)) is not None:
+        if (refill := await self.refill_before_entering(action, zone, goal_zone)) is not None:
             return refill
         await self.mark_at_the_door(zone)
         await tap(self.client, Keycode.X, TALK_KEY_SECONDS)
@@ -2870,21 +2871,24 @@ class QuestLoop:
             await asyncio.sleep(DOOR_POLL_SECONDS)
         return stalled("pressed X at the interact prompt, but the zone did not change")
 
-    async def door_destination_here(self, zone: str) -> str | None:
+    async def door_destination_here(self, zone: str, goal_zone: str | None = None) -> str | None:
         """The zone the door the wizard stands at opens on, when a walk has come out of it here before
-        (`RunRecord.zone_doors`, within DOOR_KNOWN_RADIUS); else None."""
+        (`RunRecord.zone_doors`, within DOOR_KNOWN_RADIUS); else the zone of the goal whose arrow the door stands at
+        (`goal_zone`), the quest's own word for where it leads; else None. "Curfew!"'s door under Triton Avenue had
+        not been walked out of, and the wizard went into WC_Triton_Underwater_T2 at 60% health, though the goal's
+        zone named it an instance (18:55)."""
         here = await self.client.body.position()
         known = [(flat_distance(here, XYZ(float(point[0]), float(point[1]), 0.0)), other)
                  for other, point in self.record.zone_doors.get(zone, {}).items()]
         near = [item for item in known if item[0] <= DOOR_KNOWN_RADIUS]
-        return min(near)[1] if near else None
+        return min(near)[1] if near else goal_zone or None
 
-    async def refill_before_entering(self, action: str | None, zone: str) -> dict | None:
+    async def refill_before_entering(self, action: str | None, zone: str, goal_zone: str | None = None) -> dict | None:
         """At a "to Enter" door with health or mana short of a recharge (`progress.short_before_entering`), and the
         travel buttons allowed here: mark the door and refill in the Commons first, so the Recall comes back to the
         door and the wizard goes in refilled. None to go in now."""
         state = await snapshot(self.client)
-        destination = await self.door_destination_here(zone)
+        destination = await self.door_destination_here(zone, goal_zone)
         stat = short_before_entering(action, health_fraction(state), mana_fraction(state), destination)
         if stat is None or not self.use_travel_buttons or not self.travel_allowed_in(zone):
             return None
