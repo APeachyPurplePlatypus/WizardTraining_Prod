@@ -10,7 +10,8 @@ mana, the zones entered with X at a prompt, towers and dungeons the wizard does 
 (`training.in_dungeon`), and the level it last trained at, so the school is visited once a level, and the steps across a gap between two
 walkable pieces that did not land in the other piece, which the same two pieces will not do on another day, and the
 combat strategies already lost with against each group of enemies, so a run started again after a defeat does not
-fight them with one that lost. Without them, every new run walked into teleporters
+fight them with one that lost, and whether the wizard was still recharging after a defeat (`progress.
+still_to_recharge`): a run started again in the hub after one walked out with 31 of 89 mana. Without them, every new run walked into teleporters
 to find out again, and walked into Cyclops Lane's tents again. Not kept: obstacles, because the players and
 enemies that caused most of them move on, and "no effect" teleport verdicts, because a walk that fell short of a
 volume once looked like one.
@@ -37,6 +38,7 @@ class Knowledge:
     trained_at_level: int = 0
     failed_gaps: dict[str, list[tuple[int, int]]] = field(default_factory=dict)
     combat_strategies_tried: dict[str, list[str]] = field(default_factory=dict)
+    recharging: bool = False
 
     @classmethod
     def load(cls, path: Path) -> "Knowledge":
@@ -57,7 +59,8 @@ class Knowledge:
                    failed_gaps={zone: [(int(a), int(b)) for a, b in pairs]
                                 for zone, pairs in data.get("failed_gaps", {}).items()},
                    combat_strategies_tried={enemies: list(names)
-                                            for enemies, names in data.get("combat_strategies_tried", {}).items()})
+                                            for enemies, names in data.get("combat_strategies_tried", {}).items()},
+                   recharging=bool(data.get("recharging", False)))
 
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -75,6 +78,7 @@ class Knowledge:
         record.trained_at_level = self.trained_at_level
         record.failed_gaps = {zone: list(pairs) for zone, pairs in self.failed_gaps.items()}
         record.combat_strategies_tried = {enemies: list(names) for enemies, names in self.combat_strategies_tried.items()}
+        record.recharging = self.recharging
 
     def learn_from(self, record) -> None:
         """Keep what a run found out, leaving out "no effect" verdicts."""
@@ -88,6 +92,7 @@ class Knowledge:
             if zone not in self.entered_with_x:
                 self.entered_with_x.append(zone)
         self.trained_at_level = max(self.trained_at_level, record.trained_at_level)
+        self.recharging = record.recharging
         for enemies, names in record.combat_strategies_tried.items():
             kept = self.combat_strategies_tried.setdefault(enemies, [])
             kept.extend(name for name in names if name not in kept)

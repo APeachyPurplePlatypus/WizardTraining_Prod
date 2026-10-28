@@ -108,6 +108,7 @@ class RunRecord:
     failed_gaps: dict[str, list[tuple[int, int]]] = field(default_factory=dict)
     quests_activated: dict[str, int] = field(default_factory=dict)
     combat_strategies_tried: dict[str, list[str]] = field(default_factory=dict)
+    recharging: bool = False
     walk_strategies_tried: dict[str, list[str]] = field(default_factory=dict)
     tried_wisps: dict[str, float] = field(default_factory=dict)
     visited_objects: list[str] = field(default_factory=list)

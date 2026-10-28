@@ -118,6 +118,7 @@ class KnowledgeTest(unittest.TestCase):
         run = RunRecord(limits=Limits())
         knowledge.give_to(run)
         run.combat_strategies_tried.setdefault("Nirini Sentry", []).append("heal earlier")
+        run.recharging = True
         knowledge.learn_from(run)
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "knowledge.json"
@@ -125,6 +126,7 @@ class KnowledgeTest(unittest.TestCase):
             later = RunRecord(limits=Limits())
             Knowledge.load(path).give_to(later)
         self.assertEqual(later.combat_strategies_tried, {"Flame Servant": ["default"], "Nirini Sentry": ["heal earlier"]})
+        self.assertTrue(later.recharging)
 
     def test_a_new_run_starts_with_it(self):
         run = RunRecord(limits=Limits())

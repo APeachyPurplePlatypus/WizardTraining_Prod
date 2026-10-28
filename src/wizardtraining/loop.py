@@ -141,7 +141,6 @@ class QuestLoop:
         self._marked_in: str | None = None
         self._dungeons_give_nothing_back = False
         self._refill_fully = False
-        self._recharging = False
         self._fight_situation: str | None = None
         if isinstance(combat_policy, SpellTypePolicy):
             combat_policy.strategy_for = self.strategy_against
@@ -617,7 +616,7 @@ class QuestLoop:
         battle["after"] = {key: after[key] for key in ("zone", "level", "health", "max_health", "mana", "gold")}
         if defeated:
             self.record.defeats += 1
-            self._recharging = True
+            self.record.recharging = True
             if self.limits.max_defeats is not None and self.record.defeats > self.limits.max_defeats:
                 raise StopRun("defeated in battle; stopping for the operator")
             self.change_combat_strategy(battle)
@@ -834,10 +833,10 @@ class QuestLoop:
             refill = ("health" if health is not None and health < FULL_HEALTH_FRACTION
                       else "mana" if not topped_up(mana_fraction(state)) else None)
         if not inside_a_dungeon and not health_to_travel(health_fraction(state)):
-            self._recharging = True
-        if refill is None and self._recharging and not inside_a_dungeon:
+            self.record.recharging = True
+        if refill is None and self.record.recharging and not inside_a_dungeon:
             refill = still_to_recharge(health_fraction(state), mana_fraction(state))
-            self._recharging = refill is not None
+            self.record.recharging = refill is not None
         if refill is None and (self._topping_up_in == state["zone"] or not mana_to_travel(mana_fraction(state))):
             refill = "mana"
         if refill is not None:
@@ -1098,7 +1097,7 @@ class QuestLoop:
         searched once for mana wisps, safe here, then the wizard stands still while mana comes back
         (`wait_for_mana_turn`) until `progress.topped_up`; health comes back meanwhile."""
         if stat == "health" and mana_for_a_fight(mana_fraction(state)):
-            if not self._recharging:
+            if not self.record.recharging:
                 return None
             turn = await self.explore_for_wisps_turn("health", state, planner, reach=refill_reach(True), again=False)
             return turn if turn is not None else await self.wait_for_mana_turn(state, waiting_for="health")
