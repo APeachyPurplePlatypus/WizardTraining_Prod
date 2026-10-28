@@ -6,6 +6,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **A street entered with X is not a dungeon** (`training.in_dungeon`).
+  - **What:** a zone entered with X counts as a dungeon only when it is an interior ("/Interiors/" in its name); towers and dungeons named as such count as before.
+  - **Why:** Triton Avenue's underwater zone (WC_Triton_Underwater/WC_Triton_Underwater) opens with X at a prompt, so it was kept as a dungeon, where the travel buttons are not pressed and the wizard refills in place. After each heavy fight there (465 to 707 of 1195 health) it took the wisps in reach and walked on at under half health, and at 554 of 1195 lost to a Royal Guard and a Riverclaw Guard in three rounds (19:02).
+  - **Verified:** offline (`tests/test_training.py`); in the game: the next heavy fight in the underwater zone.
+
 - **A door at the arrow of a goal in an instance is gone through refilled, though no walk has come out of it yet** (`QuestLoop.door_destination_here`, `QuestLoop.enter_with_x_turn`).
   - **What:** when the doors learned walking do not know a door, the zone of the goal whose arrow it stands at stands for where it leads, so a goal zone named as an instance (`progress.is_an_instance`) asks for the full refill before X, as a known instance door does. Not for "Explore" goals, whose arrow is in the zone the wizard is in.
   - **Why:** "Curfew!"'s door under Triton Avenue had never been walked out of, so it counted as unknown and asked only that the wizard not be low; the wizard went into WC_Triton_Underwater_T2 at 721 of 1195 health and 78 mana after two costly fights (18:55), though the goal's own zone named it an instance, where health does not come back.

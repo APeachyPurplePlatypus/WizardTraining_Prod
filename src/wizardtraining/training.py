@@ -29,6 +29,7 @@ from dataclasses import dataclass
 COMMONS = "WizardCity/WC_Hub"
 RAVENWOOD = "WizardCity/WC_Ravenwood"
 TOWER_OR_DUNGEON_NAME = re.compile(r"/Interiors/[^/]*_T\d+$|/WC_Golem_Tower/WC_Golem_Tower_\d+$")
+INTERIOR_PART = "/Interiors/"
 HUB_WORD, EXIT_WORD, ENTRANCE_WORD, TOWER_WORD, COMMONS_WORD = "hub", "exit", "entrance", "tower", "commons"
 TRAINER, VOLUME, GATE = "trainer", "volume", "gate"
 
@@ -81,7 +82,12 @@ def spells_to_learn(school: str | None, level: int, known: list[str]) -> list[st
 
 
 def in_dungeon(zone: str | None, entered_with_x: list[str]) -> bool:
-    return isinstance(zone, str) and (zone in entered_with_x or TOWER_OR_DUNGEON_NAME.search(zone) is not None)
+    """A tower floor or dungeon: named as one, or an interior entered with X. A street entered with X is not one:
+    Triton Avenue's underwater zone (WC_Triton_Underwater/WC_Triton_Underwater) opens with X, and counted as a
+    dungeon, it had no refill trips, so after each heavy fight the wizard walked on at under half health into the
+    next pair of guards (18:48 to 19:02)."""
+    return isinstance(zone, str) and ((zone in entered_with_x and INTERIOR_PART in zone)
+                                      or TOWER_OR_DUNGEON_NAME.search(zone) is not None)
 
 
 def in_tower(zone: str | None, entered_with_x: list[str]) -> bool:

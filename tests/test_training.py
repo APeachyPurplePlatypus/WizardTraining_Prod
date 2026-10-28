@@ -39,6 +39,8 @@ class DungeonTest(unittest.TestCase):
     def test_zones_entered_with_x(self):
         self.assertTrue(in_dungeon("WizardCity/WC_Streets/Interiors/WC_Firecat_Theatre",
                                    ["WizardCity/WC_Streets/Interiors/WC_Firecat_Theatre"]))
+        underwater = "WizardCity/WC_Streets/WC_Triton_Underwater/WC_Triton_Underwater"
+        self.assertFalse(in_dungeon(underwater, [underwater]))
         self.assertFalse(in_dungeon(None, []))
 
 
