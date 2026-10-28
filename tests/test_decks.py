@@ -29,12 +29,12 @@ class RoleTest(unittest.TestCase):
 
 
 class WantedDeckTest(unittest.TestCase):
-    def test_an_essence_goal_puts_one_extract_in_and_the_strongest_hits_and_heals_come_before_stuns(self):
+    def test_an_essence_goal_fills_the_extract_to_its_limit_before_heals_and_hits(self):
         wanted = wanted_deck(LIST, 14, essence_needed=True)
-        self.assertEqual(copies(wanted), {"Extract Undead": 1, "Pixie": 3, "Evil Snowman": 3, "Snow Serpent": 3,
-                                          "Frost Beetle": 3, "Freeze": 1, "Volcanic Shield": 0})
-        freeze = next(want for want in wanted if want.name == "Freeze")
-        self.assertIn("1 of 3 copies fit in the 14-card deck", freeze.reason)
+        self.assertEqual(copies(wanted), {"Extract Undead": 3, "Pixie": 3, "Evil Snowman": 3, "Snow Serpent": 3,
+                                          "Frost Beetle": 2, "Freeze": 0, "Volcanic Shield": 0})
+        beetle = next(want for want in wanted if want.name == "Frost Beetle")
+        self.assertIn("2 of 3 copies fit in the 14-card deck", beetle.reason)
 
     def test_without_an_essence_goal_the_extract_stays_out_and_says_why(self):
         wanted = wanted_deck(LIST, 14, essence_needed=False)
@@ -53,7 +53,8 @@ class PlanTest(unittest.TestCase):
     def test_cards_come_out_before_others_go_in_one_copy_at_a_time(self):
         changes = plan_changes(LIST, wanted_deck(LIST, 14, essence_needed=True))
         self.assertEqual([(change.action, change.name) for change in changes if change.action != KEEP],
-                         [(REMOVE, "Freeze"), (REMOVE, "Freeze"), (ADD, "Extract Undead"), (ADD, "Evil Snowman")])
+                         [(REMOVE, "Frost Beetle")] + [(REMOVE, "Freeze")] * 3 + [(ADD, "Extract Undead")] * 3
+                         + [(ADD, "Evil Snowman")])
         self.assertEqual([change.name for change in changes if change.action == KEEP], ["Volcanic Shield"])
 
     def test_a_deck_as_wanted_needs_no_change(self):

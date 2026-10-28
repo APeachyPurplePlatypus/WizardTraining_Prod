@@ -254,9 +254,27 @@ def extract_essence(view: RoundView, wanted: set[str]) -> Cast | Enchant | None:
     extract = first_castable(view.cards, is_extract)
     attacks = [index for index, card in enumerate(view.cards)
                if card.castable and not card.enchanted and card.spell_type in SINGLE_TARGET_ATTACKS]
-    if extract is None or not attacks:
-        return None
-    return Enchant(extract, min(attacks, key=lambda index: view.cards[index].pips or 1))
+    if extract is not None and attacks:
+        return Enchant(extract, min(attacks, key=lambda index: view.cards[index].pips or 1))
+    return spare_the_victim(view, victims, attacks)
+
+
+def spare_the_victim(view: RoundView, victims: list[int], attacks: list[int]) -> Cast | None:
+    """No Extract in hand: keep the enemy whose essence is needed alive for a later round. Hit another enemy with the
+    attack expected to do the most to it, else stun the victim, which plays a card so another is drawn next round
+    (a pass draws none: the hand stays full). None, to play as usual, when neither can be done: one Frost Beetle
+    ended the first Lost Soul fight, at 55 health, with no Extract in hand (10:21)."""
+    others = [index for index in range(len(view.enemies)) if index not in victims]
+    if others and attacks:
+        enemy = weakest(tuple(view.enemies[index] for index in others))
+        target = others[enemy]
+        attack = max(attacks, key=lambda index: expected_damage(view.cards[index], view.enemies[target]))
+        return Cast(attack, ATTACK_TARGETS[view.cards[attack].spell_type], target)
+    stun = first_castable(view.cards, lambda card: STUN in card.effects)
+    stunnable = [index for index in victims if view.enemies[index].stunnable]
+    if stun is not None and stunnable:
+        return Cast(stun, "enemy", stunnable[0])
+    return None
 
 
 def weakest(enemies: tuple[Combatant, ...]) -> int:

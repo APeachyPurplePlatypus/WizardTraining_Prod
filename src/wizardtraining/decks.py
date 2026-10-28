@@ -4,8 +4,10 @@ the clicks that carry a plan out are in `deckpage.py` (the operator, 2026-10-28,
 Each spell the Deck page lists is sorted by what the combat policy does with it (`role_of`, from the effects the
 game's files give it), and the deck is filled in this order, each spell up to its copy limit, while there is room
 (its capacity, learned in the game: an add the Deck page refuses):
- 1. An Extract spell, EXTRACT_COPIES of it, while a quest goal needs an essence: it enchants a damage spell, whose
-    hit then takes the enemy's essence (Gilda Burke, "Know Thine Enemy").
+ 1. An Extract spell, up to its copy limit, while a quest goal needs an essence: it enchants a damage spell, whose
+    hit then takes the enemy's essence (Gilda Burke, "Know Thine Enemy"). With one copy in 14 cards it was not in the
+    seven-card opening hand of the first Lost Soul fight, and one Frost Beetle ended it (10:21); three copies are in
+    nine opening hands of ten.
  2. Heals, the strongest first: the policy heals below 40% health and before a big hit.
  3. Attacks, the most pips first (damage grows with pips), then the biggest hit.
  4. Stuns: the policy stuns while saving a pip for a bigger attack, and the enemy holding the most pips.
@@ -29,7 +31,6 @@ ADD, REMOVE, KEEP = "add", "remove", "keep"
 EXTRACT, HEAL, ATTACK, STUN, SHIELD, OTHER = "extract", "heal", "attack", "stun", "shield", "other"
 EFFECT_ROLES = {"collect_essence": EXTRACT, "heal": HEAL, "damage": ATTACK, "stun": STUN,
                 "modify_incoming_damage": SHIELD}
-EXTRACT_COPIES = 1
 NO_CAPACITY_KNOWN = 10_000
 
 SPELLS_PER_PAGE, SPELL_COLUMNS, SPELL_ROWS = 6, 2, 3
@@ -112,7 +113,7 @@ def wanted_deck(spells: list[DeckSpell], capacity: int, *, essence_needed: bool)
         if spell.role not in (EXTRACT, HEAL, ATTACK, STUN) or (spell.role == EXTRACT and not essence_needed):
             wanted.append(Wanted(spell.name, 0, why_left_out(spell)))
             continue
-        target = min(spell.limit, EXTRACT_COPIES) if spell.role == EXTRACT else spell.limit
+        target = spell.limit
         copies = max(0, min(target, room))
         room -= copies
         reason = why_wanted(spell)

@@ -393,6 +393,13 @@ class ExtractTest(unittest.TestCase):
         self.assertEqual(self.policy(wanted=()).choose(view([self.EXTRACT, self.BEETLE], enemies=self.SOULS)),
                          Cast(1, "enemy", 1))
 
+    def test_without_an_extract_another_enemy_is_hit_or_the_victim_stunned(self):
+        freeze = Card("Freeze", "Manipulation", True, "Ice", 0, effects=("stun",))
+        self.assertEqual(self.policy().choose(view([self.BEETLE], enemies=self.SOULS)), Cast(0, "enemy", 0))
+        alone = (Combatant("Lost Soul", 55),)
+        self.assertEqual(self.policy().choose(view([self.BEETLE, freeze], enemies=alone)), Cast(1, "enemy", 0))
+        self.assertEqual(self.policy().choose(view([self.BEETLE], enemies=alone)), Cast(0, "enemy", 0))
+
     def test_low_health_heals_before_extracting(self):
         round_view = view([self.EXTRACT, self.BEETLE, HEAL], health=100, enemies=self.SOULS)
         self.assertEqual(self.policy().choose(round_view), Cast(2, "self"))

@@ -129,6 +129,7 @@ MAX_TELEPORTS_PER_GOAL = 2
 GATHER_SETTLE_SECONDS = 3.0
 REAGENT_ZONES_PER_TRY = 3
 DECK_RETRY_SECONDS = 60.0
+DECK_EDIT_CLEARANCE = 3000.0
 GATHERED_FORGET_SECONDS = 120.0
 BOX_CLOSE_WAIT_SECONDS = 10.0
 LOAD_STUCK_SECONDS = 60.0
@@ -589,6 +590,15 @@ class QuestLoop:
         self.events.emit("training", f"learned {', '.join(learned) or 'nothing'} from {school.professor} at level "
                                      f"{level}; next offered: {', '.join(left[:3]) or 'nothing'}; back to the quest")
         return progressed(f"trained with {school.professor}", learned=learned, opened=opened)
+
+    async def no_enemy_within(self, distance: float) -> bool:
+        """No enemy loaded within `distance` of the wizard: docs/safety.md allows deck edits "only in a zone with no
+        enemy nearby". In Unicorn Way, hunting Lost Souls, the deck's Extract copies would otherwise wait until the
+        wizard left the zone."""
+        state = await snapshot(self.client)
+        if state["loading"] is not False:
+            return False
+        return all(enemy["distance"] > distance for enemy in await nearby_enemies(self.client))
 
     async def safe_here(self) -> bool:
         """`progress.safe_to_stand` here, with enemies recognised up to about 4,000 units away. A zone's patrol paths
@@ -1986,7 +1996,7 @@ class QuestLoop:
             return None
         if in_dungeon(state["zone"], self.record.entered_with_x):
             return None
-        if not await self.safe_here():
+        if not await self.safe_here() and not await self.no_enemy_within(DECK_EDIT_CLEARANCE):
             return None
         self._deck_checked = key
         essence_needed = bool(self.record.essence_quests)

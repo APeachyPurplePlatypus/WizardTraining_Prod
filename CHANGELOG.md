@@ -6,6 +6,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Added
 
+- **Extract spells fill to their copy limit while an essence is needed, and the enemy it comes from is spared until one is in hand** (`decks.wanted_deck`, `policy.spare_the_victim`, `QuestLoop.no_enemy_within`).
+  - **What:** while a quest needs an essence, the Extract spell goes in up to its copy limit (3 for Extract Undead), before heals and hits; once the essence is collected the deck is planned again without it, and the cards come back, each logged. In a fight with the enemy whose essence is needed and no Extract in hand, the policy hits another enemy, else stuns that enemy (a card played, so one is drawn the next round), else plays as usual. The deck may be edited in a zone with enemies when none is loaded within 3,000 units.
+  - **Why:** with one copy in 14 cards, Extract Undead was not in the opening hand of the first Lost Soul fight, and one Frost Beetle ended it at 55 health (10:21, Unicorn Way); three copies are in about nine opening hands of ten. A pass would not draw the card: the hand stays full, and discarding is not an allowed click. Suggested by the coordinator (14:22 UTC), within the operator's deck approval.
+  - **Verified:** offline (`tests/test_decks.py`, `tests/test_policy.py`); in the game: the first Lost Soul fight (10:21:42 to 10:22:09).
+
 - **The Deck page is waited for; a deck edit that cannot go on stops the edit, not the run** (`deckpage.open_deck_page`, `QuestLoop.deck_turn`).
   - **What:** after the spellbook button, the book's Deck tab and then the Deck page are waited for, up to 6 seconds each; a window that does not show, or a click that finds no window, stops the edit with the book closed, and it is tried again a minute later.
   - **Why:** two seconds after "Growing Pains" taught two gardening spells (10:08), the new spells called for a deck check, the Deck tab was not there yet, and the click on it stopped the run with a `LookupError`. The book opened normally with its Deck tab a minute later.
