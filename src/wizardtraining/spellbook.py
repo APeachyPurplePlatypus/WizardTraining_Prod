@@ -47,6 +47,30 @@ async def deck_spells(client) -> dict[int, int]:
     return contents
 
 
+XP_CONFIG = "MagicXPConfig.xml"
+
+
+def load_level_table() -> dict[int, int]:
+    """Each level's m_xpToLevel (what it takes to reach the next level) from the game's MagicXPConfig.xml; {} when it
+    cannot be read."""
+    try:
+        from katsuba.op import STATEFUL_FLAGS, Serializer, SerializerOptions, TypeList
+        from katsuba.wad import Archive
+        options = SerializerOptions()
+        options.flags = STATEFUL_FLAGS
+        options.shallow = False
+        options.skip_unknown_types = True
+        types = max(DEIMOS_TYPES_FOLDER.glob("*.json"), key=lambda found: found.stat().st_mtime)
+        archive = Archive.mmap(str(Path(Wad.from_game_data(GAME_DATA_ROOT).file_path)))
+        data = bytes(archive[XP_CONFIG])
+        config = Serializer(options, TypeList.open(str(types))).deserialize(
+            data[len(BINARY_MARKER):] if data.startswith(BINARY_MARKER) else data)
+        levels = config["m_levelInfo"]
+        return {int(levels[index]["m_level"]): int(levels[index]["m_xpToLevel"]) for index in range(len(levels))}
+    except Exception:
+        return {}
+
+
 class SpellCatalog:
     """Describes spells by template ID from the game's files, loading the template manifest once, on first use."""
 

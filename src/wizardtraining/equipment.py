@@ -10,7 +10,8 @@ Memory layout, from the type dump of this game version (wiztype, Wizard_1_610.js
   m_operator at 76 (0 AND, 1 OR); ReqMagicLevel m_numericValue at 80 and m_operatorType at 84 (3 is "at least");
   ReqSchoolOfFocus m_magicSchool at 80.
 - The wizard's school and level: the "BasicMagicSchoolBehavior" behavior, m_schoolOfFocus at 128 and m_level at
-  132. `stats.reference_level()` lags behind a level-up until the next zone change; this does not.
+  132. `stats.reference_level()` lags behind a level-up until the next zone change; this does not. Its
+  m_experiencePoints at 136 is the experience earned within the level (13,104 at level 13, 2026-10-28).
 
 Equipping clicks only these: the HUD's spellbook button, the book's Inventory tab, a category tab, the item, the
 Equip_Item button and the book's Close_Button. Never Trash_Item, RecyclingBinButton or QuickSell_Item.
@@ -32,7 +33,7 @@ from .ui import click, click_window, showing, window_at
 
 INVENTORY_BEHAVIOR, INVENTORY_ITEMS = "WizardInventoryBehavior", 112
 EQUIPMENT_BEHAVIOR, EQUIPMENT_ITEMS = "WizardEquipmentBehavior", 120
-MAGIC_SCHOOL_BEHAVIOR, SCHOOL_OF_FOCUS, LEVEL = "BasicMagicSchoolBehavior", 128, 132
+MAGIC_SCHOOL_BEHAVIOR, SCHOOL_OF_FOCUS, LEVEL, EXPERIENCE = "BasicMagicSchoolBehavior", 128, 132, 136
 ITEM_TEMPLATE, GLOBAL_ID, LIST_SIZE = 88, 72, 8
 DISPLAY_NAME, ADJECTIVES, EQUIP_REQUIREMENTS, EQUIP_EFFECTS = 168, 248, 280, 296
 EFFECT_NAME, LOOKUP_INDEX = 72, 104
@@ -123,6 +124,16 @@ async def count_items(client) -> int | None:
             return None
         total += await behavior.read_value_from_offset(offset + LIST_SIZE, Primitive.int32)
     return total
+
+
+async def read_experience(client) -> tuple[int, int] | None:
+    """(level, experience within it), read from memory with no clicks; None when unreadable."""
+    behavior = await attempt(client.client_object.search_behavior_by_name(MAGIC_SCHOOL_BEHAVIOR))
+    if behavior is None:
+        return None
+    level = await attempt(behavior.read_value_from_offset(LEVEL, Primitive.int32))
+    xp = await attempt(behavior.read_value_from_offset(EXPERIENCE, Primitive.int32))
+    return (level, xp) if isinstance(level, int) and isinstance(xp, int) and level > 0 and xp >= 0 else None
 
 
 async def read_wizard(client) -> Wizard | None:

@@ -6,6 +6,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Added
 
+- **The wizard's experience is read with no clicks, and every gain is logged with the progress to the next level** (`equipment.read_experience`, `spellbook.load_level_table`, `experience.py`, `QuestLoop.check_experience`).
+  - **What:** after each turn, the experience earned within the level (the "BasicMagicSchoolBehavior" behavior, m_experiencePoints at 136) is read from memory; each level's size comes from the game's MagicXPConfig.xml (m_levelInfo, m_xpToLevel). When it changes, an "xp" event says what the turn gave (a fight, a quest's hand-in), the progress ("13,104 of 13,755 XP into level 13: 651 to level 14 (95%)"), the run's hourly rate and the time it puts to the target level.
+  - **Why:** the operator, 2026-10-28: "Can we future out a way to read the XP bar ?", and "Use WizWalker or Deimos tooling if it has access to that info". WizWalker's game stats have no experience; the type list Deimos keeps names the fields.
+  - **Verified:** in the game (16:15 UTC): level 13, 13,104 XP in it, and the table's 13,755 for level 13; offline (`tests/test_experience.py`).
+
 - **A quest's photo is taken with Photomancy's Viewfinder** (`photomancy.take_photo`, `QuestLoop.photo_turn`).
   - **What:** a scavenge goal for "Photomancy" is a photo taken in the goal's zone: the wizard walks there door by door, and where it is safe presses Z, clicks the Viewfinder's "Take Picture" button and closes the Viewfinder with its own close button; then checks the goal. Two photos a run at most, then the quest is parked. A message box after the shutter stops the run for the operator. "Say Cheese!" is no longer passed over.
   - **Why:** the operator, 2026-10-28, 14:55 UTC: "Approve photo". The goal read in the game is "Practice Photomancy" in Golem Court. The Viewfinder, opened with Z in the robe shop (11:06), is `SelfieCameraWindow`, with `TakePictureButton` ("Take Picture") and `CloseSelfieCameraWindow`.

@@ -37,7 +37,8 @@ from .doors import CHANGE_START_SECONDS, change_begins, push_through
 from .photomancy import BOX_SHOWN, PHOTO_ITEM, TOOK, take_photo
 from .entities import (objects_named, HEALTH_WISP, MANA_WISP, dungeon_entrance_near, nearby_enemies, nearest_npc, step_away,
                        surroundings, wisps)
-from .equipment import count_items, equip, read_items, read_wizard
+from .equipment import count_items, equip, read_experience, read_items, read_wizard
+from .experience import progress_text, xp_gained, xp_to_reach
 from .events import (EventLog, describe_battle, describe_changes, describe_round, dialog_text, enemies_at_once,
                      enemy_names, health_text, threat_text)
 from .gear import describe_stats, upgrades
@@ -70,7 +71,7 @@ from .travelplan import (GO_HOME, HUBS, RECALL, TRAVEL_MANA_RESERVE, WALK, Trave
                          spare_mana,
                          worth_a_way_back_mark, worth_going_home_for_wisps)
 from .screen import or_default, prompt_action, prompt_is_not_a_doors, prompt_offers_talk
-from .spellbook import SpellCatalog, deck_spells, learned_spell_ids
+from .spellbook import SpellCatalog, deck_spells, learned_spell_ids, load_level_table
 from .spells import KNOWN_AT_FIRST_CHECK, LEARNED, SpellLog, learned_text, newly_learned, spell_entry
 from .session import NoClient, attached, hooks_ready
 from .state import attempt, battle_showing, free_to_move, health_fraction, mana_fraction, snapshot
@@ -169,6 +170,10 @@ class QuestLoop:
         self._deck_checked: tuple | None = None
         self._deck_retry_at = 0.0
         self._photos_taken = 0
+        self._level_table: dict[int, int] | None = None
+        self._experience: tuple[int, int] | None = None
+        self._run_start_experience: tuple[int, int] | None = None
+        self._run_started_at = time.monotonic()
         self._enemy_names: dict[str, str] = {}
         self.use_potions = use_potions
         self.wear_gear = wear_gear
@@ -287,10 +292,42 @@ class QuestLoop:
             await self.check_getting_closer(state, turn, quest, turn_seconds)
             self.learn_walk_speed(turn, turn_seconds)
             await self.check_spells(state)
+            await self.check_experience(turn)
             log.info("turn %d: %s (progress=%s, level=%s, health=%s, zone=%s, goal=%s %s)", len(self.record.turns),
                      turn["did"], turn["progress"], state["level"], health_text(state), state["zone"], quest.get("goal"),
                      quest.get("goal_zone") or "")
             self.note_changes(state)
+
+    async def check_experience(self, turn: dict) -> None:
+        """After each turn, read the experience (`equipment.read_experience`, no clicks); when it changed, log what the
+        turn gave (a fight, a quest's hand-in) and the progress to the next level, with the hourly rate this run and
+        the time it puts to the target level. The operator, 2026-10-28: "Can we future out a way to read the XP
+        bar ?" """
+        now = await read_experience(self.client)
+        if now is None:
+            return
+        if self._level_table is None:
+            self._level_table = await asyncio.to_thread(load_level_table)
+            self._run_start_experience = now
+            self.events.emit("xp", f"{progress_text(*now, self._level_table)}; "
+                                   f"{self.to_target_text(now)}", level=now[0], xp=now[1])
+        before, self._experience = self._experience, now
+        if before is None or before == now:
+            return
+        gained = xp_gained(before, now, self._level_table)
+        hours = (time.monotonic() - self._run_started_at) / 3600
+        so_far = xp_gained(self._run_start_experience, now, self._level_table) if self._run_start_experience else None
+        rate = f"; {so_far / hours:,.0f} XP an hour this run" if so_far and hours > 0.05 else ""
+        self.events.emit("xp", f"+{gained if gained is not None else '?'} XP from {turn.get('did')}: "
+                               f"{progress_text(*now, self._level_table)}{rate}; {self.to_target_text(now, so_far, hours)}",
+                         level=now[0], xp=now[1], gained=gained)
+
+    def to_target_text(self, now: tuple[int, int], so_far: int | None = None, hours: float = 0.0) -> str:
+        left = xp_to_reach(*now, self.limits.target_level, self._level_table or {})
+        if left is None:
+            return f"level {self.limits.target_level}: unknown"
+        eta = f", about {left / (so_far / hours):.1f} h at this run's rate" if so_far and hours > 0.05 else ""
+        return f"{left:,} XP to level {self.limits.target_level}{eta}"
 
     async def check_getting_closer(self, state: dict, turn: dict, quest: dict, turn_seconds: float) -> None:
         """For a goal that is not a fight, a walk that gets no closer to the quest arrow for a while is a stall
