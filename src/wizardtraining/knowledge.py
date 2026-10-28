@@ -69,6 +69,7 @@ class Knowledge:
     deck_capacity: dict[str, int] = field(default_factory=dict)
     enemy_zones: dict[str, list[str]] = field(default_factory=dict)
     essence_quests: dict[str, str] = field(default_factory=dict)
+    trainers: dict[str, dict] = field(default_factory=dict)
 
     @classmethod
     def load(cls, path: Path) -> "Knowledge":
@@ -107,7 +108,8 @@ class Knowledge:
                    wanted_reagents=dict(data.get("wanted_reagents", {})),
                    deck_capacity={name: int(size) for name, size in data.get("deck_capacity", {}).items()},
                    enemy_zones={enemy: list(zones) for enemy, zones in data.get("enemy_zones", {}).items()},
-                   essence_quests=dict(data.get("essence_quests", {})))
+                   essence_quests=dict(data.get("essence_quests", {})),
+                   trainers={school: dict(trainer) for school, trainer in data.get("trainers", {}).items()})
 
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -140,6 +142,7 @@ class Knowledge:
         record.deck_capacity = dict(self.deck_capacity)
         record.enemy_zones = {enemy: list(zones) for enemy, zones in self.enemy_zones.items()}
         record.essence_quests = dict(self.essence_quests)
+        record.trainers = {school: dict(trainer) for school, trainer in self.trainers.items()}
 
     def learn_from(self, record) -> None:
         """Keep what a run found out, leaving out "no effect" verdicts."""
@@ -170,6 +173,7 @@ class Knowledge:
         self.deck_capacity = dict(record.deck_capacity)
         self.enemy_zones = {enemy: list(zones) for enemy, zones in record.enemy_zones.items()}
         self.essence_quests = dict(record.essence_quests)
+        self.trainers = {school: dict(trainer) for school, trainer in record.trainers.items()}
         for zone, points in record.hidden_doors.items():
             for point in points:
                 add_hidden_door(self.hidden_doors, zone, point)

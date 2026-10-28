@@ -133,6 +133,7 @@ class KnowledgeTest(unittest.TestCase):
         run.deck_capacity = {"Starter Deck": 14}
         run.enemy_zones = {"Lost Soul": ["WizardCity/WC_Streets/WC_Unicorn"]}
         run.essence_quests = {"Know Thine Enemy": "Lost Soul Essence"}
+        run.trainers = {"Balance": {"name": "Balance Tree", "world": "Krokotopia"}}
         knowledge.learn_from(run)
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "knowledge.json"
@@ -156,6 +157,7 @@ class KnowledgeTest(unittest.TestCase):
         self.assertEqual(later.deck_capacity, {"Starter Deck": 14})
         self.assertEqual(later.enemy_zones, {"Lost Soul": ["WizardCity/WC_Streets/WC_Unicorn"]})
         self.assertEqual(later.essence_quests, {"Know Thine Enemy": "Lost Soul Essence"})
+        self.assertEqual(later.trainers, {"Balance": {"name": "Balance Tree", "world": "Krokotopia"}})
 
     def test_a_new_run_starts_with_it(self):
         run = RunRecord(limits=Limits())

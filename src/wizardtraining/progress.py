@@ -130,6 +130,7 @@ class RunRecord:
     deck_capacity: dict[str, int] = field(default_factory=dict)
     enemy_zones: dict[str, list[str]] = field(default_factory=dict)
     essence_quests: dict[str, str] = field(default_factory=dict)
+    trainers: dict[str, dict] = field(default_factory=dict)
     walk_strategies_tried: dict[str, list[str]] = field(default_factory=dict)
     tried_wisps: dict[str, float] = field(default_factory=dict)
     visited_objects: list[str] = field(default_factory=list)

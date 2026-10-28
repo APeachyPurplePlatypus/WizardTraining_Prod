@@ -6,6 +6,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Added
 
+- **The knowledge file keeps trainers by school** (`Knowledge.trainers`).
+  - **What:** each school's trainer, with its name, world, landmark and, once seen in the game, its zone and position.
+  - **Why:** the operator, 2026-10-28: training points go only to Elemental Blade and Elemental Trap, at the Balance trainer, and of the Balance Tree: "It's in kroktoopia, by the sphinx. Might not have access yet". No Wizard City zone file has a Balance tree, and none of the NPCs loaded in Ravenwood is one (10:32).
+  - **Verified:** offline (`tests/test_knowledge.py`).
+
 - **A new quest an NPC's menu offers is taken once, and a world's name is not taken as a quest** (`policy.TakeAllQuests.choose_service`, `policy.names_a_quest`).
   - **What:** with side quests on, when the active quest is not in an NPC's menu, the first quest the menu names that was not taken from a menu before in this run is chosen, once; with the Quest Finder active, the first quest it names, as before. An option named for a world ("Grizzleheim") opens that world's quests and is passed over.
   - **Why:** the Headmistress offered "Colossal Trouble" and "Grizzleheim" while "Hey, Penny" was active, and the menu was left (10:38). The operator says Colossus Boulevard likely needs another quest done first ("The Gravulum Order" waits on it), and the coordinator asked to take "Colossal Trouble" as part of clearing Wizard City and to leave Grizzleheim, another world, for now.
