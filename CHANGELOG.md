@@ -95,6 +95,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **A teleport must land fewer zones from the goal than the wizard is, and door bounces no longer teach the time to cross a zone** (`travelplan.choose_travel`, `QuestLoop.learn_the_way`).
+  - **What:** Go Home or Recall is weighed only when it lands fewer zones from the goal than the wizard is. The time to cross a zone is learned only when the wizard went through it to another zone than the one it came from, in 15 to 180 s.
+  - **Why:** the bounces at the Dark Cave's mouth taught 8.4 s a zone, and at 01:15:48 the plan took Go Home to the Commons, four zones from the Cyclops Lane dungeon, over the one-zone walk from Cyclops Lane itself ("walk ~126 s, go home ~44 s"). The saved crossing time was set back to 60 s.
+  - **Verified:** offline (`tests/test_travelplan.py`).
+
 - **Dungeons are refilled in place again unless `--leave-dungeons`; a mark Recall cannot reach is forgotten; a message box that closes by itself no longer stops the run** (`training.travel_buttons_allowed`, `QuestLoop.forget_a_mark_out_of_reach`, `QuestLoop.box_closes_by_itself`).
   - **What:** the travel buttons are not pressed in any dungeon unless `--leave-dungeons` is given (never on a tower floor, nor in a dungeon found reset), and the wizard never recalls into a zone where they are not allowed. A Recall that changes no zone forgets the mark. An open message box is given 10 seconds to close with no click before the run stops for it.
   - **Why:** the first refill trip out of a dungeon (`WC_Cyclops_T1`, "Mad Maximus", 01:07 to 01:12) marked the spot (the Recall button then named "Cyclops Lane") and went home, but Recall could not bring the wizard back, twice; each failed Recall was followed by a box titled "INFO" that closed by itself, and the run stopped for it twice. Until the operator decides between trying each dungeon once and never leaving dungeons, the safer way is the default.

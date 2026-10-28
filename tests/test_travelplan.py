@@ -49,6 +49,14 @@ class TravelPlanTest(unittest.TestCase):
         self.assertEqual(choose("Krokotopia/KT_Unknown", HUB, door_distance=500).way, GO_HOME)
         self.assertEqual(choose("Krokotopia/KT_Unknown", CHAMBER, door_distance=500).way, WALK)
 
+    def test_no_teleport_lands_more_zones_from_the_goal_than_the_wizard_is(self):
+        cheap_zones = TravelCosts(zone_seconds=8.4, walk_speed=240.0)
+        links = pyramid()
+        choice = choose_travel(here=ALTAR, goal_zone=CHAMBER, door_distance=30000, links=links, hub=HUB,
+                               marked_in=None, mana=80, costs=cheap_zones, go_home_ready=True, recall_ready=True)
+        self.assertEqual(choice.way, WALK)
+        self.assertIsNone(choice.estimates[GO_HOME])
+
     def test_costs_learn_from_measurements(self):
         costs = TravelCosts(walk_speed=360.0)
         costs.learn("walk_speed", 460.0)

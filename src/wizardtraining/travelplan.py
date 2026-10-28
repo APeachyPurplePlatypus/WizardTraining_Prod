@@ -97,18 +97,23 @@ def from_landing(hops: int, costs: TravelCosts) -> float:
 def choose_travel(*, here: str, goal_zone: str, door_distance: float, links: dict[str, list[str]], hub: str | None,
                   marked_in: str | None, mana, costs: TravelCosts, go_home_ready: bool,
                   recall_ready: bool) -> TravelChoice:
-    """Walk, Go Home or Recall, whichever is expected to reach the goal's zone first. A teleport has to save at
-    least WORTH_IT_SECONDS and WORTH_IT_SHARE of the walk, as the estimates are rough; when the way on foot is not
-    known, only a teleport that lands in the goal's zone is taken."""
+    """Walk, Go Home or Recall, whichever is expected to reach the goal's zone first. A teleport has to land fewer
+    zones from the goal than the wizard is, and save at least WORTH_IT_SECONDS and WORTH_IT_SHARE of the walk, as the
+    estimates are rough; when the way on foot is not known, only a teleport that lands in the goal's zone is taken.
+    With a crossing time learned from door bounces (8 s a zone), Go Home to the Commons, four zones from the Cyclops
+    Lane dungeon, beat the one-zone walk from Cyclops Lane itself (01:15:48)."""
     hops_on_foot = zone_hops(links, here, goal_zone)
     walk = (None if hops_on_foot is None else
             door_distance * DETOUR / costs.walk_speed + max(hops_on_foot - 1, 0) * costs.zone_seconds
             + costs.zone_seconds / 2)
     landings: dict[str, int] = {}
-    if go_home_ready and hub and here != hub and (hops := zone_hops(links, hub, goal_zone)) is not None:
+    def nearer(hops: int | None) -> bool:
+        return hops is not None and (hops_on_foot is None or hops < hops_on_foot)
+
+    if go_home_ready and hub and here != hub and nearer(hops := zone_hops(links, hub, goal_zone)):
         landings[GO_HOME] = hops
     if recall_ready and marked_in and here != marked_in and spare_mana(mana):
-        if (hops := zone_hops(links, marked_in, goal_zone)) is not None:
+        if nearer(hops := zone_hops(links, marked_in, goal_zone)):
             landings[RECALL] = hops
     estimates = {WALK: walk,
                  GO_HOME: (costs.go_home_seconds + from_landing(landings[GO_HOME], costs)) if GO_HOME in landings else None,

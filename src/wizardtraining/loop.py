@@ -117,7 +117,7 @@ WAIT_FOR_THE_WAY_SECONDS = 30.0
 MARK_MANA_NEEDED = 8
 TELEPORT_LOAD_LIMIT_SECONDS = 60.0
 DEFEAT_ARRIVAL_SECONDS = 30.0
-ZONE_SAMPLE_SECONDS = (5.0, 180.0)
+ZONE_SAMPLE_SECONDS = (15.0, 180.0)
 WALK_SAMPLE_MOVED = 1500.0
 MAX_TELEPORTS_PER_GOAL = 2
 BOX_CLOSE_WAIT_SECONDS = 10.0
@@ -161,6 +161,7 @@ class QuestLoop:
         self._defeated_at = 0.0
         self._zone_entered_at: float | None = None
         self._entered_walking = False
+        self._entered_from: str | None = None
         self._last_goal: tuple | None = None
         self._last_goal_zone: str | None = None
         self._teleports_for: dict[tuple, int] = {}
@@ -1456,7 +1457,8 @@ class QuestLoop:
 
     def learn_the_way(self, left: str | None, arrived: str) -> None:
         """A zone change: when it was walked (not a travel button, not waking after a defeat), the two zones are
-        linked for the travel plan, and the time spent crossing the zone left is learned; after Go Home or Recall,
+        linked for the travel plan, and the time spent crossing the zone left is learned, when the wizard went
+        through it to another zone than it came from (a door bounce taught 8 s a zone); after Go Home or Recall,
         its time from the press to the arrival is learned, and after Go Home, where the world's hub is."""
         now = time.monotonic()
         if self._teleport_pressed is not None:
@@ -1469,10 +1471,11 @@ class QuestLoop:
         if walked and isinstance(left, str) and world_of(left) == world_of(arrived):
             link_zones(self.record.zone_links, left, arrived)
             spent = None if self._zone_entered_at is None else now - self._zone_entered_at
-            if self._entered_walking and spent is not None and ZONE_SAMPLE_SECONDS[0] <= spent <= ZONE_SAMPLE_SECONDS[1]:
+            crossed = self._entered_walking and arrived != self._entered_from
+            if crossed and spent is not None and ZONE_SAMPLE_SECONDS[0] <= spent <= ZONE_SAMPLE_SECONDS[1]:
                 self.learn_cost("zone_seconds", spent)
         self._teleport_pressed = None
-        self._zone_entered_at, self._entered_walking = now, walked
+        self._zone_entered_at, self._entered_walking, self._entered_from = now, walked, left
 
     def learn_walk_speed(self, turn: dict, seconds: float) -> None:
         moved = (turn.get("trip") or {}).get("moved") if isinstance(turn.get("trip"), dict) else None
