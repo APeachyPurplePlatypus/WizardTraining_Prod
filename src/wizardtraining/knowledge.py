@@ -71,6 +71,7 @@ class Knowledge:
     essence_quests: dict[str, str] = field(default_factory=dict)
     trainers: dict[str, dict] = field(default_factory=dict)
     heavy_fights: dict[str, int] = field(default_factory=dict)
+    school_quests_checked: dict[str, int] = field(default_factory=dict)
 
     @classmethod
     def load(cls, path: Path) -> "Knowledge":
@@ -111,7 +112,9 @@ class Knowledge:
                    enemy_zones={enemy: list(zones) for enemy, zones in data.get("enemy_zones", {}).items()},
                    essence_quests=dict(data.get("essence_quests", {})),
                    trainers={school: dict(trainer) for school, trainer in data.get("trainers", {}).items()},
-                   heavy_fights={zone: int(count) for zone, count in data.get("heavy_fights", {}).items()})
+                   heavy_fights={zone: int(count) for zone, count in data.get("heavy_fights", {}).items()},
+                   school_quests_checked={world: int(level)
+                                          for world, level in data.get("school_quests_checked", {}).items()})
 
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -146,6 +149,7 @@ class Knowledge:
         record.essence_quests = dict(self.essence_quests)
         record.trainers = {school: dict(trainer) for school, trainer in self.trainers.items()}
         record.heavy_fights = dict(self.heavy_fights)
+        record.school_quests_checked = dict(self.school_quests_checked)
 
     def learn_from(self, record) -> None:
         """Keep what a run found out, leaving out "no effect" verdicts."""
@@ -178,6 +182,7 @@ class Knowledge:
         self.essence_quests = dict(record.essence_quests)
         self.trainers = {school: dict(trainer) for school, trainer in record.trainers.items()}
         self.heavy_fights = dict(record.heavy_fights)
+        self.school_quests_checked = dict(record.school_quests_checked)
         for zone, points in record.hidden_doors.items():
             for point in points:
                 add_hidden_door(self.hidden_doors, zone, point)

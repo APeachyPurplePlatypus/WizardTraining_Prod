@@ -82,7 +82,7 @@ from .targets import (area_in_zone, essence_enemy, fought_in, found_in, is_essen
                       summary, too_close, WISP_REACH)
 from .teleports import LEFT_ZONE, NO_EFFECT, TeleportVolume, describe_outcome, volume_at
 from .trainer import OPENED_DIALOG, OPENED_MENU, close_training, learn_free_spells, open_training, open_with_professor
-from .training import (GATE, SCHOOLS, TRAINER, School, in_dungeon, in_tower, travel_buttons_allowed, spells_to_learn, way_to_school, way_toward_zone,
+from .training import (COMMONS, GATE, SCHOOLS, TRAINER, School, in_dungeon, in_tower, travel_buttons_allowed, spells_to_learn, way_to_school, way_toward_zone,
                        zone_for_area)
 from .worldgate import go_to_world, leave_the_map, spiral_map_open
 from .ui import POTION_BUTTON, answer_known_popup, click, interact_prompt_text, message_box, visible_children
@@ -1242,10 +1242,49 @@ class QuestLoop:
         skip |= {name for name in self.record.parked_quests if parked(self.record.parked_quests, name, state["level"])}
         if (target := next_quest_in_world(zones, world, skip=skip)) is not None:
             return await self.activate_for_world(target, f"a quest of {world} in the journal")
+        if (visit := await self.school_quest_turn(world, state)) is not None:
+            return visit
         if QUEST_FINDER not in zones:
             return await self.finish_clearing(world, "the journal has no Quest Finder")
         self._finder_just_activated = True
         return await self.activate_for_world(QUEST_FINDER, f"to find the next quest giver in {world}")
+
+    async def school_quest_turn(self, world: str, state: dict) -> dict | None:
+        """While clearing Wizard City, once a level: go to the professor of the wizard's school and talk; their menu's
+        new quest, if any, is taken (`policy.TakeAllQuests`). School quests pay far more than side quests: "Introduction
+        to Ice", from Lydia Greyrose's menu, gave 190 XP where Wizard City's side quests gave about 35, and the
+        journal's Quest Finder never pointed at her (the coordinator, 2026-10-28). Kept per world and level in the
+        knowledge file (`Knowledge.school_quests_checked`). None when done for this level, or no way is known."""
+        level = state["level"]
+        if world != world_of(COMMONS) or not isinstance(level, int) or self.record.school_quests_checked.get(world) == level:
+            return None
+        wizard = await read_wizard(self.client)
+        school = SCHOOLS.get(wizard.school) if wizard is not None else None
+        if school is None:
+            self.record.school_quests_checked[world] = level
+            return None
+        planner = await self.planner()
+        way = way_to_school(state["zone"], school, [volume.name for volume, _ in planner.teleports])
+        if way is None:
+            self.record.school_quests_checked[world] = level
+            self.events.emit("quest", f"no way known to {school.professor} for school quests; going on")
+            return None
+        if way.kind != TRAINER:
+            door = self.door_on_the_way(way, planner)
+            if door is None:
+                self.record.school_quests_checked[world] = level
+                return None
+            self.say_once("quest", f"visiting {school.professor} for school quests (level {level})")
+            return await self.walk_to_door_turn(f"walk toward {school.professor} for school quests", *door)
+        professor = await nearest_npc(self.client)
+        if professor is None:
+            return None
+        if flat_distance(await self.client.body.position(), professor) > NPC_ARRIVE_DISTANCE:
+            return await self.travel_turn(f"walk to {school.professor}", professor, arrive_radius=NPC_ARRIVE_DISTANCE)
+        self.record.school_quests_checked[world] = level
+        opened = await open_with_professor(self.client, professor)
+        self.events.emit("quest", f"talked to {school.professor} for school quests: {opened}")
+        return progressed(f"visited {school.professor} for school quests", opened=opened)
 
     async def follow_the_finder(self, world: str, goals: list[dict]) -> dict | None:
         """The Quest Finder is active: when it points into the world, the talk goal leads to the giver (None); when it

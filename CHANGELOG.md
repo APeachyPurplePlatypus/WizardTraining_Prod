@@ -6,6 +6,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Added
 
+- **Clearing Wizard City visits the wizard's school professor once a level for school quests** (`QuestLoop.school_quest_turn`, `Knowledge.school_quests_checked`).
+  - **What:** when the journal has no quest of the world left to do, and before the Quest Finder, the wizard goes to its school's professor (the way the spell training uses) and talks; a new quest in their menu is taken. Once per world and level, kept in the knowledge file.
+  - **Why:** "Introduction to Ice", taken from Lydia Greyrose's menu, gave 190 XP at its hand-in, where Wizard City's side quests gave about 35; the Quest Finder never pointed at her, and her menu then offered "No More Mr. Ice Guy" (13:24). Asked by the coordinator.
+  - **Verified:** offline (`tests/test_knowledge.py`, imports); in the game: the school quests of 13:18 to 13:24.
+
 - **After a heavy fight the wizard refills health to 90% before going on; a loss where fights are heavy parks the quest** (`progress.heavy_fight`, `QuestLoop.refill_after_heavy_fight_turn`, `QuestLoop.park_the_quest_in_a_heavy_zone`).
   - **What:** a won fight that cost 35% of the wizard's health or more is heavy: the wizard then fetches health wisps until 90% before walking on (health only). While clearing a world, a fight lost in a zone where two or more fights this run were heavy parks the quest until the next level, and the world's other quests go first.
   - **Why:** in Colossus Boulevard, opened at 12:31, pairs of Evil Snowmen and Gobbler Scouters (level 12) cost 400 to 900 of the wizard's 1,133 health, and two of three fights went under 25% (271, then 171). Fights there start when pairs walk in, so refilling only below 40% left too little. The coordinator (16:54 UTC) asked for both.
