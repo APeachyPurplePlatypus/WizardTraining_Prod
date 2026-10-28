@@ -489,6 +489,14 @@ class HiddenDoorTest(unittest.TestCase):
         self.assertFalse(add_hidden_door(doors, "WizardCity/WC_Streets/WC_Cyclops", (0, 13700)))
         self.assertEqual(doors, {"WizardCity/WC_Streets/WC_Cyclops": [(-50, 13621)]})
 
+    def test_a_hidden_door_lies_past_where_the_wizard_last_stood(self):
+        from wizardtraining.routes import HIDDEN_DOOR_RADIUS, hidden_door_centre, hidden_doors_to_keep_out_of
+        centre = hidden_door_centre((-6, 13506), (-17, 13579))
+        self.assertGreater(centre[1], 13579 + HIDDEN_DOOR_RADIUS * 0.9)
+        circles = hidden_doors_to_keep_out_of([centre], (-6, 13506), (-11101, 16436), 100)
+        self.assertEqual(circles[0][1], HIDDEN_DOOR_RADIUS)
+        self.assertEqual(hidden_door_centre((5, 5), (5, 5)), (5, 5))
+
     def test_routes_keep_out_of_hidden_doors_but_not_one_at_the_destination(self):
         from wizardtraining.routes import HIDDEN_DOOR_RADIUS, hidden_doors_to_keep_out_of
         door = (-50, 13620)

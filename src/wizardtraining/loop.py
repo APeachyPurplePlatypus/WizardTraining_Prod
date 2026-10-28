@@ -54,7 +54,7 @@ from .quests import arrow_shows_no_target, game_language, open_goals, read_quest
 from .reports import plain, save_report
 from .patrols import VIEWS_TO_JUDGE, note_sightings, unwalked_paths
 from .routes import (HIDDEN_DOOR_RADIUS, GapStep, Hazards, RoutePlanner, add_hidden_door, duel_clearance,
-                     hidden_doors_to_keep_out_of)
+                     hidden_door_centre, hidden_doors_to_keep_out_of)
 from .sidequests import (FINDER_SAME_GIVER_LIMIT, QUEST_FINDER, WORLD_DOOR, WORLD_DOOR_ROOMS, finder_points_into,
                          in_world, leads_to_the_world_door, next_quest_in_world, unsupported_reason)
 from .strategies import (COMBAT_STRATEGIES, CROWD_STRATEGIES, NO_CLOSER_SECONDS, CombatStrategy, GoalApproach,
@@ -1916,7 +1916,7 @@ class QuestLoop:
                             hazards=hazards)
         moved = flat_distance(start, await self.client.body.position())
         if trip.get("reason") == LOADING:
-            self.note_hidden_door(zone, planner, destination)
+            self.note_hidden_door(zone, planner, destination, start)
         if nav_did_better(trip["attempts"]) and zone not in self.record.nav_first_zones:
             self.record.nav_first_zones.append(zone)
             planner.nav_first = True
@@ -2049,10 +2049,11 @@ class QuestLoop:
         here = await self.client.body.position()
         return planner.piece_of((here.x, here.y))
 
-    def note_hidden_door(self, zone: str, planner: RoutePlanner, destination) -> None:
+    def note_hidden_door(self, zone: str, planner: RoutePlanner, destination, walked_from) -> None:
         """A walk for a place in this zone changed the zone: it went through a door the zone's data does not list.
-        Where the wizard last stood is kept as such a door (`routes.add_hidden_door`), routed around from then on,
-        unless the walk was for a door there or a known teleport volume is there."""
+        It is kept as such a door just past where the wizard last stood (`routes.hidden_door_centre`,
+        `routes.add_hidden_door`), routed around from then on, unless the walk was for a door there or a known
+        teleport volume is there."""
         walking_at, self._walking_at = self._walking_at, None
         if walking_at is None or walking_at[0] != zone or not isinstance(walking_at[1], dict):
             return
@@ -2062,9 +2063,11 @@ class QuestLoop:
         if any(flat_distance(point, XYZ(volume.x, volume.y, 0.0)) <= volume.radius + HIDDEN_DOOR_RADIUS
                for volume, _ in planner.teleports):
             return
-        if add_hidden_door(self.record.hidden_doors, zone, (point.x, point.y)):
-            self.events.emit("walk", f"walked through a door {zone}'s data does not list, at ({point.x:.0f}, "
-                                     f"{point.y:.0f}); routes keep out of it from now on")
+        centre = hidden_door_centre(xy(walked_from), (point.x, point.y))
+        if add_hidden_door(self.record.hidden_doors, zone, centre):
+            self.events.emit("walk", f"walked through a door {zone}'s data does not list, last standing at "
+                                     f"({point.x:.0f}, {point.y:.0f}); routes keep out of ({centre[0]:.0f}, "
+                                     f"{centre[1]:.0f}) from now on")
 
     def hazards_for(self, planner: RoutePlanner, zone: str, start, destination, arrive_radius: float, *,
                     avoid, duel_circles) -> tuple[Hazards, list[dict]]:

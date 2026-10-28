@@ -60,6 +60,18 @@ HIDDEN_DOOR_RADIUS = 250.0
 HIDDEN_DOOR_SAME = 300.0
 
 
+def hidden_door_centre(walked_from, last_stood) -> tuple[float, float]:
+    """Where a door the zone data does not list most likely is: HIDDEN_DOOR_RADIUS past the spot the wizard last stood
+    on before the zone changed, along the way it was walking. That spot is the edge of the door's trigger, and the
+    wizard arrives back next to it: kept out around that spot itself, the circle was 73 units wide where the wizard
+    stood, and every route walked past it into the Dark Cave's mouth again (00:57 to 00:58)."""
+    dx, dy = last_stood[0] - walked_from[0], last_stood[1] - walked_from[1]
+    length = math.hypot(dx, dy)
+    if length < 1.0:
+        return (last_stood[0], last_stood[1])
+    return (last_stood[0] + dx / length * HIDDEN_DOOR_RADIUS, last_stood[1] + dy / length * HIDDEN_DOOR_RADIUS)
+
+
 def add_hidden_door(doors: dict[str, list], zone: str, point) -> bool:
     """Keep `point` as a door of `zone` the zone data does not list, unless one is known within HIDDEN_DOOR_SAME.
     True when it is new."""
