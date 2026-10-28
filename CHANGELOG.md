@@ -6,6 +6,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Added
 
+- **OK is pressed on the game's "INFO" notices** (`ui.close_game_notice`, `screen.is_game_notice`; docs/safety.md).
+  - **What:** a message box titled "INFO" whose only button is its OK (`rightButton`) is closed with that OK, and what it said is logged. Boxes from other players (friend, trade, duel requests) have other titles and Yes and No buttons, and are left as before.
+  - **Why:** the operator, 2026-10-28, 11:38 UTC: "Approve", for clicking OK on INFO boxes, game notices only. After a Recall into a dungeon that had reset, the game's box ("You cannot teleport to that location. The dungeon timer has ended and the dungeon has been reset.") stayed open and took every click, and the run stopped for it from 01:32 until the operator's answer.
+  - **Verified:** the box's one button read in the game (`rightButton`, 07:40 local); offline (`tests/test_screen.py`).
+
 - **Scavenge goals: a reagent is gathered where it grows** (`QuestLoop.scavenge_turn`, `targets.is_reagent`, `entities.objects_named`).
   - **What:** a scavenge goal names its item ("Mist Wood"), shows no quest arrow and has no tags. The wizard walks to the nearest loaded entity named for the reagent (its name without spaces, then a number: "MistWood_..."), uses it with X as a quest object, and checks that it is gone (gathered). With none in sight it searches the zone, then walks one door at a time to the nearest open zone of the world (no interior, tower or dungeon) not yet searched for it, and stops for the operator when none is left. Nothing is ever bought. "Wizards in the Mist" is no longer passed over.
   - **Why:** David asked to "finish the quests" in Wizard City; "Wizards in the Mist" ("Get" Mist Wood) stopped the run at 00:18. Reagents are not in the zones' data: they spawn as entities, such as "FrostedFlax_01" by the Commons' blue wisps (01:41).

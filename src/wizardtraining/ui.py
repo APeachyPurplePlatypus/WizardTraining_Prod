@@ -13,7 +13,7 @@ from dataclasses import dataclass
 
 from wizwalker import HookAlreadyActivated
 
-from .screen import is_friend_request, or_default, plain_text, visible_named
+from .screen import is_friend_request, is_game_notice, or_default, plain_text, visible_named
 from .session import HOOK_TIMEOUT_SECONDS
 
 POTION_BUTTON = ["WorldView", "windowHUD", "btnPotions"]
@@ -126,6 +126,27 @@ async def decline_friend_request(client) -> str | None:
     return "declined a friend request"
 
 
+async def visible_buttons(box) -> list[str]:
+    """The names of a message box's visible buttons."""
+    layout = await or_default(window_at(box, BOX_BUTTONS), None)
+    if layout is None:
+        return []
+    return [await child.name() for child in await or_default(layout.children(), [])
+            if await or_default(child.is_visible(), False)]
+
+
+async def close_game_notice(client) -> str | None:
+    """Press OK on a game notice (`screen.is_game_notice`), and say what it said; None when none is showing. The
+    operator approved it on 2026-10-28 ("Approve", 11:38 UTC), for the OK of the game's INFO boxes only: after a
+    Recall the game refused, one stayed open and took every click until the run stopped for it."""
+    box = await message_box(client)
+    if box is None or not is_game_notice(box.title, await visible_buttons(box.window)):
+        return None
+    await click_window(client, await window_at(box.window, BOX_NO))
+    await asyncio.sleep(BOX_SETTLE_SECONDS)
+    return f"pressed OK on a game notice: {box.caption}"
+
+
 async def answer_known_popup(client) -> str | None:
     """Decline a friend request, or answer the first showing popup in KNOWN_POPUPS, and say what was done. These
     hold the keyboard or the mouse until answered. The Endorse a Wizard window, shown after another player shared a
@@ -133,6 +154,8 @@ async def answer_known_popup(client) -> str | None:
     button is missing, the popup is closed with its own close button instead. Unknown popups are left alone."""
     if declined := await decline_friend_request(client):
         return declined
+    if closed := await close_game_notice(client):
+        return closed
     for name, (window, answer, close_button, answered) in KNOWN_POPUPS.items():
         if await showing(client, window):
             try:

@@ -66,6 +66,17 @@ def is_friend_request(title: str, caption: str) -> bool:
     return title.lower() == FRIEND_BOX_TITLE and caption.lower().endswith(FRIEND_REQUEST_QUESTION)
 
 
+GAME_NOTICE_TITLE = "info"
+GAME_NOTICE_BUTTONS = ["rightButton"]
+
+
+def is_game_notice(title: str, buttons: list[str]) -> bool:
+    """The game's own notice: a box titled "INFO" whose only button is its OK (`rightButton`), such as "You cannot
+    teleport to that location. The dungeon timer has ended and the dungeon has been reset." Another player's
+    request (friend, trade, duel) has another title and Yes and No buttons, and is never one."""
+    return title.strip().lower() == GAME_NOTICE_TITLE and buttons == GAME_NOTICE_BUTTONS
+
+
 def prompt_offers_talk(prompt: str) -> bool:
     """The interact prompt is a person's: it reads "Press X to Talk" (the game's NPCInteractText). A door's reads
     "to Enter" or "to Teleport", a chest's "to Open", an object's "to Use"."""
