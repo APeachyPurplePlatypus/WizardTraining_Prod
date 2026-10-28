@@ -127,6 +127,13 @@ def choose_travel(*, here: str, goal_zone: str, door_distance: float, links: dic
                                          "count on")
 
 
+def worth_going_home_for_wisps(here: str, hub: str | None, went_home_from: set[str]) -> bool:
+    """A safe zone searched with no wisp of the kind needed left, and not the hub: Go Home (free) and search the hub,
+    once from each zone. Woken after a defeat, the wizard searched the Krokotopia world teleporter room for wisps,
+    found none and stood for mana, about 2 a minute; the hub next to it gave 35 to 80 mana in wisps in a minute."""
+    return hub is not None and here != hub and here not in went_home_from
+
+
 def worth_a_way_back_mark(here: str, finished_zone: str | None, next_goal_zone: str | None, hub: str | None,
                           links: dict[str, list[str]], marked_in: str | None, mana) -> bool:
     """A goal was just finished here and the next one is in another zone: quests often come back to where they were

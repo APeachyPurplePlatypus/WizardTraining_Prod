@@ -57,8 +57,9 @@ from .routes import GapStep, Hazards, RoutePlanner, duel_clearance
 from .sidequests import unsupported_reason
 from .strategies import (COMBAT_STRATEGIES, CROWD_STRATEGIES, NO_CLOSER_SECONDS, CombatStrategy, GoalApproach,
                          fight_situation, next_combat_strategy, next_walk_strategy)
-from .travelplan import (GO_HOME, HUBS, RECALL, WALK, TravelCosts, choose_travel, link_zones,
-                         worth_a_way_back_mark)
+from .travelplan import (GO_HOME, HUBS, RECALL, TRAVEL_MANA_RESERVE, WALK, TravelCosts, choose_travel, link_zones,
+                         spare_mana,
+                         worth_a_way_back_mark, worth_going_home_for_wisps)
 from .screen import or_default, prompt_action, prompt_offers_talk
 from .spellbook import SpellCatalog, deck_spells, learned_spell_ids
 from .spells import KNOWN_AT_FIRST_CHECK, LEARNED, SpellLog, learned_text, newly_learned, spell_entry
@@ -160,6 +161,7 @@ class QuestLoop:
         self._travel_planned_for: tuple | None = None
         self._no_teleport_until = 0.0
         self._left_dungeon: tuple[str, int] | None = None
+        self._went_home_for_wisps: set[str] = set()
         self._dungeons_give_nothing_back = False
         self._refill_fully = False
         self._fight_situation: str | None = None
@@ -1130,17 +1132,48 @@ class QuestLoop:
         efficient"), so None and the wizard walks on, except while recharging after a defeat (`progress.
         still_to_recharge`; the operator: "seek out blue and red wisps in safe areas to recharge after death"): the
         zone is searched once for health wisps, then the wizard stands while health comes back, about 2.4 a second.
-        Mana is waited for: the operator allowed waiting in Olde Town for it, or looking for wisps. The zone is
+        Mana is waited for: the operator allowed waiting in Olde Town for it, or looking for wisps; but not while
+        recharging after a defeat, which goes on with mana over the travel reserve once no blue wisp is left here or
+        in the hub (`home_for_wisps_turn`): standing gave about 2 mana a minute. The zone is
         searched once for mana wisps, safe here, then the wizard stands still while mana comes back
         (`wait_for_mana_turn`) until `progress.topped_up`; health comes back meanwhile."""
         if stat == "health" and mana_for_a_fight(mana_fraction(state)):
             if not self.record.recharging:
                 return None
             turn = await self.explore_for_wisps_turn("health", state, planner, reach=refill_reach(True), again=False)
+            if turn is None:
+                turn = await self.home_for_wisps_turn("health", state)
             return turn if turn is not None else await self.wait_for_mana_turn(state, waiting_for="health")
         self.top_up_in(state["zone"])
         turn = await self.explore_for_wisps_turn("mana", state, planner, reach=refill_reach(True), again=False)
+        if turn is None:
+            turn = await self.home_for_wisps_turn("mana", state)
+        if turn is None and self.record.recharging and spare_mana(state["mana"]):
+            self.record.recharging, self._topping_up_in = False, None
+            self.events.emit("mana", f"no blue wisp left to find in {state['zone']} or the hub; going on with "
+                                     f"{state['mana']} mana, over the {TRAVEL_MANA_RESERVE} kept for fights and "
+                                     "Recall, rather than standing for mana (about 2 a minute)")
+            return None
         return turn if turn is not None else await self.wait_for_mana_turn(state)
+
+    async def home_for_wisps_turn(self, stat: str, state: dict) -> dict | None:
+        """This safe zone was searched and holds no wisp of the kind needed: Go Home, free, to search the world's hub
+        (`travelplan.worth_going_home_for_wisps`), once from each zone. None when not worth it or not possible, so
+        the wizard stands instead."""
+        zone = state["zone"]
+        hub = self.record.hubs.get(world_of(zone)) or HUBS.get(world_of(zone))
+        if not self.travel_allowed_in(zone) or not worth_going_home_for_wisps(zone, hub, self._went_home_for_wisps):
+            return None
+        self._went_home_for_wisps.add(zone)
+        started = time.monotonic()
+        problem = await go_to_the_commons(self.client)
+        if problem is not None:
+            self.events.emit("travel", f"could not go home for {stat} wisps: {problem}; standing instead")
+            return None
+        self._teleport_pressed = (GO_HOME, started)
+        self.events.emit("travel", f"no {stat} wisp left in {zone}; went home to {hub} to look for them there")
+        self.record.last_place = None
+        return progressed(f"went home for {stat} wisps", stat=stat)
 
     def top_up_in(self, zone: str) -> None:
         """From now on, refill mana in `zone` until `progress.topped_up`, not just until a fight is allowed. Set as

@@ -90,6 +90,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **A safe zone without the wisps needed sends the wizard home for them, and the recharge after a defeat never stands for mana.**
+  - **What:** a safe zone searched with no wisp of the kind needed left, other than the world's hub, sends the wizard home (Go Home, free) to search the hub, once from each zone (`travelplan.worth_going_home_for_wisps`, `QuestLoop.home_for_wisps_turn`). While recharging after a defeat, once no blue wisp is left there or in the hub and mana is over the 30 kept for fights plus Recall, the wizard goes on and logs why instead of standing for mana. Other mana top-ups still wait, as allowed before.
+  - **Why:** the operator: "seek out blue and red wisps in safe areas to recharge after death". Woken after a defeat at 23:44, the wizard searched the Krokotopia world teleporter room, found no wisps and stood: health came back about 3.6 a second, mana not at all (55 of 94 for minutes; about 2 a minute in the Commons), while the hub next door had given 35 to 80 mana in wisps within a minute at 23:18.
+  - **Verified:** offline (`tests/test_travelplan.py`). In the game: not yet.
+
 - **A search for wisps stays in its zone.**
   - **What:** a part of the zone reached only through a teleport volume not known to stay in the zone is skipped and counted as searched (`targets.area_in_zone`, `QuestLoop.area_to_search`).
   - **Why:** woken in the Krokotopia hub with 19 health at 23:44, the search for health wisps walked into the hub's World Spiral entrance and left the hub for the world teleporter room.

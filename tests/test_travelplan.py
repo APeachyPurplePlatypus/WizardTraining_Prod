@@ -1,7 +1,8 @@
 import unittest
 
 from wizardtraining.travelplan import (GO_HOME, RECALL, TRAVEL_MANA_RESERVE, WALK, TravelCosts, choose_travel,
-                                       link_zones, spare_mana, worth_a_way_back_mark, zone_hops)
+                                       link_zones, spare_mana, worth_a_way_back_mark, worth_going_home_for_wisps,
+                                       zone_hops)
 
 HUB, ALTAR = "Krokotopia/KT_Hub", "Krokotopia/KT_Pyramid/KT_AltarOfKings"
 CHAMBER, PALACE = "Krokotopia/KT_Pyramid/KT_Chamber", "Krokotopia/KT_Pyramid/KT_PalaceOfFire"
@@ -53,6 +54,13 @@ class TravelPlanTest(unittest.TestCase):
         costs.learn("walk_speed", 460.0)
         self.assertAlmostEqual(costs.walk_speed, 390.0)
         self.assertEqual(TravelCosts.from_dict({"walk_speed": 400.0, "unknown": 1}).walk_speed, 400.0)
+
+    def test_home_for_wisps_once_from_a_searched_safe_zone_that_is_not_the_hub(self):
+        teleporter = "Krokotopia/KT_WorldTeleporter"
+        self.assertTrue(worth_going_home_for_wisps(teleporter, HUB, set()))
+        self.assertFalse(worth_going_home_for_wisps(teleporter, HUB, {teleporter}))
+        self.assertFalse(worth_going_home_for_wisps(HUB, HUB, set()))
+        self.assertFalse(worth_going_home_for_wisps(teleporter, None, set()))
 
     def test_the_way_back_is_marked_when_leaving_a_finished_goals_zone_far_from_the_hub(self):
         links = pyramid()
