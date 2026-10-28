@@ -47,6 +47,10 @@ These come from one character's first unattended play, level 1 to level 5 in Wiz
 - **A window's visible flag is its own.** `is_visible()` does not look at parents: hidden battle windows still say visible outside battle. WizWalker's `WindowFlags.disabled` (bit 31) is set on the action buttons while they cannot be used.
 - **Results:** after the spell-type fix, every automated battle (about 12) was won, most in 1 or 2 rounds, with starter cards against Skeletal Pirates, Lost Souls and Dark Fairies.
 
+## Ramps and stairs
+
+- **Some ramps and stairs are missing from a zone's collision data.** A raised terrace or upper street then reads as its own walkable piece with no way onto it, though players walk up. The game's nav graph links the levels, but its waypoints can be far apart, and walking one long leg straight across a busy area gets stuck on whatever is in between. So when the collision data has no route to a destination on another piece and the nav graph has one, the walk goes by the collision data to the nav route's last waypoint on the wizard's own piece (the foot of the ramp), then up the nav legs, which are short where the ground climbs, only as far as the first waypoint on the next piece (the top of the ramp), and plans again from there, so a long nav leg across the new level also goes by the collision data (`ramps.py`, `QuestLoop.ramp_foot`). This applies to every walk, whatever its target. Found on 2026-10-28 with the Commons Smith of "Find the Smiths", on a terrace at height 253 (the operator: "there's no teleport in the Commons or anything so you need to be able to walk to that Smith"); Olde Town's Smith was reached the same way.
+
 ## Health
 
 - **Health regenerates outdoors** (about 1.6 HP/s in the Commons) **but not in every interior**, nor on Triton Avenue or Cyclops Lane. Resting in one froze the run. Resting was later dropped altogether as too slow: health comes from potions, wisps, in-battle heals and level-ups.
