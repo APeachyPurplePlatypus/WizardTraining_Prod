@@ -10,6 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from typing import Literal, Protocol
 
+from .strategies import COMBAT_STRATEGIES, MOST_DANGEROUS, CombatStrategy
+
 ATTACK_TARGETS = {"Damage": "enemy", "Steal": "enemy", "AOE": "all enemies"}
 HEAL_SPELL_TYPES = {"Heal"}
 LOW_HEALTH_FRACTION = 0.4
@@ -143,21 +145,29 @@ class SpellTypePolicy:
     Otherwise attack the enemy with the least health with the affordable attack expected to do the most to it: its
     pip cost (damage grows with pips: Frost Beetle, 1 pip, about 85; Snow Serpent, 2 pips, about 175), times the
     share the target's shields, wards, traps and resistances let through, times the card's accuracy; the first in
-    hand on a tie. It knows nothing of blades or of saving pips for attacks beyond one round."""
+    hand on a tie. It knows nothing of blades.
+
+    It plays by a `strategies.CombatStrategy`, which the loop changes after a lost fight: when to heal, how big an
+    enemy's saved-up hit is counted, which enemy is attacked first, and whether pips are saved for a bigger card."""
+
+    def __init__(self, strategy: CombatStrategy = COMBAT_STRATEGIES[0]):
+        self.strategy = strategy
 
     def choose(self, view: RoundView) -> Cast | Pass | Flee | None:
         if out_of_mana(view) and view.can_flee:
             return Flee(f"out of mana ({view.mana} left)")
         attacks = [index for index, card in enumerate(view.cards) if card.castable and card.spell_type in ATTACK_TARGETS]
         finisher = cheapest_finisher(view, attacks) if view.enemies else None
-        if finisher is not None and ends_the_danger(view, finisher):
+        per_pip = self.strategy.enemy_damage_per_pip
+        if finisher is not None and ends_the_danger(view, finisher, per_pip):
             return finisher
         fraction = view.health_fraction()
-        if (fraction is not None and fraction < LOW_HEALTH_FRACTION) or within_reach_of_a_big_hit(view):
+        big_hit = within_reach_of_a_big_hit(view, per_pip)
+        if (fraction is not None and fraction < self.strategy.heal_below) or big_hit:
             heal = first_castable(view.cards, lambda card: card.spell_type in HEAL_SPELL_TYPES)
             if heal is not None:
                 return Cast(heal, "self")
-            if within_reach_of_a_big_hit(view) and (stun := stun_on_the_most_dangerous(view)) is not None:
+            if big_hit and (stun := stun_on_the_most_dangerous(view)) is not None:
                 return stun
             if (worth_saving_for := heal_worth_saving_for(view)) is not None:
                 return stun_on_the_most_dangerous(view) or Pass(f"saving pips for {worth_saving_for.name} "
@@ -169,9 +179,11 @@ class SpellTypePolicy:
         stun = stun_while_saving_a_pip(view, attacks)
         if stun is not None:
             return stun
+        if self.strategy.save_pips_for_bigger_cards and (bigger := bigger_card_soon(view, attacks)) is not None:
+            return stun_on_the_most_dangerous(view) or Pass(f"saving pips for {bigger.name} ({bigger.pips} pips)")
         if not attacks:
             return None
-        enemy = weakest(view.enemies)
+        enemy = most_dangerous(view.enemies) if self.strategy.target == MOST_DANGEROUS else weakest(view.enemies)
         attack = max(attacks, key=lambda index: expected_damage(view.cards[index], view.enemies[enemy]))
         return Cast(attack, ATTACK_TARGETS[view.cards[attack].spell_type], enemy)
 
@@ -181,6 +193,24 @@ def weakest(enemies: tuple[Combatant, ...]) -> int:
     General Akilles (470) and his Cyclops Legionnaire (235) took 100 to 200 health a round between them, and every
     attack went to Akilles while the Cyclops kept hitting."""
     return min(range(len(enemies)), key=lambda index: (enemies[index].health is None, enemies[index].health or 0))
+
+
+def most_dangerous(enemies: tuple[Combatant, ...]) -> int:
+    """The enemy holding the most pips, on a tie the one with the most health: its next hit is the biggest. Lord
+    Nightshade (690) stayed untouched while the wizard spent eight rounds on his Field Guard (395)."""
+    return max(range(len(enemies)), key=lambda index: (enemies[index].pips or 0, enemies[index].health or 0))
+
+
+def bigger_card_soon(view: RoundView, attacks: list[int]) -> Card | None:
+    """An attack in hand that needs one or two pips more than the wizard has, which it can pay for in mana, and that
+    is expected to do more than the best attack it can cast now, else None."""
+    have = (view.pips or 0) + (view.power_pips or 0)
+    target = view.enemies[weakest(view.enemies)]
+    best_now = max((expected_damage(view.cards[index], target) for index in attacks), default=0.0)
+    soon = [card for card in view.cards if card.spell_type in ATTACK_TARGETS and not card.castable and card.pips
+            and have < card.pips <= have + 2 and (view.mana is None or view.mana >= card.pips)
+            and expected_damage(card, target) > best_now]
+    return max(soon, key=lambda card: expected_damage(card, target), default=None)
 
 
 def cheapest_finisher(view: RoundView, attacks: list[int]) -> Cast | None:
@@ -220,15 +250,15 @@ def stun_on_the_most_dangerous(view: RoundView) -> Cast | None:
                                                                 view.enemies[index].health or 0)))
 
 
-def ends_the_danger(view: RoundView, finisher: Cast) -> bool:
+def ends_the_danger(view: RoundView, finisher: Cast, per_pip: int = ENEMY_DAMAGE_PER_PIP) -> bool:
     """Finishing the enemy `finisher` targets leaves no enemy, or none that could take what health is left: then
     the finishing blow comes before any heal. With 288 health and Alicane Swiftarrow at 16, holding 3 pips, the
     wizard passed to save pips for a heal instead of finishing her with a 1-pip attack, and lost the battle."""
     left = tuple(enemy for index, enemy in enumerate(view.enemies) if index != finisher.enemy)
-    return not left or not within_reach_of_a_big_hit(replace(view, enemies=left))
+    return not left or not within_reach_of_a_big_hit(replace(view, enemies=left), per_pip)
 
 
-def within_reach_of_a_big_hit(view: RoundView) -> bool:
+def within_reach_of_a_big_hit(view: RoundView, per_pip: int = ENEMY_DAMAGE_PER_PIP) -> bool:
     """The wizard's health is no more than what the enemies could deal next round if each spent all its pips, at
     ENEMY_DAMAGE_PER_PIP. General Akilles, stunned in the first round, saved his pips and took 357 health or more in
     one round, where his hits had been 100 to 140; the wizard had a 245 heal in hand at 45% health and attacked,
@@ -237,7 +267,7 @@ def within_reach_of_a_big_hit(view: RoundView) -> bool:
     margin."""
     if not isinstance(view.health, int):
         return False
-    reach = sum((enemy.pips or 0) * ENEMY_DAMAGE_PER_PIP for enemy in view.enemies)
+    reach = sum((enemy.pips or 0) * per_pip for enemy in view.enemies)
     return reach > 0 and view.health <= reach
 
 

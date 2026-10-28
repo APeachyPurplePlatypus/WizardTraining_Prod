@@ -60,7 +60,7 @@ class Limits:
     max_battles: int = 20
     max_turns_without_progress: int = 4
     max_step_aways: int = 40
-    max_defeats: int = 0
+    max_defeats: int | None = None
     max_loading_waits_in_a_row: int = 40
     max_immobile_threat_stops_in_a_row: int = 8
     max_duel_waits_in_a_row: int = 20
@@ -104,6 +104,8 @@ class RunRecord:
     teleport_outcomes: dict[str, dict[str, object]] = field(default_factory=dict)
     failed_gaps: dict[str, list[tuple[int, int]]] = field(default_factory=dict)
     quests_activated: dict[str, int] = field(default_factory=dict)
+    combat_strategies_tried: dict[str, list[str]] = field(default_factory=dict)
+    walk_strategies_tried: dict[str, list[str]] = field(default_factory=dict)
     tried_wisps: dict[str, float] = field(default_factory=dict)
     visited_objects: list[str] = field(default_factory=list)
     arrivals: dict[str, dict] = field(default_factory=dict)

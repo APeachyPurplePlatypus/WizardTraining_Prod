@@ -33,8 +33,8 @@ from .doors import CHANGE_START_SECONDS, change_begins, push_through
 from .entities import (HEALTH_WISP, MANA_WISP, dungeon_entrance_near, nearby_enemies, nearest_npc, step_away,
                        surroundings, wisps)
 from .equipment import count_items, equip, read_items, read_wizard
-from .events import (EventLog, describe_battle, describe_changes, describe_round, dialog_text, enemy_names, health_text,
-                     threat_text)
+from .events import (EventLog, describe_battle, describe_changes, describe_round, dialog_text, enemies_at_once,
+                     enemy_names, health_text, threat_text)
 from .gear import describe_stats, upgrades
 from .gametravel import go_to_the_commons, has_mark, mark_here, recall
 from .geometry import Point, distance_to_path, flat_distance, path_within, xy
@@ -55,6 +55,7 @@ from .reports import plain, save_report
 from .patrols import VIEWS_TO_JUDGE, note_sightings, unwalked_paths
 from .routes import GapStep, Hazards, RoutePlanner, duel_clearance
 from .sidequests import unsupported_reason
+from .strategies import fight_situation, next_combat_strategy, next_walk_strategy
 from .screen import or_default, prompt_action, prompt_offers_talk
 from .spellbook import SpellCatalog, deck_spells, learned_spell_ids
 from .spells import KNOWN_AT_FIRST_CHECK, LEARNED, SpellLog, learned_text, newly_learned, spell_entry
@@ -105,6 +106,8 @@ MANA_WAIT_POLL_SECONDS = 10.0
 ENEMIES_IN_THE_WAY_WAIT_SECONDS = 4.0
 DUEL_WAIT_SECONDS = 30.0
 MAX_ACTIVATIONS_PER_QUEST = 2
+FULL_HEALTH_FRACTION = 0.95
+WAIT_FOR_THE_WAY_SECONDS = 30.0
 MARK_MANA_NEEDED = 8
 FEW_PLACES_TO_LOOK = 2
 DUEL_WAIT_POLL_SECONDS = 3.0
@@ -136,6 +139,7 @@ class QuestLoop:
         self.use_travel_buttons = use_travel_buttons
         self._marked_in: str | None = None
         self._dungeons_give_nothing_back = False
+        self._refill_fully = False
         self._gear_checked: tuple | None = None
         self._finishing_since: float | None = None
         self.approaches = ApproachLog()
@@ -200,6 +204,8 @@ class QuestLoop:
         while True:
             state = await snapshot(self.client)
             try:
+                if self.record.turns_without_progress >= self.limits.max_turns_without_progress:
+                    await self.try_another_walk_strategy(state)
                 check_limits(self.record, seconds_left=deadline - time.monotonic(),
                              stop_requested=self.settings.stop_requested())
                 if isinstance(state["level"], int) and state["level"] >= self.limits.target_level:
@@ -217,6 +223,44 @@ class QuestLoop:
                      turn["did"], turn["progress"], state["level"], health_text(state), state["zone"], quest.get("goal"),
                      quest.get("goal_zone") or "")
             self.note_changes(state)
+
+    async def try_another_walk_strategy(self, state: dict) -> None:
+        """Several turns went by without progress: take the next walk strategy not yet tried in this zone for this
+        goal (`strategies.next_walk_strategy`), say which and why, and count the turns again. When every one has
+        been tried here, the run stops for the operator, naming them."""
+        quest = self.record.quest or {}
+        situation = f"{state['zone']} | {quest.get('title') or quest.get('name')} | {quest.get('goal')}"
+        tried = self.record.walk_strategies_tried.setdefault(situation, [])
+        available = {"nav graph first", "collision data first", "forget the obstacles here", "wait for the way to clear"}
+        if self.use_travel_buttons and not in_dungeon(state["zone"], self.record.entered_with_x):
+            available.add("go to the Commons and come back")
+        choice = next_walk_strategy(tried, available)
+        if choice is None:
+            raise StopRun(f"several turns without progress at {situation}, after trying {', '.join(tried) or 'nothing'}")
+        name, why = choice
+        tried.append(name)
+        self.events.emit("strategy", f"{self.record.turns_without_progress} turns without progress at {situation}; "
+                                     f"trying '{name}': {why}")
+        await self.apply_walk_strategy(name, state)
+        self.record.turns_without_progress = 0
+
+    async def apply_walk_strategy(self, name: str, state: dict) -> None:
+        zone = state["zone"]
+        planner = await self.planner()
+        if name == "nav graph first":
+            planner.nav_first = True
+        elif name == "collision data first":
+            planner.nav_first = False
+            if zone in self.record.nav_first_zones:
+                self.record.nav_first_zones.remove(zone)
+        elif name == "forget the obstacles here":
+            self.record.obstacles[zone] = []
+        elif name == "wait for the way to clear":
+            deadline = time.monotonic() + WAIT_FOR_THE_WAY_SECONDS
+            while time.monotonic() < deadline and not self.settings.stop_requested():
+                await asyncio.sleep(1.0)
+        elif name == "go to the Commons and come back":
+            await self.commons_trip_turn("mana", state)
 
     async def check_spells(self, state: dict) -> None:
         """Every SPELL_CHECK_SECONDS, and at once after a level up, compare the learned spells with those known
@@ -542,11 +586,33 @@ class QuestLoop:
         battle["after"] = {key: after[key] for key in ("zone", "level", "health", "max_health", "mana", "gold")}
         if defeated:
             self.record.defeats += 1
-            if self.record.defeats > self.limits.max_defeats:
+            if self.limits.max_defeats is not None and self.record.defeats > self.limits.max_defeats:
                 raise StopRun("defeated in battle; stopping for the operator")
+            self.change_combat_strategy(battle)
         casts = sum(1 for battle_round in battle["rounds"] if battle_round["action"].startswith("cast"))
         return progressed("battle", rounds=len(battle["rounds"]), casts=casts, final_phase=battle["final_phase"],
                           after=battle["after"])
+
+    def change_combat_strategy(self, battle: dict) -> None:
+        """After a lost fight, the next fight plays by the next combat strategy not yet tried against these enemies
+        (`strategies.next_combat_strategy`), and says which and why. The operator: "There should be no retry limit as
+        you should be trying different strategies if something isn't working." When every strategy has lost against
+        them, the run stops for the operator."""
+        _, names = enemies_at_once(battle.get("rounds", []))
+        situation = fight_situation(list(names))
+        tried = self.record.combat_strategies_tried.setdefault(situation, [])
+        current = getattr(self.combat_policy, "strategy", None)
+        if current is None:
+            raise StopRun(f"lost to {situation}; the combat policy has no strategies to change; left for the operator")
+        if current.name not in tried:
+            tried.append(current.name)
+        following = next_combat_strategy(tried)
+        if following is None:
+            raise StopRun(f"lost to {situation} with every combat strategy ({', '.join(tried)}); left for the operator")
+        self.combat_policy.strategy = following
+        self._refill_fully = following.refill_fully_first
+        self.events.emit("strategy", f"lost to {situation} playing '{current.name}'; the next fight plays "
+                                     f"'{following.name}': {following.why}")
 
     async def dialog_turn(self) -> dict:
         record = {}
@@ -721,6 +787,10 @@ class QuestLoop:
         inside_a_dungeon = in_dungeon(state["zone"], self.record.entered_with_x)
         mana_for_the_gate = 1.0 if inside_a_dungeon else mana_fraction(state)
         refill = short_for_a_fight(health_fraction(state), mana_for_the_gate) if goal["type"] in FIGHT_GOALS else None
+        if refill is None and goal["type"] in FIGHT_GOALS and self._refill_fully and not inside_a_dungeon:
+            health = health_fraction(state)
+            refill = ("health" if health is not None and health < FULL_HEALTH_FRACTION
+                      else "mana" if not topped_up(mana_fraction(state)) else None)
         if refill is None and (self._topping_up_in == state["zone"] or not mana_to_travel(mana_fraction(state))):
             refill = "mana"
         if refill is not None:

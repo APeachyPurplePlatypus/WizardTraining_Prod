@@ -30,8 +30,9 @@ def main(argv=None) -> int:
     play.add_argument("--minutes", type=float, default=Limits.minutes, help="stop after this long")
     play.add_argument("--battles", type=int, default=Limits.max_battles, help="stop after this many battles")
     play.add_argument("--max-defeats", type=int, default=Limits.max_defeats,
-                      help="defeats to play on through; the run stops at the next one. By default none: the first "
-                           "defeat stops it for you")
+                      help="stop at the defeat after this many; by default there is no cap, and each fight lost "
+                           "again in the same situation is fought with another strategy (strategies.py) until "
+                           "every one has been tried there")
     play.add_argument("--approve-quest", action="append", default=[], metavar="TITLE",
                       help="a quest title an NPC's menu may offer that you have checked is a main quest; repeatable, "
                            "earlier titles are preferred")

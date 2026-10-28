@@ -19,6 +19,31 @@ def view(cards, health=500, max_health=500, enemies=ONE_ENEMY, pips=3, mana=None
                      enemies=enemies, mana=mana)
 
 
+class StrategyPolicyTest(unittest.TestCase):
+    """The same round played by each combat strategy (strategies.py)."""
+
+    def test_heal_earlier_heals_at_half_health(self):
+        from wizardtraining.strategies import COMBAT_STRATEGIES
+        half = view([BOLT, HEAL], health=250)
+        self.assertEqual(SpellTypePolicy().choose(half), Cast(0, "enemy"))
+        self.assertEqual(SpellTypePolicy(COMBAT_STRATEGIES[1]).choose(half), Cast(1, "self"))
+
+    def test_most_dangerous_first_attacks_the_boss_not_the_guard(self):
+        from wizardtraining.strategies import COMBAT_STRATEGIES
+        boss_and_guard = (Combatant("Lord Nightshade", 690, pips=3), Combatant("Field Guard", 395, pips=1))
+        self.assertEqual(SpellTypePolicy().choose(view([BOLT], enemies=boss_and_guard)), Cast(0, "enemy", 1))
+        self.assertEqual(SpellTypePolicy(COMBAT_STRATEGIES[2]).choose(view([BOLT], enemies=boss_and_guard)),
+                         Cast(0, "enemy", 0))
+
+    def test_save_pips_for_bigger_cards_passes_for_a_two_pip_wait(self):
+        from wizardtraining.strategies import COMBAT_STRATEGIES
+        beetle = Card("Frost Beetle", "Damage", True, "Ice", pips=1)
+        snowman = Card("Evil Snowman", "Damage", False, "Ice", pips=3)
+        round_one = view([beetle, snowman], pips=1)
+        self.assertEqual(SpellTypePolicy().choose(round_one), Cast(0, "enemy", 0))
+        self.assertIsInstance(SpellTypePolicy(COMBAT_STRATEGIES[3]).choose(round_one), Pass)
+
+
 class SpellTypePolicyTest(unittest.TestCase):
     policy = SpellTypePolicy()
 
