@@ -206,6 +206,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **A short search walk no longer ends in standing** (`QuestLoop.keep_looking_turn`, `loop.reached_its_point`).
+  - **What:** while searching a safe zone for wisps, a walk that reached its point but was too short to count as progress goes on to the next point, up to three walks, before the wizard stands.
+  - **Why:** in the Commons after a heavy fight (14:32), the first search point was 232 away; the walk arrived, counted as no progress, and the wizard stood 90 s at 429 of 1164 health before searching on.
+  - **Verified:** offline (imports, tests).
+
 - **The Recall back from the Commons waits only for what the way back needs** (`QuestLoop.ready_to_go_back`).
   - **What:** after a trip for health, the wizard recalls once health is ready and it has the mana for Recall and the 30 kept for fights, not 80% of its mana; after any trip, three minutes in the Commons with health ready and that mana are enough too.
   - **Why:** after a heavy fight's trip (14:16 to 14:18), the wizard had full health and 70 of 96 mana, short of the 80% a mana trip waits for, and chased seven mana wisps in a row that gave nothing (used up, each a different one, each then skipped for three minutes as before). The coordinator asked for both.

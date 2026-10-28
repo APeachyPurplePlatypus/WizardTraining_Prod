@@ -133,6 +133,7 @@ REAGENT_ZONES_PER_TRY = 3
 DECK_RETRY_SECONDS = 60.0
 PHOTO_TRIES = 2
 RECALL_WAIT_CAP_SECONDS = 180.0
+SEARCH_WALKS_BEFORE_STANDING = 3
 PHOTO_DISTANCE = 600.0
 PHOTO_SUBJECT_TRIES = 4
 DECK_EDIT_CLEARANCE = 3000.0
@@ -159,6 +160,11 @@ KEYS_IGNORED = ("the game ignored a turn key while free to move; a popup (such a
                 "may be holding the keyboard; left for the operator")
 
 log = logging.getLogger(__name__)
+
+
+def reached_its_point(turn: dict) -> bool:
+    """A travel turn whose walk arrived where it was going, whatever the distance."""
+    return turn.get("trip", {}).get("result") == "arrived"
 
 
 class QuestLoop:
@@ -1597,8 +1603,13 @@ class QuestLoop:
         wisps come back, and health and mana come back while walking as while standing. Standing only when no part of
         the zone is left to walk to. The operator, 2026-10-28: "Standing to regenerate is fine, but it should continue
         to hunt for wisps in known safe areas since that is faster than just waiting around plus you regen health as you
-        are looking." Used-up wisps come back."""
-        turn = await self.explore_for_wisps_turn(stat, state, planner, reach=refill_reach(True), again=True)
+        are looking." Used-up wisps come back. A walk that reached its point but was too short to count as progress
+        goes on to the next point, up to SEARCH_WALKS_BEFORE_STANDING walks: a 232 walk in the Commons was followed
+        by 90 s standing at 429 of 1164 health (14:32)."""
+        for _ in range(SEARCH_WALKS_BEFORE_STANDING):
+            turn = await self.explore_for_wisps_turn(stat, state, planner, reach=refill_reach(True), again=True)
+            if turn["progress"] or not reached_its_point(turn):
+                break
         if turn["progress"]:
             return turn
         return await self.wait_for_mana_turn(state, waiting_for=stat)
