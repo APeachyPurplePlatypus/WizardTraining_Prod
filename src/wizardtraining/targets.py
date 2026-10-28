@@ -133,10 +133,13 @@ def letters_and_digits(text: str) -> str:
 
 
 def is_reagent(entity_name: str, reagent: str) -> bool:
-    """A loaded entity is the reagent a scavenge goal asks for: its object name is the reagent's name without spaces,
-    then a number. In the Commons a Frosted Flax showed as "FrostedFlax_01"; "Mist Wood" shows as "MistWood_..."."""
+    """A loaded entity is the reagent a scavenge goal asks for: its object name ends in the reagent's name without
+    spaces, then a number, after any prefix. In the Commons a Frosted Flax showed as "FrostedFlax_01"; a "Mist Wood"
+    may show as "MistWood_..." or with a zone's prefix. A name that goes on past the reagent's ("MistWoodBarrel_01")
+    is another object."""
     key, name = letters_and_digits(reagent), letters_and_digits(entity_name)
-    return bool(key) and name.startswith(key) and name[len(key):].isdigit() and len(name) > len(key)
+    stem = name.rstrip("0123456789")
+    return bool(key) and stem != name and stem.endswith(key)
 
 
 BLOCKED_TALK_DISTANCE = 260.0

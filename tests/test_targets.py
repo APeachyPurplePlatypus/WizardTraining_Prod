@@ -107,6 +107,7 @@ class TargetsTest(unittest.TestCase):
         self.assertFalse(is_reagent("MistWoodBarrel_01", "Mist Wood"))
         self.assertFalse(is_reagent("WC_WispMana", "Mist Wood"))
         self.assertFalse(is_reagent("FrostedFlax_01", ""))
+        self.assertTrue(is_reagent("WC_MistWood_03", "Mist Wood"))
 
     def test_preferred_pieces_are_explored_first(self):
         points = [((0, 5000), 0), ((0, 1000), 0), ((0, 3000), 1)]
