@@ -158,6 +158,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **A finishing blow is the most accurate of the cheapest, and a card that did nothing is not played again in that fight** (`policy.cheapest_finisher`, `SpellTypePolicy.note_last_hit`).
+  - **What:** among the cheapest attacks that surely finish an enemy, the most accurate is played. When the attack cast last round left its target's health as it was, that card is passed over for the rest of the fight while another attack is in hand.
+  - **Why:** a Field Guard at 45 health took three Thunder Snakes (Storm wand) in three rounds without losing any, while a Fire Cat in hand would have finished it; the wizard went from 759 to 520 health (10:49, Haunted Cave street).
+  - **Verified:** offline (`tests/test_policy.py`); in the game: the fight's rounds.
+
 - **An Extract spell enchants only a deck card, and an enchantment that does not take is not tried again on that card** (`policy.extract_essence`, `SpellTypePolicy.enchant_refused`, `combat.play_round`).
   - **What:** item cards (a wand's, such as "Dark Sprite - Starter Wand") are not enchanted. After an enchantment, the hand is read again; when no card in it is enchanted, that card is refused for the fight and the policy chooses again, up to twice a round; with no card left to try, the round is played without extracting, never passed for it. While every deck attack in hand needs more pips than the wizard has, the round is passed to save one (Snow Serpent needed 2 in a first round with 1). A card named for its item ("Frost Beetle - Starter Wand") counts as an item card even if the game does not say so. No deck edit while recharging or below the travel line of health.
   - **Why:** in the second Lost Soul fight (10:22, Unicorn Way) Extract Undead was in hand ("CollectEssenceUndead"); it was played onto "Dark Sprite - Starter Wand", the cheapest attack, and did not take, so each round passed ("a second enchantment in one round") while the Lost Soul took the wizard from 1071 to 546 health in seven rounds.

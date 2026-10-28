@@ -185,11 +185,33 @@ class SpellTypePolicy:
         self._strategy_chosen = False
         self._extracted = False
         self._enchant_refused: set[str] = set()
+        self._last_hit: tuple[str, str, int, int] | None = None
+        self._no_effect: set[str] = set()
 
     def new_fight(self) -> None:
         self._strategy_chosen = False
         self._extracted = False
         self._enchant_refused = set()
+        self._last_hit = None
+        self._no_effect = set()
+
+    def note_last_hit(self, view: RoundView) -> None:
+        """The attack cast last round left its target's health as it was: that card is not played again this fight
+        while another attack is in hand. Three Thunder Snakes in a row left a Field Guard at 45 (10:49), where a
+        Fire Cat in hand would have finished it."""
+        if self._last_hit is None:
+            return
+        card, target, health, alike = self._last_hit
+        self._last_hit = None
+        if alike_enemies(view, target, health) >= alike:
+            self._no_effect.add(card)
+
+    def remember_hit(self, view: RoundView, choice) -> None:
+        if isinstance(choice, Cast) and choice.target == "enemy" and 0 <= choice.enemy < len(view.enemies):
+            enemy = view.enemies[choice.enemy]
+            if isinstance(enemy.health, int):
+                self._last_hit = (view.cards[choice.card].name or "", enemy.name or "", enemy.health,
+                                  alike_enemies(view, enemy.name or "", enemy.health))
 
     def enchant_refused(self, card_name: str | None) -> None:
         """The enchantment onto this card did not take: it is not tried again this fight, and with no card left to
@@ -197,6 +219,12 @@ class SpellTypePolicy:
         self._enchant_refused.add(card_name or "")
 
     def choose(self, view: RoundView) -> Cast | Enchant | Pass | Flee | None:
+        self.note_last_hit(view)
+        choice = self.choose_this_round(view)
+        self.remember_hit(view, choice)
+        return choice
+
+    def choose_this_round(self, view: RoundView) -> Cast | Enchant | Pass | Flee | None:
         if self.strategy_for is not None and not self._strategy_chosen and view.enemies:
             self.strategy = self.strategy_for(fight_situation([enemy.name for enemy in view.enemies]))
             self._strategy_chosen = True
@@ -211,6 +239,7 @@ class SpellTypePolicy:
             if extraction is not None:
                 return extraction
         attacks = [index for index, card in enumerate(view.cards) if card.castable and card.spell_type in ATTACK_TARGETS]
+        attacks = [index for index in attacks if (view.cards[index].name or "") not in self._no_effect] or attacks
         finisher = cheapest_finisher(view, attacks) if view.enemies else None
         per_pip = self.strategy.enemy_damage_per_pip
         if finisher is not None and ends_the_danger(view, finisher, per_pip):
@@ -240,6 +269,11 @@ class SpellTypePolicy:
         enemy = most_dangerous(view.enemies) if self.strategy.target == MOST_DANGEROUS else weakest(view.enemies)
         attack = max(attacks, key=lambda index: expected_damage(view.cards[index], view.enemies[enemy]))
         return Cast(attack, ATTACK_TARGETS[view.cards[attack].spell_type], enemy)
+
+
+def alike_enemies(view: RoundView, name: str, health: int) -> int:
+    """How many enemies have this name and health: two Lost Souls at 55, one finished, leave one."""
+    return sum(1 for enemy in view.enemies if (enemy.name or "") == name and enemy.health == health)
 
 
 def essence_enemies(view: RoundView, wanted: set[str]) -> list[int]:
@@ -338,12 +372,12 @@ def bigger_card_soon(view: RoundView, attacks: list[int]) -> Card | None:
 
 
 def cheapest_finisher(view: RoundView, attacks: list[int]) -> Cast | None:
-    """The cheapest attack that surely finishes an enemy, on the first such enemy."""
-    sure = [(view.cards[card].pips or 1, enemy, card) for enemy, target in enumerate(view.enemies) for card in attacks
-            if surely_finishes(view.cards[card], target)]
+    """The cheapest attack that surely finishes an enemy, the most accurate of those, on the first such enemy."""
+    sure = [(view.cards[card].pips or 1, -view.cards[card].hit_chance(), enemy, card)
+            for enemy, target in enumerate(view.enemies) for card in attacks if surely_finishes(view.cards[card], target)]
     if not sure:
         return None
-    _, enemy, card = min(sure)
+    _, _, enemy, card = min(sure)
     return Cast(card, ATTACK_TARGETS[view.cards[card].spell_type], enemy)
 
 

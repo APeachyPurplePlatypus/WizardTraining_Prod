@@ -85,7 +85,8 @@ class QuestFinderMenuTest(unittest.TestCase):
 
 
 class SpellTypePolicyTest(unittest.TestCase):
-    policy = SpellTypePolicy()
+    def setUp(self):
+        self.policy = SpellTypePolicy()
 
     def test_attacks_the_first_enemy_with_the_first_affordable_attack(self):
         self.assertEqual(self.policy.choose(view([SHIELD, TOO_DEAR, BOLT])), Cast(2, "enemy"))
@@ -367,6 +368,31 @@ class ServicesMenuTest(unittest.TestCase):
         policy = MainQuestsOnly(approved_titles=["A Good Day to Cyclops"])
         self.choose(policy)
         self.assertEqual(policy.decide(["I am offering you a side quest."], can_go_back=True), DECLINE)
+
+
+class NoEffectTest(unittest.TestCase):
+    SNAKE = Card("Thunder Snake - Starter Wand", "Damage", True, "Storm", 1, accuracy=70)
+    CAT = Card("Fire Cat - Starter Wand", "Damage", True, "Fire", 1, accuracy=75)
+
+    def test_the_most_accurate_of_the_cheapest_finishers(self):
+        guard = (Combatant("Field Guard", 45),)
+        self.assertEqual(SpellTypePolicy().choose(view([self.SNAKE, self.CAT], enemies=guard)), Cast(1, "enemy", 0))
+
+    def test_a_card_that_left_the_target_as_it_was_is_not_played_again_this_fight(self):
+        policy = SpellTypePolicy()
+        guard = (Combatant("Field Guard", 300),)
+        first = policy.choose(view([self.SNAKE, self.CAT], enemies=guard))
+        played = [self.SNAKE, self.CAT][first.card].name
+        second = policy.choose(view([self.SNAKE, self.CAT], enemies=guard))
+        self.assertNotEqual([self.SNAKE, self.CAT][second.card].name, played)
+        policy.new_fight()
+        self.assertEqual(policy.choose(view([self.SNAKE, self.CAT], enemies=guard)), first)
+
+    def test_finishing_one_of_two_alike_enemies_is_an_effect(self):
+        policy = SpellTypePolicy()
+        two = (Combatant("Lost Soul", 55), Combatant("Lost Soul", 55))
+        first = policy.choose(view([self.CAT, self.SNAKE], enemies=two))
+        self.assertEqual(policy.choose(view([self.CAT, self.SNAKE], enemies=two[:1])).card, first.card)
 
 
 class MenuQuestTest(unittest.TestCase):
