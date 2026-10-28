@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from typing import Literal, Protocol
 
+from .sidequests import QUEST_FINDER
 from .strategies import COMBAT_STRATEGIES, MOST_DANGEROUS, CombatStrategy, fight_situation
 
 ATTACK_TARGETS = {"Damage": "enemy", "Steal": "enemy", "AOE": "all enemies"}
@@ -23,6 +24,7 @@ ENEMY_DAMAGE_PER_PIP = 125
 SIDE_QUEST_OFFER_PHRASE = "offering you a side quest"
 ACCEPT, DECLINE, GO_BACK, STOP = "accept", "decline", "go back", "stop"
 LEAVE_MENU = "leave menu"
+SERVICE_WORDS = ("shop", "trading", "trade", "rematch", "vendor", "bazaar", "sell", "buy", "train")
 UNIVERSAL = "Universal"
 
 
@@ -338,6 +340,14 @@ def same_title(a: str | None, b: str | None) -> bool:
     return a is not None and b is not None and a.strip().casefold() == b.strip().casefold()
 
 
+def first_quest_option(options: list[str]) -> int | str:
+    """The first option of an NPC's menu that names a quest rather than a service, else LEAVE_MENU. The giver the
+    journal's Quest Finder pointed to in Olde Town offered ['Wizards in the Mist', 'Recipe Shop', 'Rematch Trading'],
+    and the menu was left, since no option was named for the active quest, the Quest Finder itself."""
+    return next((index for index, option in enumerate(options)
+                 if not any(word in option.lower() for word in SERVICE_WORDS)), LEAVE_MENU)
+
+
 def index_of(options: list[str], title: str) -> int | None:
     return next((index for index, option in enumerate(options) if same_title(option, title)), None)
 
@@ -393,6 +403,8 @@ class TakeAllQuests(MainQuestsOnly):
         return ACCEPT
 
     def choose_service(self, options: list[str], *, active_quest: str | None, business_here: bool) -> int | str | None:
+        if active_quest is not None and same_title(active_quest, QUEST_FINDER):
+            return first_quest_option(options)
         choice = super().choose_service(options, active_quest=active_quest, business_here=business_here)
         if choice is None and active_quest is None and options:
             return 0

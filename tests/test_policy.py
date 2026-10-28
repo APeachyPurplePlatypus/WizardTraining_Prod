@@ -72,6 +72,18 @@ class StrategyPolicyTest(unittest.TestCase):
         self.assertIsInstance(SpellTypePolicy(COMBAT_STRATEGIES[3]).choose(round_one), Pass)
 
 
+class QuestFinderMenuTest(unittest.TestCase):
+    def test_at_the_quest_finders_giver_the_first_quest_is_taken_not_a_shop(self):
+        policy = TakeAllQuests()
+        menu = ["Wizards in the Mist", "Recipe Shop", "Rematch Trading"]
+        self.assertEqual(policy.choose_service(menu, active_quest="Quest Finder", business_here=False), 0)
+        self.assertEqual(policy.choose_service(["Recipe Shop", "Wizards in the Mist"], active_quest="Quest Finder",
+                                               business_here=False), 1)
+        self.assertEqual(policy.choose_service(["Recipe Shop", "Rematch Trading"], active_quest="Quest Finder",
+                                               business_here=False), LEAVE_MENU)
+        self.assertEqual(policy.choose_service(menu, active_quest="Looking Sharp!", business_here=False), LEAVE_MENU)
+
+
 class SpellTypePolicyTest(unittest.TestCase):
     policy = SpellTypePolicy()
 

@@ -95,6 +95,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **At the giver the Quest Finder points to, the menu's first quest is taken** (`policy.first_quest_option`).
+  - **What:** with the journal's Quest Finder the active quest, an NPC's services menu is answered with its first option that names a quest rather than a service (a shop, trading, training and the like), and left when it has none.
+  - **Why:** the Quest Finder's second giver in Wizard City, in Olde Town (00:15), offered ['Wizards in the Mist', 'Recipe Shop', 'Rematch Trading']; the menu was left each time, since no option was named for the active quest, until the run stopped for a menu that kept reopening.
+  - **Verified:** offline (`tests/test_policy.py`). In the game: not yet.
+
 - **"The Gravulum Order" is passed over while Colossus Boulevard is closed** (`sidequests.UNSUPPORTED`).
   - **What:** the quest is listed as one the framework cannot do yet, with the reason, so `--clear-world` goes on to the next quest or the Quest Finder's next giver instead of walking into the closed tunnel.
   - **Why:** the first giver the Quest Finder led to in Wizard City (Ravenwood, 00:07) gave "The Gravulum Order", whose goal is in Colossus Boulevard. Its tunnel from the Shopping District is closed: a blocker (`BigGenericBlocker_CollossusGate`) stops the wizard about 100 units short of the gate's trigger (`DynaTrigger_WC_GateCommons`), with no prompt and no message, and the walk strategies went round it from 00:08 to 00:12. Players say Merle Ambrose opens it once Wizard City's other assignments are done, and that it may need a membership.
