@@ -956,7 +956,8 @@ class QuestLoop:
                 return await self.explore_turn(goal, goals)
             if arrow is None and self.record.clearing_world:
                 return await self.park_the_active_quest(f"the quest arrow shows no target for its {goal['type']} goal "
-                                                        "and no open goal's zone can be walked to")
+                                                        "and no open goal's zone can be walked to",
+                                                        title=quest.get("title"))
             if arrow is None:
                 raise StopRun(f"the quest arrow shows no target for the {goal['type']} goal of "
                               f"{quest.get('title') or quest['name_key']}, and neither its tags {goal.get('tags')} "
@@ -2124,10 +2125,11 @@ class QuestLoop:
         self.record.wanted_reagents[reagent] = turn["quest"]
         return turn
 
-    async def park_the_active_quest(self, why: str) -> dict:
+    async def park_the_active_quest(self, why: str, title: str | None = None) -> dict:
         """While clearing a world, the active quest is parked until the next level (`progress.parked`) and the world's
-        other quests go on; otherwise the run stops for the operator."""
-        title = " ".join(((self.record.quest or {}).get("title") or "").split())
+        other quests go on; otherwise the run stops for the operator. `title` when the turn has not yet noted the
+        active quest (`record.quest`)."""
+        title = " ".join((title or (self.record.quest or {}).get("title") or "").split())
         level = (await snapshot(self.client))["level"]
         if not self.record.clearing_world or not title or not isinstance(level, int):
             raise StopRun(f"{why}; left for the operator")

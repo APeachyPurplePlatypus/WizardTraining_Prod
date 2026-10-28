@@ -140,6 +140,9 @@ ZONE_PARENT = {"WizardCity/WC_Ravenwood_Teleporter": RAVENWOOD, "WizardCity/WC_G
 # the Shopping District, Unicorn Way and Golem Court (its "WC_Golem_Tower Hub Exit"); the Shopping District to Olde Town; Olde Town to Triton Avenue, Cyclops Lane
 # and Firecat Alley; Triton Avenue to the Haunted Cave; Cyclops Lane to the Dark Cave.
 DOWN_VOLUMES = {(SHOPPING_DISTRICT, OLDE_TOWN): "Shop Area to Street2"}
+UP_VOLUMES = {DARK_CAVE: "Cavern to Street3"}
+# The Dark Cave's two ways out are named for the streets they lead to; Street3 is Cyclops Lane (its own way out is
+# "Street3 Street2 Exit"), the one toward the Commons. Its zone file names no hub or exit volume.
 AREA_ZONES = {"Cyclops Lane": CYCLOPS, "Firecat Alley": FIRECAT, "Triton Avenue": TRITON, "Unicorn Way": UNICORN_WAY,
               "Olde Town": OLDE_TOWN, "Shopping District": SHOPPING_DISTRICT}
 # The area names the spellbook's quest page shows (`txtWorld`), for the zones they are.
@@ -180,7 +183,9 @@ def way_toward_zone(zone: str | None, target: str, volume_names: list[str]) -> W
     if following is None:
         return None
     if ZONE_PARENT.get(zone) == following:
-        out = way_out_toward_the_commons(volume_names)
+        hint = UP_VOLUMES.get(zone)
+        out = way_out_toward_the_commons(volume_names) or next(
+            (name for name in volume_names if hint and hint.lower() in name.lower()), None)
         return Way(VOLUME, out) if out else None
     if hint := DOWN_VOLUMES.get((zone, following)):
         name = next((name for name in volume_names if hint.lower() in name.lower()), None)
