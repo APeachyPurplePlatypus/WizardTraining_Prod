@@ -77,11 +77,22 @@ def is_game_notice(title: str, buttons: list[str]) -> bool:
     return title.strip().lower() == GAME_NOTICE_TITLE and buttons == GAME_NOTICE_BUTTONS
 
 
-def prompt_for_a_talk(in_range, prompt: str, *, talk_only: bool) -> bool:
-    """The interact prompt shows and, for a talk, reads "to Talk". By Private Emerson in Cyclops Lane another prompt
-    showed (one that teleports), X was pressed for the talk three times, and each took the wizard 17,000 units to the
-    top of the lane (2026-10-28, 08:14 to 08:22)."""
-    return in_range is True and (not talk_only or prompt_offers_talk(prompt))
+TALK, USE = "talk", "use"
+
+
+def prompt_fits(in_range, prompt: str, *, wants: str | None) -> bool:
+    """The interact prompt shows and is for what X is pressed for: a talk's reads "to Talk", a quest object's anything
+    else. By Private Emerson in Cyclops Lane another prompt showed (one that teleports), X was pressed for the talk
+    three times, and each took the wizard 17,000 units to the top of the lane (2026-10-28, 08:14 to 08:22). By the
+    Golem Court seedling of "The Facts of Life", 110 units from it, the prompt was Farley's "to Talk", 416 units away,
+    and each X opened his shop menu (09:40)."""
+    if in_range is not True:
+        return False
+    if wants == TALK:
+        return prompt_offers_talk(prompt)
+    if wants == USE:
+        return not prompt_offers_talk(prompt)
+    return True
 
 
 def prompt_offers_talk(prompt: str) -> bool:

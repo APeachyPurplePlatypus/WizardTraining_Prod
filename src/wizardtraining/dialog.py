@@ -23,7 +23,7 @@ from .movement import face_and_step
 from .policy import ACCEPT, DECLINE, GO_BACK, OfferPolicy
 from .state import attempt
 from .targets import close_enough
-from .screen import prompt_for_a_talk
+from .screen import TALK, USE, prompt_fits
 from .ui import click, click_window, interact_prompt_text, showing, text_of, window_at
 
 ADVANCE_BUTTON = ["WorldView", "wndDialogMain", "btnRight"]
@@ -116,14 +116,15 @@ async def prompt_is_for(client, npc_position) -> bool:
 
 
 async def walk_up_to(client, position, within: float = TALK_DISTANCE, *, trust_prompt: bool = True,
-                     talk_only: bool = False) -> list[dict]:
-    """Face the NPC or object and creep closer until X would reach this one and not another nearby. For a talk
-    (`talk_only`), a prompt that does not read "to Talk" counts as no prompt (`screen.prompt_for_a_talk`)."""
+                     wants: str | None = None) -> list[dict]:
+    """Face the NPC or object and creep closer until X would reach this one and not another nearby. A prompt that is
+    not for what X is pressed for (`wants`: a talk or a quest object's use) counts as no prompt
+    (`screen.prompt_fits`)."""
     nudges = []
     for _ in range(MAX_NUDGES):
         distance = flat_distance(await client.body.position(), position)
-        prompt_showing = prompt_for_a_talk(await attempt(client.is_in_npc_range()),
-                                           await interact_prompt_text(client), talk_only=talk_only)
+        prompt_showing = prompt_fits(await attempt(client.is_in_npc_range()), await interact_prompt_text(client),
+                                     wants=wants)
         prompt_for_this_one = trust_prompt and prompt_showing and await prompt_is_for(client, position)
         nudges.append({"distance": round(distance, 1), "in_range": prompt_showing, "within": within,
                        "prompt_for_this_one": prompt_for_this_one})
@@ -182,7 +183,7 @@ async def talk(client, npc_position, record: dict, offers: OfferPolicy, *, trust
     friendly NPC nearest the arrow is enough (it lets the wizard talk across a counter); without it, the
     wizard walks right up to the arrow first, for when a trusted prompt turned out to be someone else's."""
     if not await dialog_open(client):
-        record["nudges"] = nudges = await walk_up_to(client, npc_position, trust_prompt=trust_prompt, talk_only=True)
+        record["nudges"] = nudges = await walk_up_to(client, npc_position, trust_prompt=trust_prompt, wants=TALK)
         if not close_enough(nudges):
             return "could not get close enough to the quest NPC to talk"
         await tap(client, Keycode.X, TALK_KEY_SECONDS)
@@ -192,7 +193,7 @@ async def talk(client, npc_position, record: dict, offers: OfferPolicy, *, trust
 
 
 async def use_object(client, position, record: dict, offers: OfferPolicy) -> str:
-    record["nudges"] = nudges = await walk_up_to(client, position, within=OBJECT_USE_DISTANCE)
+    record["nudges"] = nudges = await walk_up_to(client, position, within=OBJECT_USE_DISTANCE, wants=USE)
     if not close_enough(nudges):
         return "could not get close enough to the quest object to use it"
     await tap(client, Keycode.X, TALK_KEY_SECONDS)

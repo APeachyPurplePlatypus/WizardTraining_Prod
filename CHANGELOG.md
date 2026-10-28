@@ -128,6 +128,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **X at a quest object waits for the object's own prompt, not a person's** (`screen.prompt_fits`, `dialog.walk_up_to`, `dialog.use_object`).
+  - **What:** when using a quest object (or gathering a reagent), a prompt that reads "to Talk" is a person's nearby, and counts as no prompt: the wizard keeps stepping closer to the object until another prompt shows. A talk still needs a "to Talk" prompt, as before.
+  - **Why:** "The Facts of Life" (from Farley's menu, through the Quest Finder) asks to look at a seedling in Golem Court. The wizard stood 110 units from the "WC_Gardening_Plant_Seedling" with Farley's "to Talk" prompt showing; Farley was 416 units away. Each X opened his shop menu, and the run stopped after four (09:40).
+  - **Verified:** the prompt and the entities read in the game (09:41); offline (`tests/test_screen.py`).
+
 - **A scavenge goal recharges first, as any other goal** (`QuestLoop.recharge_first_turn`).
   - **What:** before a scavenge goal's search, the wizard recharges after a defeat or below 40% health, and refills mana below the travel line, as the usual refills do for other goals (not in a tower, nor in a dungeon refilled in place).
   - **Why:** the scavenge branch came before the refills, and the wizard searched Cyclops Lane for Mist Wood at 409 of 1133 among its Cyclops (08:51).
