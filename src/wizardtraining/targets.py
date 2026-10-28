@@ -128,6 +128,17 @@ def next_area_to_explore(points: list, *, me, explored=(), prefer=()) -> tuple |
     return min(preferred or left, key=lambda point: flat_distance(me, point[0]), default=None)
 
 
+def area_in_zone(points: list, *, me, explored: list, leaves_the_zone) -> tuple | None:
+    """The nearest exploration point not explored yet that is not reached only through a door out of the zone
+    (`leaves_the_zone`, given the point); the points that are, are added to `explored`. Woken in the Krokotopia hub
+    with 19 health, the search for health wisps walked into the hub's World Spiral entrance and left the hub."""
+    while (area := next_area_to_explore(points, me=me, explored=explored)) is not None:
+        if not leaves_the_zone(area[0]):
+            return area
+        explored.append((round(area[0][0]), round(area[0][1])))
+    return None
+
+
 def keeps_blocking(dodge_times: list[float], *, now: float) -> bool:
     """True once the wizard has stepped away DODGES_BEFORE_WAITING times in DODGE_MEMORY_SECONDS: enemies patrol
     the way ahead, and walking on as soon as they are out of reach only leads back into them."""

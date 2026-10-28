@@ -65,7 +65,7 @@ from .spells import KNOWN_AT_FIRST_CHECK, LEARNED, SpellLog, learned_text, newly
 from .session import NoClient, attached, hooks_ready
 from .state import attempt, battle_showing, free_to_move, health_fraction, mana_fraction, snapshot
 from .placed import gate_toward, objects_for_goal
-from .targets import (bystanders, enemies_to_route_around, in_grace_after_battle, keeps_blocking,
+from .targets import (area_in_zone, bystanders, enemies_to_route_around, in_grace_after_battle, keeps_blocking,
                       leads_to_another_zone, named_enemies_not_in_a_duel, next_area_to_explore, others, quest_targets,
                       refill_reach, safe_wisps,
                       summary, too_close, WISP_REACH)
@@ -1439,16 +1439,17 @@ class QuestLoop:
                                      again: bool = True) -> dict | None:
         """Walk to the nearest part of the zone not explored for this kind of wisp yet, stopping as soon as an
         untried one loads within `reach`, the distance the refill fetches from (`targets.refill_reach`). Once every
-        part has been seen, start over, since used-up wisps come back; or, with `again` false, None."""
+        part has been seen, start over, since used-up wisps come back; or, with `again` false, None. Parts reached
+        only through a door not known to stay in the zone are skipped (`area_to_search`)."""
         kind = HEALTH_WISP if stat == "health" else MANA_WISP
         explored = self.record.explored.setdefault(f"{state['zone']}|{kind}s", [])
         me = await self.client.body.position()
-        area = next_area_to_explore(planner.exploration_points, me=(me.x, me.y), explored=explored)
+        area = self.area_to_search(planner, state["zone"], me, explored)
         if area is None and not again:
             return None
         if area is None:
             explored.clear()
-            area = next_area_to_explore(planner.exploration_points, me=(me.x, me.y))
+            area = self.area_to_search(planner, state["zone"], me, explored)
         if area is None:
             return stalled(f"too little {stat} for the fight, and no part of this zone to look for {kind}s in")
         (x, y), _ = area
@@ -1467,6 +1468,17 @@ class QuestLoop:
         if turn.get("trip", {}).get("reason") in (None, f"{kind} in sight", "every route method failed"):
             explored.append((round(x), round(y)))
         return turn
+
+    def area_to_search(self, planner: RoutePlanner, zone: str, me, explored: list):
+        """`targets.area_in_zone`: a part of the zone reached without a teleport volume not known to stay in it."""
+        outcomes, failed = self.record.teleport_outcomes.get(zone, {}), self.record.failed_gaps.get(zone, [])
+
+        def leaves_the_zone(point) -> bool:
+            way = planner.way_across(me, XYZ(point[0], point[1], 0.0), outcomes, failed)
+            return isinstance(way, TeleportVolume) and not isinstance(outcomes.get(way.name), int)
+
+        return area_in_zone(planner.exploration_points, me=(me.x, me.y), explored=explored,
+                            leaves_the_zone=leaves_the_zone)
 
     async def persona_turn(self, arrow, goal: dict) -> dict:
         """Walk to the arrow's NPC and talk. A talk that leaves the goal open reached the wrong NPC: it is not

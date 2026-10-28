@@ -6,7 +6,7 @@ from wizardtraining.targets import (AFTER_BATTLE_GRACE_SECONDS, ENEMY_CLEARANCE,
                                     back_away, bystanders, detour, enemies_to_route_around, in_grace_after_battle,
                                     is_duel_circle, is_dungeon_entrance, keeps_blocking, leads_to_another_zone,
                                     measured, named_enemies_not_in_a_duel,
-                                    next_area_to_explore, others, quest_targets,
+                                    next_area_to_explore, others, quest_targets, area_in_zone,
                                     refill_reach, safe_wisps, threat_centre, too_close)
 
 
@@ -82,6 +82,14 @@ class TargetsTest(unittest.TestCase):
         self.assertEqual(next_area_to_explore(points, me=(0, 0)), ((0, 1000), 0))
         self.assertEqual(next_area_to_explore(points, me=(0, 0), explored=[(0, 1000)]), ((0, 3000), 1))
         self.assertIsNone(next_area_to_explore(points, me=(0, 0), explored=[(0, 1000), (0, 3000), (0, 5000)]))
+
+    def test_a_wisp_search_skips_parts_reached_only_through_a_door_out_of_the_zone(self):
+        points = [((0, 1000), 0), ((0, 3000), 1)]
+        explored = []
+        self.assertEqual(area_in_zone(points, me=(0, 0), explored=explored,
+                                      leaves_the_zone=lambda point: point == (0, 1000)), ((0, 3000), 1))
+        self.assertEqual(explored, [(0, 1000)])
+        self.assertIsNone(area_in_zone(points, me=(0, 0), explored=[], leaves_the_zone=lambda point: True))
 
     def test_preferred_pieces_are_explored_first(self):
         points = [((0, 5000), 0), ((0, 1000), 0), ((0, 3000), 1)]

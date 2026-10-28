@@ -90,6 +90,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **A search for wisps stays in its zone.**
+  - **What:** a part of the zone reached only through a teleport volume not known to stay in the zone is skipped and counted as searched (`targets.area_in_zone`, `QuestLoop.area_to_search`).
+  - **Why:** woken in the Krokotopia hub with 19 health at 23:44, the search for health wisps walked into the hub's World Spiral entrance and left the hub for the world teleporter room.
+  - **Verified:** offline (`tests/test_targets.py`). In the game: not yet.
+
 - **A strategy that heals earlier no longer passes round after round to save pips for a heal.**
   - **What:** pips are saved for a heal only in danger (below 40% health, or within reach of the enemies' saved-up hit), whatever the strategy's heal line. Between 40% and "heal earlier"'s 60%, a castable heal is still cast first; without one, the wizard attacks.
   - **Why:** at 23:03 to 23:05, playing "heal earlier" against two Nirini Sentries, the wizard passed for Pixie at 49%, healed, fell below 60% again and passed again, while the last Sentry stood at 220 health for eight rounds.
