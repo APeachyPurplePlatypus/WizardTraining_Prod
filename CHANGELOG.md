@@ -168,6 +168,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **A photo is kept: "Keep Picture" in the preview, then the Viewfinder is closed** (`photomancy.keep_the_picture`, `photomancy.take_photo`; docs/safety.md).
+  - **What:** after "Take Picture", the photo's preview ("Keep Picture", "Trash Picture") is answered with "Keep Picture", then the Viewfinder is closed with its own button; a preview left open by an earlier photo is kept first.
+  - **Why:** in Golem Court (11:44) the preview waited for an answer; the step expected the Viewfinder's close button, took a second shot, and parked "Say Cheese!" with the goal open, and while the preview showed, the spellbook's Quest tab could not be opened, so the run stopped after turns without progress. The operator, 2026-10-28, 16:08 UTC: "Approve and keep picture".
+  - **Verified:** the preview's windows read in the game (11:48); offline (imports, tests).
+
 - **A reagent's "to Collect" is not taken for a door, and no Recall from inside the goal's zone** (`screen.prompt_is_not_a_doors`, `progress.worth_recalling`).
   - **What:** near a door's arrow, an interact prompt whose action is Talk, Collect, Use, Open or Read is not a door's, so no Mark is set and no X pressed for it. Recall toward the goal is not pressed while the wizard is already in the goal's zone.
   - **Why:** leaving the Dark Cave (11:39), a reagent's "to Collect" prompt by the way out was taken for the door's: the wizard set a Mark there "before entering" Cyclops Lane and pressed X. In Cyclops Lane, the goal's zone, it then recalled to that Mark in the Dark Cave, and walked back out.
