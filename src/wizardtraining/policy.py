@@ -43,6 +43,7 @@ class Card:
     accuracy: int | None = None
     effects: tuple[str, ...] = ()
     enchanted: bool = False
+    item_card: bool = False
 
     def hit_chance(self) -> float:
         """The card's accuracy as a fraction; 1 when it could not be read."""
@@ -178,10 +179,17 @@ class SpellTypePolicy:
         self.essence_from = essence_from
         self._strategy_chosen = False
         self._extracted = False
+        self._enchant_refused: set[str] = set()
 
     def new_fight(self) -> None:
         self._strategy_chosen = False
         self._extracted = False
+        self._enchant_refused = set()
+
+    def enchant_refused(self, card_name: str | None) -> None:
+        """The enchantment onto this card did not take: it is not tried again this fight, and with no card left to
+        try, the fight is played without extracting."""
+        self._enchant_refused.add(card_name or "")
 
     def choose(self, view: RoundView) -> Cast | Enchant | Pass | Flee | None:
         if self.strategy_for is not None and not self._strategy_chosen and view.enemies:
@@ -192,7 +200,7 @@ class SpellTypePolicy:
         fraction = view.health_fraction()
         wanted = self.essence_from() if self.essence_from is not None and not self._extracted else set()
         if wanted and (fraction is None or fraction >= LOW_HEALTH_FRACTION):
-            extraction = extract_essence(view, wanted)
+            extraction = extract_essence(view, wanted, refused=self._enchant_refused)
             if isinstance(extraction, Cast):
                 self._extracted = True
             if extraction is not None:
@@ -239,9 +247,11 @@ def is_extract(card: Card) -> bool:
     return EXTRACT_EFFECT in card.effects or (card.name or "").lower().startswith("extract ")
 
 
-def extract_essence(view: RoundView, wanted: set[str]) -> Cast | Enchant | None:
+def extract_essence(view: RoundView, wanted: set[str], refused: set[str] = frozenset()) -> Cast | Enchant | None:
     """With an enemy in the fight whose essence a goal needs: hit it with a castable enchanted attack, else enchant
-    the cheapest castable single-target attack with an Extract spell in hand. Gilda Burke ("Know Thine Enemy"):
+    the cheapest castable single-target attack of the deck with an Extract spell in hand (not an item card, such
+    as a wand's, nor one an enchantment was refused onto this fight: onto "Dark Sprite - Starter Wand" none took, and
+    the wizard passed seven rounds against a Lost Soul, 1071 to 546 health, 10:22). Gilda Burke ("Know Thine Enemy"):
     Extract spells "enchant damage spells, which can then capture an enemy's very essence"; an enchanted spell that
     deals damage extracts one Animus, a defeating hit one more, and the duel must be won to collect it. None when
     there is no such enemy, or the hand cannot do it this round."""
@@ -254,8 +264,12 @@ def extract_essence(view: RoundView, wanted: set[str]) -> Cast | Enchant | None:
     extract = first_castable(view.cards, is_extract)
     attacks = [index for index, card in enumerate(view.cards)
                if card.castable and not card.enchanted and card.spell_type in SINGLE_TARGET_ATTACKS]
-    if extract is not None and attacks:
-        return Enchant(extract, min(attacks, key=lambda index: view.cards[index].pips or 1))
+    enchantable = [index for index in attacks
+                   if not view.cards[index].item_card and (view.cards[index].name or "") not in refused]
+    if extract is not None and enchantable:
+        return Enchant(extract, min(enchantable, key=lambda index: view.cards[index].pips or 1))
+    if extract is not None and refused:
+        return None
     return spare_the_victim(view, victims, attacks)
 
 

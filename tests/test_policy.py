@@ -400,6 +400,14 @@ class ExtractTest(unittest.TestCase):
         self.assertEqual(self.policy().choose(view([self.BEETLE, freeze], enemies=alone)), Cast(1, "enemy", 0))
         self.assertEqual(self.policy().choose(view([self.BEETLE], enemies=alone)), Cast(0, "enemy", 0))
 
+    def test_an_item_card_or_a_refused_card_is_not_enchanted(self):
+        wand = Card("Dark Sprite - Starter Wand", "Damage", True, "Death", 1, item_card=True)
+        souls = (Combatant("Lost Soul", 55),)
+        self.assertEqual(self.policy().choose(view([wand, self.EXTRACT, self.SERPENT], enemies=souls)), Enchant(1, 2))
+        policy = self.policy()
+        policy.enchant_refused("Snow Serpent")
+        self.assertEqual(policy.choose(view([wand, self.EXTRACT, self.SERPENT], enemies=souls)), Cast(0, "enemy", 0))
+
     def test_low_health_heals_before_extracting(self):
         round_view = view([self.EXTRACT, self.BEETLE, HEAL], health=100, enemies=self.SOULS)
         self.assertEqual(self.policy().choose(round_view), Cast(2, "self"))

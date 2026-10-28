@@ -1996,6 +1996,8 @@ class QuestLoop:
             return None
         if in_dungeon(state["zone"], self.record.entered_with_x):
             return None
+        if self.record.recharging or not health_to_travel(health_fraction(state)):
+            return None
         if not await self.safe_here() and not await self.no_enemy_within(DECK_EDIT_CLEARANCE):
             return None
         self._deck_checked = key

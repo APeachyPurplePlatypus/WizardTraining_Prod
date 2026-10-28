@@ -148,6 +148,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **An Extract spell enchants only a deck card, and an enchantment that does not take is not tried again on that card** (`policy.extract_essence`, `SpellTypePolicy.enchant_refused`, `combat.play_round`).
+  - **What:** item cards (a wand's, such as "Dark Sprite - Starter Wand") are not enchanted. After an enchantment, the hand is read again; when no card in it is enchanted, that card is refused for the fight and the policy chooses again, up to twice a round; with no card left to try, the round is played without extracting, never passed for it.
+  - **Why:** in the second Lost Soul fight (10:22, Unicorn Way) Extract Undead was in hand ("CollectEssenceUndead"); it was played onto "Dark Sprite - Starter Wand", the cheapest attack, and did not take, so each round passed ("a second enchantment in one round") while the Lost Soul took the wizard from 1071 to 546 health in seven rounds.
+  - **Verified:** offline (`tests/test_policy.py`); in the game: the fight's rounds (10:22:33 to 10:24:08).
+
 - **"Say Cheese!" is passed over: its goal is a Photo** (`sidequests.UNSUPPORTED`).
   - **What:** the quest is listed as one the framework cannot do, so the clearing goes on to the next giver instead of searching zones for its scavenge item.
   - **Why:** the Quest Finder led to Annie in Golem Court (10:16), whose quest asks for a Photo taken with Photomancy's Viewfinder, opened with Z or the spellbook's Photomancy page. Z is not an allowed key, and that page is not among the allowed clicks. The scavenge goal names "Photomancy", and the ground of Golem Court was searched for it as if it were a reagent (10:17).
