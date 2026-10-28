@@ -134,7 +134,6 @@ DECK_RETRY_SECONDS = 60.0
 PHOTO_TRIES = 2
 RECALL_WAIT_CAP_SECONDS = 180.0
 SEARCH_WALKS_BEFORE_STANDING = 3
-MARK_CLEARANCE = 1500.0
 PHOTO_DISTANCE = 600.0
 PHOTO_SUBJECT_TRIES = 4
 DECK_EDIT_CLEARANCE = 3000.0
@@ -182,6 +181,7 @@ class QuestLoop:
         self._photos_taken = 0
         self._trip_stat: str | None = None
         self._trip_started = 0.0
+        self._mark_position = None
         self._refill_after_heavy_fight = False
         self._level_table: dict[int, int] | None = None
         self._experience: tuple[int, int] | None = None
@@ -1707,11 +1707,8 @@ class QuestLoop:
         if mark and self._marked_in is None and isinstance(state["mana"], int) and state["mana"] >= MARK_MANA_NEEDED:
             if await self.kept_mark_in(zone):
                 self._marked_in = zone
-                self.events.emit("travel", f"keeping the mark already set in {zone} ({self.record.mark_tip}) for the "
-                                           f"way back")
-            elif zone in self.record.zones_with_enemies and not await self.no_enemy_within(MARK_CLEARANCE):
-                self.events.emit("travel", f"not marking in {zone}: an enemy is within {MARK_CLEARANCE:.0f}, where a "
-                                           f"Recall back would land; walking back instead")
+                self.events.emit("travel", f"keeping the mark already set in {zone}, nearer the goal than here, for "
+                                           f"the way back")
             else:
                 await self.mark_before_the_trip(zone, stat)
         if must_come_back and self._marked_in != zone:
@@ -1719,11 +1716,15 @@ class QuestLoop:
         return await self.go_home_for(stat, state)
 
     async def kept_mark_in(self, zone: str) -> bool:
-        """The Recall button still names the mark recorded for `zone`, such as the one set on arriving in the goal's
-        zone (`mark_the_goal_zone`), so a trip from here can Recall to it rather than mark again. On Colossus
-        Boulevard a Commons trip marked over the arrival mark where a battle had just ended, and the Recall back landed
-        in the next fight among the same Snowmen (14:45)."""
-        if self.record.marked_in != zone or not self.record.mark_tip:
+        """The Recall button still names the mark recorded for `zone`, set this run nearer the goal's arrow than the
+        wizard is now, so a trip from here Recalls to it rather than marking over it. Otherwise a mark here keeps the
+        ground won: on Colossus Boulevard the quest object lay about 6,600 past the fights, each fight a step nearer,
+        and a mark where a battle had just ended brought the wizard back there, into the next fight (14:45)."""
+        arrow = (self.record.quest or {}).get("arrow")
+        if self.record.marked_in != zone or not self.record.mark_tip or self._mark_position is None or not arrow:
+            return False
+        goal = XYZ(arrow["x"], arrow["y"], 0.0)
+        if flat_distance(self._mark_position, goal) >= flat_distance(await self.client.body.position(), goal):
             return False
         return await has_mark(self.client) and await recall_tip(self.client) == self.record.mark_tip
 
@@ -1736,6 +1737,7 @@ class QuestLoop:
         self._marked_in = zone if problem is None else None
         if problem is None:
             self.record.marked_in, self.record.mark_tip = zone, await recall_tip(self.client)
+            self._mark_position = await self.client.body.position()
             self.record.mark_purpose, self.record.mark_quest = FOR_A_REFILL, None
             self.record.mark_door_for = None
 
@@ -1806,6 +1808,7 @@ class QuestLoop:
             self.events.emit("travel", f"could not mark the way back in {here}: {problem}")
             return
         self.record.marked_in, self.record.mark_tip = here, await recall_tip(self.client)
+        self._mark_position = await self.client.body.position()
         self.record.mark_purpose, self.record.mark_quest = WAY_BACK, quest_name
         self.record.mark_door_for = None
         self.events.emit("travel", f"marked the way back in {here} before leaving for {goal_zone} "
@@ -1867,6 +1870,7 @@ class QuestLoop:
             self.events.emit("travel", f"could not mark the spot in {zone}: {problem}")
             return
         self.record.marked_in, self.record.mark_tip = zone, await recall_tip(self.client)
+        self._mark_position = await self.client.body.position()
         self.record.mark_purpose, self.record.mark_quest = AFTER_A_DEFEAT, None
         self.record.mark_door_for = None
         self.events.emit("travel", f"marked the spot in {zone}, the goal's zone, to recall to after a defeat "
@@ -2606,6 +2610,7 @@ class QuestLoop:
             self.events.emit("travel", f"could not mark the door in {zone}: {problem}")
             return
         self.record.marked_in, self.record.mark_tip = zone, await recall_tip(self.client)
+        self._mark_position = await self.client.body.position()
         self.record.mark_purpose, self.record.mark_quest = AFTER_A_DEFEAT, None
         self.record.mark_door_for = goal_zone
         self.events.emit("travel", f"marked the door in {zone} before entering {goal_zone}, to recall to after a "

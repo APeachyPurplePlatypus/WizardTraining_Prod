@@ -207,9 +207,9 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
-- **A refill trip keeps a clean mark and does not mark among enemies** (`QuestLoop.kept_mark_in`, `loop.MARK_CLEARANCE`).
-  - **What:** before Go Home for a refill, the wizard keeps the mark the Recall button already names for this zone (such as the one set on arriving in the goal's zone) rather than marking again; with no such mark, in a zone with enemies, it marks only when no enemy is within 1,500, and otherwise walks back.
-  - **Why:** on Colossus Boulevard, a Commons trip marked where a battle had just ended, over the mark set on arrival; the Recall back landed in the next fight among the same Snowmen (14:45), and the quest object was not reached between 14:28 and 14:48: fight, Commons, Recall into a fight. The coordinator suggested it.
+- **A refill trip keeps a mark nearer the goal rather than marking over it** (`QuestLoop.kept_mark_in`).
+  - **What:** before Go Home for a refill, the wizard keeps the mark the Recall button already names for this zone when that mark, set this run, is nearer the goal's arrow than the wizard is; otherwise it marks where it stands, as before.
+  - **Why:** the coordinator asked that a refill trip not mark among enemies, since on Colossus Boulevard a Recall back landed in the next fight (14:45). A first version (d9bf442) skipped the mark with an enemy within 1,500 and kept any earlier mark; but the quest object lies about 6,600 past the fights, each fight a step nearer, and enemies are within 1,500 after nearly every battle there, so the wizard would have walked back from the Commons, or recalled to the entrance, and lost that ground. A Recall into a fight at refilled health is the cheaper way on.
   - **Verified:** offline (imports, tests); the code that presses Go Home is unchanged, moved into `QuestLoop.go_home_for`.
 
 - **A Mark Location press that leaves no mark is pressed once more, and the failure says what the game showed** (`gametravel.mark_here`, `gametravel.press_mark`).
