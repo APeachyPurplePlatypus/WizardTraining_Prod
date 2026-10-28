@@ -128,6 +128,17 @@ def next_area_to_explore(points: list, *, me, explored=(), prefer=()) -> tuple |
     return min(preferred or left, key=lambda point: flat_distance(me, point[0]), default=None)
 
 
+def letters_and_digits(text: str) -> str:
+    return "".join(character for character in text.lower() if character.isalnum())
+
+
+def is_reagent(entity_name: str, reagent: str) -> bool:
+    """A loaded entity is the reagent a scavenge goal asks for: its object name is the reagent's name without spaces,
+    then a number. In the Commons a Frosted Flax showed as "FrostedFlax_01"; "Mist Wood" shows as "MistWood_..."."""
+    key, name = letters_and_digits(reagent), letters_and_digits(entity_name)
+    return bool(key) and name.startswith(key) and name[len(key):].isdigit() and len(name) > len(key)
+
+
 BLOCKED_TALK_DISTANCE = 260.0
 STALLED_NUDGE_DISTANCE = 5.0
 

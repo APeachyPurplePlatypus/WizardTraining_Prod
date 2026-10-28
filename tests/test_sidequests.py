@@ -10,9 +10,6 @@ class UnsupportedQuestsTest(unittest.TestCase):
     def test_a_quest_in_closed_colossus_boulevard_is_unsupported(self):
         self.assertIn("Colossus Boulevard", unsupported_reason("The Gravulum Order"))
 
-    def test_a_reagent_gathering_quest_is_unsupported(self):
-        self.assertIn("Mist Wood", unsupported_reason("Wizards in the Mist"))
-
     def test_a_title_with_a_trailing_space_matches(self):
         self.assertIn("Lord Nightshade", unsupported_reason("The Lore You Know "))
 

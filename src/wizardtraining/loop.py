@@ -26,11 +26,11 @@ from wizwalker import XYZ, Keycode
 
 from .combat import approach, fight, fled_in
 from .config import Settings
-from .dialog import (DIALOG_FINISHED, FOLLOW_UP_WAIT_SECONDS, NPC_ARRIVE_DISTANCE, OFFER_LEFT_FOR_OPERATOR,
+from .dialog import (DIALOG_FINISHED, FOLLOW_UP_WAIT_SECONDS, NPC_ARRIVE_DISTANCE, OBJECT_USE_DISTANCE, OFFER_LEFT_FOR_OPERATOR,
                      TALK_KEY_SECONDS, choose_service, close_enough, dialog_open, leave_services, near_npc, read_conversation, service_options,
                      services_open, talk, use_object, wait_for_dialog)
 from .doors import CHANGE_START_SECONDS, change_begins, push_through
-from .entities import (HEALTH_WISP, MANA_WISP, dungeon_entrance_near, nearby_enemies, nearest_npc, step_away,
+from .entities import (objects_named, HEALTH_WISP, MANA_WISP, dungeon_entrance_near, nearby_enemies, nearest_npc, step_away,
                        surroundings, wisps)
 from .equipment import count_items, equip, read_items, read_wizard
 from .events import (EventLog, describe_battle, describe_changes, describe_round, dialog_text, enemies_at_once,
@@ -61,6 +61,7 @@ from .sidequests import (FINDER_SAME_GIVER_LIMIT, QUEST_FINDER, WORLD_DOOR, WORL
 from .strategies import (COMBAT_STRATEGIES, CROWD_STRATEGIES, NO_CLOSER_SECONDS, CombatStrategy, GoalApproach,
                          fight_situation, next_combat_strategy, next_walk_strategy)
 from .travelplan import (GO_HOME, HUBS, RECALL, TRAVEL_MANA_RESERVE, WALK, TravelCosts, choose_travel, link_zones,
+                         zone_hops,
                          spare_mana,
                          worth_a_way_back_mark, worth_going_home_for_wisps)
 from .screen import or_default, prompt_action, prompt_offers_talk
@@ -69,7 +70,7 @@ from .spells import KNOWN_AT_FIRST_CHECK, LEARNED, SpellLog, learned_text, newly
 from .session import NoClient, attached, hooks_ready
 from .state import attempt, battle_showing, free_to_move, health_fraction, mana_fraction, snapshot
 from .placed import gate_toward, objects_for_goal
-from .targets import (area_in_zone, bystanders, enemies_to_route_around, in_grace_after_battle, keeps_blocking,
+from .targets import (area_in_zone, is_reagent, bystanders, enemies_to_route_around, in_grace_after_battle, keeps_blocking,
                       leads_to_another_zone, named_enemies_not_in_a_duel, next_area_to_explore, others, quest_targets,
                       refill_reach, safe_wisps,
                       summary, too_close, WISP_REACH)
@@ -121,6 +122,8 @@ DEFEAT_ARRIVAL_SECONDS = 30.0
 ZONE_SAMPLE_SECONDS = (15.0, 180.0)
 WALK_SAMPLE_MOVED = 1500.0
 MAX_TELEPORTS_PER_GOAL = 2
+GATHER_SETTLE_SECONDS = 3.0
+GATHERED_FORGET_SECONDS = 120.0
 BOX_CLOSE_WAIT_SECONDS = 10.0
 BOX_CLOSE_POLL_SECONDS = 0.5
 WAY_BACK, AFTER_A_DEFEAT, FOR_A_REFILL = "way back", "after a defeat", "refill"
@@ -174,6 +177,8 @@ class QuestLoop:
         self._finder_givers: dict[tuple, int] = {}
         self._finder_just_activated = False
         self._walking_at: tuple[str, dict] | None = None
+        self._gathered: list[tuple[int, float]] = []
+        self._searched_for: dict[str, set[str]] = {}
         self._dungeons_give_nothing_back = False
         self._refill_fully = False
         self._fight_situation: str | None = None
@@ -875,6 +880,11 @@ class QuestLoop:
         if (arrow_shows_no_target(arrow) and goal_world and goal_world != here_world
                 and not self.record.limits.stay_in_world):
             return await self.to_the_world_turn(goal_world, state["zone"])
+        if goal["type"] == "scavenge" and arrow_shows_no_target(arrow):
+            self.record.quest = {"name": quest["name_key"], "title": quest.get("title"), "goal": goal["type"],
+                                 "goal_id": goal.get("id"), "main": quest["mainline"] is True, "goal_zone": "",
+                                 "arrow": None}
+            return await self.scavenge_turn(goal, state)
         if arrow_shows_no_target(arrow):
             if (travelled := await self.go_to_quest_area_turn(quest, goals)) is not None:
                 return travelled
@@ -1746,6 +1756,77 @@ class QuestLoop:
             return progressed("talk", result=result)
         return await self.travel_turn("travel to quest NPC", arrow, arrive_radius=NPC_ARRIVE_DISTANCE / 2,
                                       also=self.arrival_check(arrow), avoid=await nearby_enemies(self.client))
+
+    async def scavenge_turn(self, goal: dict, state: dict) -> dict:
+        """A scavenge goal: get a reagent ("Mist Wood", the goal's item) wherever it grows; its goal shows no arrow.
+        Walk to the nearest one loaded (`targets.is_reagent`) and use it with X, as a quest object; with none in
+        sight, search this zone, then the next open zone of the world not yet searched for it."""
+        reagent = await self.reagent_name(goal)
+        zone = state["zone"]
+        recent = {gathered for gathered, at in self._gathered if time.monotonic() - at < GATHERED_FORGET_SECONDS}
+        found = [found for found in await objects_named(self.client, lambda name: is_reagent(name, reagent))
+                 if found["id"] not in recent]
+        me = await self.client.body.position()
+        if found:
+            target = min(found, key=lambda found: flat_distance(me, found["position"]))
+            if flat_distance(me, target["position"]) <= OBJECT_USE_DISTANCE:
+                return await self.gather_turn(reagent, target)
+            return await self.travel_turn(f"walk to {reagent}", target["position"], arrive_radius=OBJECT_USE_DISTANCE / 2,
+                                          avoid=await nearby_enemies(self.client))
+        planner = await self.planner()
+        explored = self.record.explored.setdefault(f"{zone}|{reagent}", [])
+        if (area := self.area_to_search(planner, zone, me, explored)) is not None:
+            (x, y), _ = area
+
+            async def reagent_in_sight():
+                return f"{reagent} in sight" if await objects_named(self.client, lambda name: is_reagent(name, reagent)) else None
+
+            self.say_once("gather", f"no {reagent} in sight in {zone}; looking at ({x:.0f}, {y:.0f})")
+            turn = await self.travel_turn(f"look for {reagent}", XYZ(x, y, 0.0), arrive_radius=WAYPOINT_ARRIVE_RADIUS * 3,
+                                          also=reagent_in_sight, avoid=await nearby_enemies(self.client))
+            if turn.get("trip", {}).get("reason") in (None, f"{reagent} in sight", "every route method failed"):
+                explored.append((round(x), round(y)))
+            return turn
+        return await self.next_zone_for_reagent_turn(reagent, zone, planner)
+
+    async def reagent_name(self, goal: dict) -> str:
+        code = goal.get("item_code")
+        name = await game_language().text(code) if code else None
+        if not name:
+            raise StopRun(f"the scavenge goal names no item the game's text can name ({code}); left for the operator")
+        return name
+
+    async def gather_turn(self, reagent: str, target: dict) -> dict:
+        """Use the reagent with X (`dialog.use_object`), then see whether it is gone: gathered."""
+        record = {}
+        result = await use_object(self.client, target["position"], record, self.offer_policy)
+        await asyncio.sleep(GATHER_SETTLE_SECONDS)
+        self._gathered.append((target["id"], time.monotonic()))
+        still_there = any(found["id"] == target["id"]
+                          for found in await objects_named(self.client, lambda name: is_reagent(name, reagent)))
+        where = target["position"]
+        self.events.emit("gather", f"{reagent} at ({where.x:.0f}, {where.y:.0f}): {result}; "
+                                   f"{'still there' if still_there else 'gathered'}")
+        return (stalled if still_there else progressed)(f"gather {reagent}", result=result)
+
+    async def next_zone_for_reagent_turn(self, reagent: str, zone: str, planner: RoutePlanner) -> dict:
+        """This zone was searched for the reagent: walk one door toward the nearest open zone of the world (not an
+        interior, tower or dungeon) not yet searched for it, by the zones walked between (`travelplan.zone_hops`)."""
+        searched = self._searched_for.setdefault(reagent, set())
+        searched.add(zone)
+        candidates = [other for other in self.record.zone_links
+                      if world_of(other) == world_of(zone) and other not in searched and INTERIOR_WORD not in other
+                      and not in_dungeon(other, self.record.entered_with_x)]
+        reachable = sorted((hops, other) for other in candidates
+                           if (hops := zone_hops(self.record.zone_links, zone, other)) is not None)
+        for _, other in reachable:
+            way = way_toward_zone(zone, other, [volume.name for volume, _ in planner.teleports])
+            door = None if way is None else self.door_on_the_way(way, planner)
+            if door is not None:
+                self.say_once("gather", f"no {reagent} left to find in {zone}; going on to {other}")
+                return await self.walk_to_door_turn(f"walk toward {other} for {reagent}", *door)
+        raise StopRun(f"no {reagent} found in {', '.join(sorted(searched))}, and no way to another open zone of "
+                      f"{world_of(zone)} is known; left for the operator")
 
     async def usage_turn(self, arrow, goal: dict) -> dict:
         """Walk to the quest object and use it. Progress only if an open goal was completed."""

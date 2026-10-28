@@ -151,6 +151,20 @@ async def wisps(client, kind: str) -> list[dict]:
     return await tracker_for(client).wisps(kind)
 
 
+async def objects_named(client, matches) -> list[dict]:
+    """Loaded entities whose object name `matches` accepts, with their id, name and position: reagents, which the
+    tracker does not keep."""
+    found = []
+    for entity in await client.get_base_entity_list():
+        try:
+            name = await entity.object_name() or ""
+            if matches(name):
+                found.append({"id": entity.base_address, "name": name, "position": await entity.location()})
+        except Exception:
+            continue
+    return found
+
+
 async def dungeon_entrance_near(client, point, reach: float):
     """The loaded tower or dungeon entrance nearest `point` within `reach` of it, or None."""
     entrances = [where for where in await tracker_for(client).dungeon_entrances()

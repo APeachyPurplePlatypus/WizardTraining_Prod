@@ -19,9 +19,6 @@ UNSUPPORTED = {
                           "gate's trigger, with no prompt and no message (2026-10-28, 00:08 to 00:12); players say "
                           "Merle Ambrose opens it once Wizard City's other assignments are done, and that it may "
                           "need a membership",
-    "Wizards in the Mist": "its goal is a scavenge goal, to get Mist Wood (Reagents_00000000) anywhere in Wizard "
-                           "City: reagents are gathered where they grow, and the framework cannot find or gather "
-                           "them yet; the goal has no tags, no target and no quest arrow",
 }
 
 

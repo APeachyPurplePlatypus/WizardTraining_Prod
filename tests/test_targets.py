@@ -6,7 +6,7 @@ from wizardtraining.targets import (AFTER_BATTLE_GRACE_SECONDS, ENEMY_CLEARANCE,
                                     back_away, bystanders, detour, enemies_to_route_around, in_grace_after_battle,
                                     is_duel_circle, is_dungeon_entrance, keeps_blocking, leads_to_another_zone,
                                     measured, named_enemies_not_in_a_duel,
-                                    next_area_to_explore, others, quest_targets, area_in_zone, close_enough,
+                                    next_area_to_explore, others, quest_targets, area_in_zone, close_enough, is_reagent,
                                     refill_reach, safe_wisps, threat_centre, too_close)
 
 
@@ -99,6 +99,14 @@ class TargetsTest(unittest.TestCase):
         self.assertFalse(close_enough([nudge(206), nudge(205, in_range=False)]))
         self.assertFalse(close_enough([nudge(301), nudge(300)]))
         self.assertTrue(close_enough([nudge(60)]))
+
+    def test_a_reagent_is_known_by_its_name_without_spaces_and_a_number(self):
+        self.assertTrue(is_reagent("FrostedFlax_01", "Frosted Flax"))
+        self.assertTrue(is_reagent("MistWood_12", "Mist Wood"))
+        self.assertFalse(is_reagent("MistWood", "Mist Wood"))
+        self.assertFalse(is_reagent("MistWoodBarrel_01", "Mist Wood"))
+        self.assertFalse(is_reagent("WC_WispMana", "Mist Wood"))
+        self.assertFalse(is_reagent("FrostedFlax_01", ""))
 
     def test_preferred_pieces_are_explored_first(self):
         points = [((0, 5000), 0), ((0, 1000), 0), ((0, 3000), 1)]
