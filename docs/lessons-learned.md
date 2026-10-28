@@ -1,6 +1,6 @@
 # Lessons learned
 
-These come from one character's first unattended play, level 1 to level 5 in Wizard City, on 2026-10-26. The code was a set of prototype scripts at the time; this framework is those scripts restructured. Each lesson gives what happened, what it taught, and where the fix lives now.
+These come from one character's first unattended play, level 1 to level 5 in Wizard City, on 2026-10-26, and from later runs; each run's findings are also summed up in [retros](retros/), the latest [level 10 to 15](retros/level-10-to-15.md). The code was a set of prototype scripts at the time; this framework is those scripts restructured. Each lesson gives what happened, what it taught, and where the fix lives now.
 
 ## Reading the game
 

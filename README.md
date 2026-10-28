@@ -17,7 +17,7 @@ It comes out of one character's unattended run from level 1 to level 5 in Wizard
 
 ## Status
 
-Version 0.2.0. Played on Windows 11 with one character from level 5 to 10 in Wizard City (the Commons, Olde Town, Unicorn Way, Triton Avenue, Cyclops Lane, Firecat Alley and their houses and towers) on 2026-10-26 and 27, with WizWalker 1.8.2 as vendored in Deimos at commit `d7ef56eb`. The game updates often, and memory layouts and window paths can change with it. See [CHANGELOG.md](CHANGELOG.md) for what each release changed and why.
+Version 0.3.0. Played on Windows 11 with one character from level 5 to 15 in Wizard City (the Commons, Olde Town, Unicorn Way, Triton Avenue and its underwater zone, Cyclops Lane, Firecat Alley, Colossus Boulevard, Golem Court and their houses, towers and instances) and in Krokotopia's Pyramid on 2026-10-26 to 28, with WizWalker 1.8.2 as vendored in Deimos at commit `d7ef56eb`. The game updates often, and memory layouts and window paths can change with it. See [CHANGELOG.md](CHANGELOG.md) for what each release changed and why.
 
 ## Setup
 
