@@ -36,6 +36,7 @@ from .equipment import count_items, equip, read_items, read_wizard
 from .events import (EventLog, describe_battle, describe_changes, describe_round, dialog_text, enemy_names, health_text,
                      threat_text)
 from .gear import describe_stats, upgrades
+from .gametravel import go_to_the_commons, has_mark, mark_here, recall
 from .geometry import Point, distance_to_path, flat_distance, path_within, xy
 from .keys import tap
 from .knowledge import Knowledge
@@ -104,6 +105,7 @@ MANA_WAIT_POLL_SECONDS = 10.0
 ENEMIES_IN_THE_WAY_WAIT_SECONDS = 4.0
 DUEL_WAIT_SECONDS = 30.0
 MAX_ACTIVATIONS_PER_QUEST = 2
+MARK_MANA_NEEDED = 8
 DUEL_WAIT_POLL_SECONDS = 3.0
 DEFEATED_HEALTH_FRACTION = 0.05
 NOT_FREE_TO_MOVE_WAIT_SECONDS = 3.0
@@ -126,10 +128,12 @@ log = logging.getLogger(__name__)
 class QuestLoop:
     def __init__(self, client, settings: Settings, record: RunRecord, *,
                  combat_policy: CombatPolicy, offer_policy: OfferPolicy, events: EventLog | None = None,
-                 use_potions: bool = False, wear_gear: bool = False):
+                 use_potions: bool = False, wear_gear: bool = False, use_travel_buttons: bool = False):
         self.client = client
         self.use_potions = use_potions
         self.wear_gear = wear_gear
+        self.use_travel_buttons = use_travel_buttons
+        self._marked_in: str | None = None
         self._gear_checked: tuple | None = None
         self._finishing_since: float | None = None
         self.approaches = ApproachLog()
@@ -707,6 +711,8 @@ class QuestLoop:
                           "to follow it")
         if topped_up(mana_fraction(state)):
             self._topping_up_in = None
+            if (recalled := await self.recall_turn(state)) is not None:
+                return recalled
         refill = short_for_a_fight(health_fraction(state), mana_fraction(state)) if goal["type"] in FIGHT_GOALS else None
         if refill is None and (self._topping_up_in == state["zone"] or not mana_to_travel(mana_fraction(state))):
             refill = "mana"
@@ -896,6 +902,10 @@ class QuestLoop:
             self.saw_enemies(state["zone"])
         if safe_zone:
             return await self.safe_zone_refill_turn(stat, state, planner)
+        if stat == "mana" and not indoors and self.use_travel_buttons:
+            turn = await self.mana_trip_turn(state)
+            if turn is not None:
+                return turn
         if indoors or stat == "mana":
             turn = await self.leave_for_wisps_turn(stat, state, planner)
             if turn is not None:
@@ -943,6 +953,41 @@ class QuestLoop:
                                  f"{now['max_mana']}, health {state['health']} -> {now['health']}")
         gained = isinstance(now["mana"], int) and isinstance(state["mana"], int) and now["mana"] > state["mana"]
         return (progressed if gained else stalled)("waited for mana", before=state["mana"], after=now["mana"])
+
+    async def mana_trip_turn(self, state: dict) -> dict | None:
+        """Short of mana in a street with no wisp to fetch: mark the spot (Mark Location costs about 5 mana, so only
+        with MARK_MANA_NEEDED), then Go to The Commons, the world's hub, where mana comes back (free; a
+        walk back through the exits met enemies, and in Cyclops Lane fetching wisps cost more mana than it
+        gave). `recall_turn` returns to the mark. None when the tools cannot be used now, so the wizard walks."""
+        zone = state["zone"]
+        if self._marked_in is None and isinstance(state["mana"], int) and state["mana"] >= MARK_MANA_NEEDED:
+            problem = await mark_here(self.client)
+            self.events.emit("travel", f"marked the spot in {zone} before leaving for mana" if problem is None else
+                                       f"could not mark the spot in {zone}: {problem}")
+            self._marked_in = zone if problem is None else None
+        problem = await go_to_the_commons(self.client)
+        if problem is not None:
+            self.events.emit("travel", f"could not go to the Commons for mana: {problem}")
+            return None
+        self.events.emit("travel", f"went to the Commons from {zone} with {state['mana']} mana, to refill it there")
+        return progressed("went to the Commons for mana", mana=state["mana"])
+
+    async def recall_turn(self, state: dict) -> dict | None:
+        """Mana is back after a trip to the Commons: Recall Location to the spot marked before leaving. Recall costs
+        about 5 mana, which the refill covers. None when nothing is marked or the wizard is where it was."""
+        marked_in = self._marked_in
+        if marked_in is None:
+            return None
+        if state["zone"] == marked_in or not await has_mark(self.client):
+            self._marked_in = None
+            return None
+        problem = await recall(self.client)
+        self._marked_in = None
+        if problem is not None:
+            self.events.emit("travel", f"could not recall to {marked_in}: {problem}; the quest walk goes on")
+            return stalled("could not recall", problem=problem)
+        self.events.emit("travel", f"recalled to the spot marked in {marked_in}, with {state['mana']} mana")
+        return progressed("recalled to the marked spot", zone=marked_in)
 
     async def leave_for_wisps_turn(self, stat: str, state: dict, planner: RoutePlanner) -> dict | None:
         return await self.exit_turn(planner, stat, f"{state[stat]} of {state['max_' + stat]} {stat} and no {stat} "
@@ -1501,7 +1546,7 @@ def reroute_text(attempt: dict) -> str:
 
 async def play(settings: Settings, limits: Limits, *, combat_policy: CombatPolicy | None = None,
                offer_policy: OfferPolicy | None = None, loop_class: type[QuestLoop] = QuestLoop,
-               use_potions: bool = False, wear_gear: bool = False):
+               use_potions: bool = False, wear_gear: bool = False, use_travel_buttons: bool = False):
     """Attach to the game, play, remove the hooks, and always save the report, even when interrupted.
     Returns the report and the path it was saved to."""
     record = RunRecord(limits=limits)
@@ -1518,7 +1563,7 @@ async def play(settings: Settings, limits: Limits, *, combat_policy: CombatPolic
             loop = loop_class(attachment.client, settings, record,
                               combat_policy=combat_policy or SpellTypePolicy(),
                               offer_policy=offer_policy or MainQuestsOnly(), events=events,
-                              use_potions=use_potions, wear_gear=wear_gear)
+                              use_potions=use_potions, wear_gear=wear_gear, use_travel_buttons=use_travel_buttons)
             await loop.play()
     except NoClient as exc:
         record.stopped = str(exc)
