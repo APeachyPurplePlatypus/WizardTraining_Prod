@@ -95,6 +95,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **"The Gravulum Order" is passed over while Colossus Boulevard is closed** (`sidequests.UNSUPPORTED`).
+  - **What:** the quest is listed as one the framework cannot do yet, with the reason, so `--clear-world` goes on to the next quest or the Quest Finder's next giver instead of walking into the closed tunnel.
+  - **Why:** the first giver the Quest Finder led to in Wizard City (Ravenwood, 00:07) gave "The Gravulum Order", whose goal is in Colossus Boulevard. Its tunnel from the Shopping District is closed: a blocker (`BigGenericBlocker_CollossusGate`) stops the wizard about 100 units short of the gate's trigger (`DynaTrigger_WC_GateCommons`), with no prompt and no message, and the walk strategies went round it from 00:08 to 00:12. Players say Merle Ambrose opens it once Wizard City's other assignments are done, and that it may need a membership.
+  - **Verified:** in the game (the walk stopped at y = -5525, no prompt, no message box); offline (`tests/test_sidequests.py`).
+
 - **A safe zone without the wisps needed sends the wizard home for them, and the recharge after a defeat never stands for mana.**
   - **What:** a safe zone searched with no wisp of the kind needed left, other than the world's hub, sends the wizard home (Go Home, free) to search the hub, once from each zone (`travelplan.worth_going_home_for_wisps`, `QuestLoop.home_for_wisps_turn`). While recharging after a defeat, once no blue wisp is left there or in the hub and mana is over the 30 kept for fights plus Recall, the wizard goes on and logs why instead of standing for mana. Other mana top-ups still wait, as allowed before.
   - **Why:** the operator: "seek out blue and red wisps in safe areas to recharge after death". Woken after a defeat at 23:44, the wizard searched the Krokotopia world teleporter room, found no wisps and stood: health came back about 3.6 a second, mana not at all (55 of 94 for minutes; about 2 a minute in the Commons), while the hub next door had given 35 to 80 mana in wisps within a minute at 23:18.
