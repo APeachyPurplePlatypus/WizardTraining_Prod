@@ -54,6 +54,7 @@ from .quests import arrow_shows_no_target, game_language, open_goals, read_quest
 from .reports import plain, save_report
 from .patrols import VIEWS_TO_JUDGE, note_sightings, unwalked_paths
 from .routes import GapStep, Hazards, RoutePlanner, duel_clearance
+from .sidequests import unsupported_reason
 from .screen import or_default, prompt_action, prompt_offers_talk
 from .spellbook import SpellCatalog, deck_spells, learned_spell_ids
 from .spells import KNOWN_AT_FIRST_CHECK, LEARNED, SpellLog, learned_text, newly_learned, spell_entry
@@ -673,6 +674,10 @@ class QuestLoop:
             if (switched := await self.switch_quest_turn()) is not None:
                 return switched
             raise StopRun("no active main quest and no dialog offering one")
+        if (reason := unsupported_reason(quest.get("title"))) is not None:
+            self.say_once("quest", f"skipping {quest['title']}: {reason}")
+            if (switched := await self.switch_quest_turn()) is not None:
+                return switched
         goals = open_goals(quest)
         goal = goals[0] if goals else {"type": "persona", "destination_zone": ""}
         arrow = await read_quest_arrow(self.client)
@@ -806,8 +811,10 @@ class QuestLoop:
         None when there is nothing to switch to."""
         if not getattr(self.offer_policy, "side_quests", False):
             return None
-        journal = (await read_quests(self.client))["journal"]
-        titled = [entry for entry in journal if entry.get("title")
+        quests = await read_quests(self.client)
+        journal, active_title = quests["journal"], (quests["active"] or {}).get("title")
+        titled = [entry for entry in journal if entry.get("title") and entry["title"] != active_title
+                  and not unsupported_reason(entry["title"])
                   and self.record.quests_activated.get(entry["title"], 0) < MAX_ACTIVATIONS_PER_QUEST]
         side_quests = [entry for entry in titled if entry["mainline"] is not True]
         main_quests = [] if side_quests_only else [entry for entry in titled if entry["mainline"] is True]
