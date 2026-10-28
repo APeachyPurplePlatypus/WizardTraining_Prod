@@ -976,6 +976,7 @@ class QuestLoop:
             return None
         self.events.emit("travel", f"went to the Commons from {zone} with {state['mana']} mana and {state['health']} "
                                    f"health, to refill {stat} there")
+        self.record.last_place = None
         return progressed("went to the Commons for a refill", stat=stat)
 
     async def back_from_the_commons_turn(self, state: dict) -> dict | None:
@@ -1008,6 +1009,7 @@ class QuestLoop:
             self.events.emit("travel", f"could not recall to {marked_in}: {problem}; the quest walk goes on")
             return stalled("could not recall", problem=problem)
         self.events.emit("travel", f"recalled to the spot marked in {marked_in}, with {state['mana']} mana")
+        self.record.last_place = None
         return progressed("recalled to the marked spot", zone=marked_in)
 
     async def leave_for_wisps_turn(self, stat: str, state: dict, planner: RoutePlanner) -> dict | None:

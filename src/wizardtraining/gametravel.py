@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 
 from .screen import or_default
+from .state import attempt
 from .ui import click, showing, window_at
 
 BUTTONS = ["WorldView", "windowHUD", "compassAndTeleporterButtons"]
@@ -47,11 +48,20 @@ async def has_mark(client) -> bool:
 
 
 async def mark_here(client) -> str | None:
-    """Press Mark Location. None when the Recall button then shows a mark, else what went wrong (the game refuses
-    in some places: "Can't Mark in this Area")."""
+    """Press Mark Location. None when a mark was set, else what went wrong. The game refuses in some places ("Can't
+    Mark in this Area"; on a Golem Tower floor it showed no message at all), and the Recall button may still show
+    an older mark, so "a mark shows" proves nothing: a mark was set when the Recall tooltip changed or mana was
+    spent (Mark Location cost 5 mana in Cyclops Lane, and nothing on the tower floor, where it did nothing)."""
+    tip_before, mana_before = await tip_of(client, RECALL_BUTTON), await attempt(client.stats.current_mana())
     await click(client, MARK_BUTTON)
     await asyncio.sleep(MARK_SETTLE_SECONDS)
-    return None if await has_mark(client) else "the Recall button still shows no mark after Mark Location"
+    tip_after, mana_after = await tip_of(client, RECALL_BUTTON), await attempt(client.stats.current_mana())
+    if not tip_after or tip_after == NO_MARK_TIP:
+        return "the Recall button still shows no mark after Mark Location"
+    paid = isinstance(mana_before, int) and isinstance(mana_after, int) and mana_after < mana_before
+    if tip_after != tip_before or paid:
+        return None
+    return "the game refused Mark Location here: the Recall tooltip did not change and no mana was spent"
 
 
 async def zone_changed(client, zone: str) -> bool:
