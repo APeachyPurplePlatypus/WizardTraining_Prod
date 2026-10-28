@@ -180,7 +180,6 @@ class QuestLoop:
         self._walking_at: tuple[str, dict] | None = None
         self._loading_since: float | None = None
         self._gathered: list[tuple[int, float]] = []
-        self._searched_for: dict[str, set[str]] = {}
         self._dungeons_give_nothing_back = False
         self._refill_fully = False
         self._fight_situation: str | None = None
@@ -1797,6 +1796,7 @@ class QuestLoop:
                  if found["id"] not in recent]
         me = await self.client.body.position()
         if found:
+            self.record.reagent_searched.pop(reagent, None)
             if found_in(self.record.reagent_zones, reagent, zone):
                 self.events.emit("gather", f"{reagent} grows in {zone}: kept as the first zone to look in for it")
             target = min(found, key=lambda found: flat_distance(me, found["position"]))
@@ -1806,7 +1806,7 @@ class QuestLoop:
                                           avoid=await nearby_enemies(self.client))
         planner = await self.planner()
         known = self.record.reagent_zones.get(reagent, [])
-        searched = self._searched_for.setdefault(reagent, set())
+        searched = self.record.reagent_searched.setdefault(reagent, [])
         if known and zone not in known and any(other not in searched for other in known):
             return await self.next_zone_for_reagent_turn(reagent, zone, planner)
         explored = self.record.explored.setdefault(f"{zone}|{reagent}", [])
@@ -1849,8 +1849,9 @@ class QuestLoop:
         """This zone was searched for the reagent: walk one door toward the nearest open zone of the world (not an
         interior, tower or dungeon) not yet searched for it: those it is known or said to grow in first
         (`targets.zones_to_search_for`), then the nearest by the zones walked between (`travelplan.zone_hops`)."""
-        searched = self._searched_for.setdefault(reagent, set())
-        searched.add(zone)
+        searched = self.record.reagent_searched.setdefault(reagent, [])
+        if zone not in searched:
+            searched.append(zone)
         candidates = [other for other in self.record.zone_links
                       if world_of(other) == world_of(zone) and other not in searched and INTERIOR_WORD not in other
                       and not in_dungeon(other, self.record.entered_with_x)]
@@ -1866,6 +1867,7 @@ class QuestLoop:
         level = (await snapshot(self.client))["level"]
         if self.record.clearing_world and title and isinstance(level, int):
             self.record.parked_quests[title] = level
+            self.record.reagent_searched.pop(reagent, None)
             self.events.emit("gather", f"no {reagent} found in {', '.join(sorted(searched))}; parking {title} until the "
                                        f"wizard is past level {level}, while the world's other quests go on")
             return progressed("parked a quest whose reagent was not found", quest=title)

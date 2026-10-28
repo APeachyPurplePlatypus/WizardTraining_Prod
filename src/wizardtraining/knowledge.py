@@ -19,7 +19,8 @@ dungeons found reset after a refill trip out by the travel buttons, refilled in 
 world being cleared of its quests (`--clear-world`) with the quest paused for it, and the doors a zone's data does
 not list, where a walk changed the zone by accident (`routes.hidden_doors_to_keep_out_of`), the dungeon a door
 mark is for, the quests parked while clearing a world, with the level each was parked at, and the zones each
-reagent grows in, the one where it was last found first. Without them, every new run walked into teleporters
+reagent grows in, the one where it was last found first, with the zones searched for it since without a find,
+so a run started again does not search them again. Without them, every new run walked into teleporters
 to find out again, and walked into Cyclops Lane's tents again. Not kept: obstacles, because the players and
 enemies that caused most of them move on, and "no effect" teleport verdicts, because a walk that fell short of a
 volume once looked like one.
@@ -63,6 +64,7 @@ class Knowledge:
     mark_door_for: str | None = None
     parked_quests: dict[str, int] = field(default_factory=dict)
     reagent_zones: dict[str, list[str]] = field(default_factory=dict)
+    reagent_searched: dict[str, list[str]] = field(default_factory=dict)
 
     @classmethod
     def load(cls, path: Path) -> "Knowledge":
@@ -95,7 +97,9 @@ class Knowledge:
                                  for zone, points in data.get("hidden_doors", {}).items()},
                    mark_door_for=data.get("mark_door_for"),
                    parked_quests={title: int(level) for title, level in data.get("parked_quests", {}).items()},
-                   reagent_zones={reagent: list(zones) for reagent, zones in data.get("reagent_zones", {}).items()})
+                   reagent_zones={reagent: list(zones) for reagent, zones in data.get("reagent_zones", {}).items()},
+                   reagent_searched={reagent: list(zones)
+                                     for reagent, zones in data.get("reagent_searched", {}).items()})
 
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -123,6 +127,7 @@ class Knowledge:
         record.hidden_doors = {zone: list(points) for zone, points in self.hidden_doors.items()}
         record.mark_door_for, record.parked_quests = self.mark_door_for, dict(self.parked_quests)
         record.reagent_zones = {reagent: list(zones) for reagent, zones in self.reagent_zones.items()}
+        record.reagent_searched = {reagent: list(zones) for reagent, zones in self.reagent_searched.items()}
 
     def learn_from(self, record) -> None:
         """Keep what a run found out, leaving out "no effect" verdicts."""
@@ -148,6 +153,7 @@ class Knowledge:
         self.clearing_world, self.paused_quest = record.clearing_world, record.paused_quest
         self.mark_door_for, self.parked_quests = record.mark_door_for, dict(record.parked_quests)
         self.reagent_zones = {reagent: list(zones) for reagent, zones in record.reagent_zones.items()}
+        self.reagent_searched = {reagent: list(zones) for reagent, zones in record.reagent_searched.items()}
         for zone, points in record.hidden_doors.items():
             for point in points:
                 add_hidden_door(self.hidden_doors, zone, point)
