@@ -323,8 +323,9 @@ class QuestLoop:
             return None
         if await self.safe_here():
             return await self.keep_looking_turn("health", state, await self.planner())
-        if (self.record.heavy_fights.get(state["zone"], 0) >= HEAVY_ZONE_FIGHTS and self.use_travel_buttons
-                and self._marked_in is None and self.travel_allowed_in(state["zone"])):
+        low_among_enemies = not health_to_travel(fraction) and state["zone"] in self.record.zones_with_enemies
+        if ((self.record.heavy_fights.get(state["zone"], 0) >= HEAVY_ZONE_FIGHTS or low_among_enemies)
+                and self.use_travel_buttons and self._marked_in is None and self.travel_allowed_in(state["zone"])):
             trip = await self.commons_trip_turn("health", state)
             if trip is not None:
                 self.events.emit("health", f"{self.record.heavy_fights[state['zone']]} heavy fights in {state['zone']}: "
