@@ -49,6 +49,7 @@ from .progress import (DUEL_BLOCKS_THE_WAY, DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY, 
                        progressed, remember_obstacles, safe_to_stand, short_for_a_fight, should_drink_potion, stalled,
                        topped_up,
                        travel_outcome, wanted_wisp, WISP_ANY_DIRECTION_BELOW_FRACTION, world_of)
+from .questbook import activate_quest
 from .quests import arrow_shows_no_target, game_language, open_goals, read_quest_arrow, read_quests
 from .reports import plain, save_report
 from .patrols import VIEWS_TO_JUDGE, note_sightings, unwalked_paths
@@ -99,6 +100,7 @@ MANA_WAIT_SECONDS = 90.0
 MANA_WAIT_POLL_SECONDS = 10.0
 ENEMIES_IN_THE_WAY_WAIT_SECONDS = 4.0
 DUEL_WAIT_SECONDS = 30.0
+MAX_ACTIVATIONS_PER_QUEST = 2
 DUEL_WAIT_POLL_SECONDS = 3.0
 DEFEATED_HEALTH_FRACTION = 0.05
 NOT_FREE_TO_MOVE_WAIT_SECONDS = 3.0
@@ -635,6 +637,8 @@ class QuestLoop:
         if quest is None:
             if await wait_for_dialog(self.client, FOLLOW_UP_WAIT_SECONDS, poll=0.5):
                 return await self.dialog_turn()
+            if (switched := await self.switch_quest_turn()) is not None:
+                return switched
             raise StopRun("no active main quest and no dialog offering one")
         goals = open_goals(quest)
         goal = goals[0] if goals else {"type": "persona", "destination_zone": ""}
@@ -652,12 +656,14 @@ class QuestLoop:
                              "goal_zone": goal["destination_zone"], "arrow": plain(arrow)}
         here = await self.client.zone_name()
         if self.record.limits.stay_in_world and leaves_world(here, goal["destination_zone"]):
-            side_quests = [entry.get("title") or entry["name_key"] for entry in (await read_quests(self.client))["journal"]
-                           if entry["mainline"] is not True]
+            if (switched := await self.switch_quest_turn(side_quests_only=True)) is not None:
+                return switched
+            left_open = [entry.get("title") or entry["name_key"] for entry in (await read_quests(self.client))["journal"]
+                         if entry["mainline"] is not True]
             raise StopRun(f"the main quest {quest.get('title') or quest['name_key']} moves on to "
-                          f"{world_of(goal['destination_zone'])}; the side quests of {world_of(here)} come first "
-                          f"(open: {', '.join(side_quests) or 'none in the journal'}), and the framework cannot "
-                          "switch the active quest yet; left for the operator")
+                          f"{world_of(goal['destination_zone'])}; no side quest of {world_of(here)} is left to switch to "
+                          f"(still in the journal: {', '.join(left_open) or 'none'}); run again with --leave-world "
+                          "to follow it")
         if topped_up(mana_fraction(state)):
             self._topping_up_in = None
         refill = short_for_a_fight(health_fraction(state), mana_fraction(state)) if goal["type"] in FIGHT_GOALS else None
@@ -757,6 +763,34 @@ class QuestLoop:
         if turn.get("trip", {}).get("reason") in (None, "target in sight", "every route method failed"):
             explored.append((round(x), round(y)))
         return turn
+
+    async def switch_quest_turn(self, *, side_quests_only: bool = False) -> dict | None:
+        """Make another quest the active one through the quest book (`questbook.activate_quest`), when the offer
+        policy takes side quests: the next side quest, the one ready to hand in first, each at most
+        MAX_ACTIVATIONS_PER_QUEST times a run; and with no active quest and no side quest left, the main quest.
+        None when there is nothing to switch to."""
+        if not getattr(self.offer_policy, "side_quests", False):
+            return None
+        journal = (await read_quests(self.client))["journal"]
+        titled = [entry for entry in journal if entry.get("title")
+                  and self.record.quests_activated.get(entry["title"], 0) < MAX_ACTIVATIONS_PER_QUEST]
+        side_quests = [entry for entry in titled if entry["mainline"] is not True]
+        main_quests = [] if side_quests_only else [entry for entry in titled if entry["mainline"] is True]
+        candidates = side_quests or main_quests
+        if not candidates:
+            return None
+        choice = next((entry for entry in candidates if entry["ready_to_turn_in"]), candidates[0])
+        title = choice["title"]
+        self.record.quests_activated[title] = self.record.quests_activated.get(title, 0) + 1
+        problem = await activate_quest(self.client, title)
+        active = (await read_quests(self.client))["active"]
+        switched = problem is None and active is not None and active.get("title") == title
+        self.events.emit("quest", f"made {title} the active quest through the quest book" if switched else
+                                  f"could not make {title} the active quest: "
+                                  f"{problem or 'another quest is active after Activate'}")
+        if switched:
+            return progressed("switched the active quest", to=title)
+        return stalled("could not switch the active quest", quest=title, problem=problem)
 
     async def active_quest(self) -> dict | None:
         """The active quest. A side quest stops the run unless the offer policy takes side quests."""
