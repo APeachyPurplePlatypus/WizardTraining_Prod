@@ -14,7 +14,7 @@ import asyncio
 
 from .screen import or_default
 from .state import attempt
-from .ui import click, showing, window_at
+from .ui import click, message_box, showing, window_at
 
 BUTTONS = ["WorldView", "windowHUD", "compassAndTeleporterButtons"]
 MARK_BUTTON = [*BUTTONS, "MarkButton"]
@@ -25,6 +25,8 @@ RECALL_TIMER = [*RECALL_BUTTON, "txtRecallTimer"]
 TIP_OFFSET = 520
 NO_MARK_TIP = "No Mark Set"
 MARK_SETTLE_SECONDS = 2.0
+MARK_RETRY_SECONDS = 3.0
+NO_MARK = "the Recall button still shows no mark after Mark Location"
 ZONE_CHANGE_WAIT_SECONDS = 25.0
 ZONE_CHANGE_POLL_SECONDS = 0.5
 RECALL_NOT_REACHED = "the zone did not change after Recall"
@@ -62,20 +64,38 @@ async def has_mark(client) -> bool:
 
 
 async def mark_here(client) -> str | None:
-    """Press Mark Location. None when a mark was set, else what went wrong. The game refuses in some places ("Can't
-    Mark in this Area"; on a Golem Tower floor it showed no message at all), and the Recall button may still show
-    an older mark, so "a mark shows" proves nothing: a mark was set when the Recall tooltip changed or mana was
-    spent (Mark Location cost 5 mana in Cyclops Lane, and nothing on the tower floor, where it did nothing)."""
+    """Press Mark Location; once more after MARK_RETRY_SECONDS when no mark shows at all. None when a mark was set,
+    else what went wrong, with what the buttons, mana and any message box showed. On Colossus Boulevard, two presses
+    2 to 3 s after a battle left "No Mark Set" (13:41, 14:32) while two others as soon after a battle took (13:35,
+    14:15), so the reason is not known yet."""
+    problem = await press_mark(client)
+    if problem is None or not problem.startswith(NO_MARK):
+        return problem
+    await asyncio.sleep(MARK_RETRY_SECONDS)
+    again = await press_mark(client)
+    return None if again is None else f"{problem}; pressed again {MARK_RETRY_SECONDS:.0f} s later: {again}"
+
+
+async def press_mark(client) -> str | None:
+    """One press of Mark Location. The game refuses in some places ("Can't Mark in this Area"; on a Golem Tower
+    floor it showed no message at all), and the Recall button may still show an older mark, so "a mark shows" proves
+    nothing: a mark was set when the Recall tooltip changed or mana was spent (Mark Location cost 5 mana in Cyclops
+    Lane, and nothing on the tower floor, where it did nothing)."""
     tip_before, mana_before = await tip_of(client, RECALL_BUTTON), await attempt(client.stats.current_mana())
+    mark_shown, mark_tip = await showing(client, MARK_BUTTON), await tip_of(client, MARK_BUTTON)
     await click(client, MARK_BUTTON)
     await asyncio.sleep(MARK_SETTLE_SECONDS)
     tip_after, mana_after = await tip_of(client, RECALL_BUTTON), await attempt(client.stats.current_mana())
-    if not tip_after or tip_after == NO_MARK_TIP:
-        return "the Recall button still shows no mark after Mark Location"
     paid = isinstance(mana_before, int) and isinstance(mana_after, int) and mana_after < mana_before
-    if tip_after != tip_before or paid:
+    if tip_after and tip_after != NO_MARK_TIP and (tip_after != tip_before or paid):
         return None
-    return "the game refused Mark Location here: the Recall tooltip did not change and no mana was spent"
+    box = await attempt(message_box(client))
+    seen = (f"Recall tip {tip_before!r} -> {tip_after!r}, mana {mana_before} -> {mana_after}, Mark button "
+            f"{'showing' if mark_shown else 'not showing'} ({mark_tip!r}), "
+            + (f"box {box.title!r}: {box.caption!r}" if getattr(box, "title", None) is not None else "no box"))
+    if not tip_after or tip_after == NO_MARK_TIP:
+        return f"{NO_MARK} ({seen})"
+    return f"the game refused Mark Location here: the Recall tooltip did not change and no mana was spent ({seen})"
 
 
 async def zone_changed(client, zone: str) -> bool:

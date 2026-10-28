@@ -206,6 +206,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **A Mark Location press that leaves no mark is pressed once more, and the failure says what the game showed** (`gametravel.mark_here`, `gametravel.press_mark`).
+  - **What:** when the Recall button still shows "No Mark Set" after a press, the wizard waits 3 s and presses again. A failure now logs the Recall tooltip before and after, mana before and after, whether the Mark button showed (and its tooltip), any message box, and the seconds since the last battle ended. The mark's log line names the stat the trip is for (it said "for mana" on every trip).
+  - **Why:** on Colossus Boulevard, Mark Location left no mark twice before a health trip (13:41, 14:32), so the Recall back could not be used and the wizard walked; two other presses as soon after a battle took (13:35, 14:15), and mana did not tell them apart. The coordinator asked for the reason to be found and logged.
+  - **Verified:** offline (`tests/test_gametravel.py`).
+
 - **A short search walk no longer ends in standing** (`QuestLoop.keep_looking_turn`, `loop.reached_its_point`).
   - **What:** while searching a safe zone for wisps, a walk that reached its point but was too short to count as progress goes on to the next point, up to three walks, before the wizard stands.
   - **Why:** in the Commons after a heavy fight (14:32), the first search point was 232 away; the walk arrived, counted as no progress, and the wizard stood 90 s at 429 of 1164 health before searching on.

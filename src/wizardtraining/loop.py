@@ -1705,8 +1705,10 @@ class QuestLoop:
         zone = state["zone"]
         if mark and self._marked_in is None and isinstance(state["mana"], int) and state["mana"] >= MARK_MANA_NEEDED:
             problem = await mark_here(self.client)
-            self.events.emit("travel", f"marked the spot in {zone} before leaving for mana" if problem is None else
-                                       f"could not mark the spot in {zone}: {problem}")
+            since = ("" if self._battle_ended_at is None
+                     else f", {time.monotonic() - self._battle_ended_at:.0f} s after the last battle ended")
+            self.events.emit("travel", f"marked the spot in {zone} before leaving for {stat}{since}" if problem is None
+                                       else f"could not mark the spot in {zone}{since}: {problem}")
             self._marked_in = zone if problem is None else None
             if problem is None:
                 self.record.marked_in, self.record.mark_tip = zone, await recall_tip(self.client)

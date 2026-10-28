@@ -28,8 +28,9 @@ class Game:
     """The HUD's travel buttons, a zone name, and the clicks the code makes."""
 
     def __init__(self, zone="WizardCity/WC_Streets/WC_Cyclops", marked=False, hub_timer=False, recall_timer=False,
-                 mana=84, refuses_marks=False):
+                 mana=84, refuses_marks=False, refuses_first_marks=0):
         self.zone, self.clicked, self.loading, self.mana, self.refuses_marks = zone, [], False, mana, refuses_marks
+        self.refuses_first_marks = refuses_first_marks
         self.mark = StandIn("MarkButton", tip="Mark Location")
         self.hub = StandIn("GoHomeButton", [StandIn("txtGoHomeTimer", visible=hub_timer)], tip="Go to The Commons")
         self.recall = StandIn("RecallButton", [StandIn("txtRecallTimer", visible=recall_timer)],
@@ -54,7 +55,9 @@ class Game:
 
     async def click(self, client, path):
         self.clicked.append(path[-1])
-        if path[-1] == "MarkButton" and not self.refuses_marks:
+        if path[-1] == "MarkButton" and self.refuses_first_marks:
+            self.refuses_first_marks -= 1
+        elif path[-1] == "MarkButton" and not self.refuses_marks:
             self.recall.tip = "Teleport to Cyclops Lane"
             self.mana -= 5
         if path[-1] in ("GoHomeButton", "RecallButton"):
@@ -63,6 +66,7 @@ class Game:
 
 def run(game, function):
     patches = (mock.patch.object(gametravel, "click", game.click), mock.patch.object(gametravel, "MARK_SETTLE_SECONDS", 0),
+               mock.patch.object(gametravel, "MARK_RETRY_SECONDS", 0),
                mock.patch.object(gametravel, "ZONE_CHANGE_WAIT_SECONDS", 0.2),
                mock.patch.object(gametravel, "ZONE_CHANGE_POLL_SECONDS", 0.01))
     for patch in patches:
@@ -85,9 +89,18 @@ class GameTravelTest(unittest.TestCase):
         self.assertIsNone(run(game, gametravel.mark_here))
         self.assertEqual(game.mana, 79)
 
-    def test_no_mark_at_all_is_reported(self):
+    def test_no_mark_at_all_is_reported_with_what_the_buttons_showed_after_a_second_press(self):
         game = Game(refuses_marks=True)
-        self.assertEqual(run(game, gametravel.mark_here), "the Recall button still shows no mark after Mark Location")
+        problem = run(game, gametravel.mark_here)
+        self.assertTrue(problem.startswith(gametravel.NO_MARK))
+        self.assertIn("'No Mark Set'", problem)
+        self.assertIn("pressed again", problem)
+        self.assertEqual(game.clicked, ["MarkButton", "MarkButton"])
+
+    def test_a_mark_the_first_press_did_not_set_is_set_by_the_second(self):
+        game = Game(refuses_first_marks=1)
+        self.assertIsNone(run(game, gametravel.mark_here))
+        self.assertEqual(game.clicked, ["MarkButton", "MarkButton"])
 
     def test_an_older_mark_is_not_a_new_one_when_the_game_refused(self):
         """On a Golem Tower floor, Mark did nothing: the tooltip kept the Cyclops Lane mark and mana stayed at 89."""
