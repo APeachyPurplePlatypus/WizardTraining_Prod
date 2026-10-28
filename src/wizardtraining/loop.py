@@ -891,6 +891,8 @@ class QuestLoop:
             self.record.quest = {"name": quest["name_key"], "title": quest.get("title"), "goal": goal["type"],
                                  "goal_id": goal.get("id"), "main": quest["mainline"] is True, "goal_zone": "",
                                  "arrow": None}
+            if (refilled := await self.recharge_first_turn(state)) is not None:
+                return refilled
             return await self.scavenge_turn(goal, state)
         if arrow_shows_no_target(arrow):
             if (travelled := await self.go_to_quest_area_turn(quest, goals)) is not None:
@@ -1763,6 +1765,21 @@ class QuestLoop:
             return progressed("talk", result=result)
         return await self.travel_turn("travel to quest NPC", arrow, arrive_radius=NPC_ARRIVE_DISTANCE / 2,
                                       also=self.arrival_check(arrow), avoid=await nearby_enemies(self.client))
+
+    async def recharge_first_turn(self, state: dict) -> dict | None:
+        """For a goal handled before the usual refills (a scavenge goal): recharge after a defeat or below
+        HEALTH_TO_TRAVEL_FRACTION, and refill mana below the travel line, as any other goal would (outside a tower or a
+        dungeon refilled in place). Searching Cyclops Lane for Mist Wood, the wizard went on at 409 of 1133 among its
+        Cyclops (08:51)."""
+        if in_dungeon(state["zone"], self.record.entered_with_x) and not self.travel_allowed_in(state["zone"]):
+            return None
+        if not health_to_travel(health_fraction(state)):
+            self.record.recharging = True
+        refill = still_to_recharge(health_fraction(state), mana_fraction(state)) if self.record.recharging else None
+        self.record.recharging = refill is not None
+        if refill is None and not mana_to_travel(mana_fraction(state)):
+            refill = "mana"
+        return None if refill is None else await self.refill_turn(refill, state)
 
     async def scavenge_turn(self, goal: dict, state: dict) -> dict:
         """A scavenge goal: get a reagent ("Mist Wood", the goal's item) wherever it grows; its goal shows no arrow.
