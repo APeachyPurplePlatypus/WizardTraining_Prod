@@ -1284,12 +1284,15 @@ class QuestLoop:
             return await self.to_the_world_turn(world, here)
         if title == QUEST_FINDER:
             return await self.follow_the_finder(world, goals)
-        if title and not unsupported_reason(title) and not parked(self.record.parked_quests, title, state["level"]):
+        if title and not unsupported_reason(title) and not parked(self.record.parked_quests, title, state["level"],
+                                                                  self.record.held_quests):
             if finder_points_into(goal_zone, world) or in_world((await self.journal_zones()).get(title), world):
                 return None
         zones = await self.journal_zones()
         skip = {name for name, count in self.record.quests_activated.items() if count >= MAX_ACTIVATIONS_PER_QUEST}
-        skip |= {name for name in self.record.parked_quests if parked(self.record.parked_quests, name, state["level"])}
+        skip |= {name for name in self.record.parked_quests if parked(self.record.parked_quests, name, state["level"],
+                                                                      self.record.held_quests)}
+        skip |= set(self.record.held_quests)
         if (target := next_quest_in_world(zones, world, skip=skip)) is not None:
             return await self.activate_for_world(target, f"a quest of {world} in the journal")
         if (visit := await self.school_quest_turn(world, state)) is not None:
@@ -2520,10 +2523,12 @@ class QuestLoop:
         and make that quest one to do again. Not in a tower or dungeon, nor while recharging."""
         if not self.record.wanted_reagents or in_dungeon(state["zone"], self.record.entered_with_x) or self.record.recharging:
             return None
+        wanted = {reagent: title for reagent, title in self.record.wanted_reagents.items()
+                  if " ".join(title.split()) not in self.record.held_quests}
         recent = {gathered for gathered, at in self._gathered if time.monotonic() - at < GATHERED_FORGET_SECONDS}
         me = await self.client.body.position()
         enemies = await nearby_enemies(self.client)
-        for reagent, title in list(self.record.wanted_reagents.items()):
+        for reagent, title in list(wanted.items()):
             found = [found for found in await objects_named(self.client, lambda name: is_reagent(name, reagent))
                      if found["id"] not in recent]
             if not found:

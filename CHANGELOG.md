@@ -208,6 +208,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **Parked quests are held until the wizard404 API is connected** (`RunRecord.held_quests`, `progress.parked`).
+  - **What:** quests in `knowledge.json`'s `held_quests` (title to reason) stay parked whatever the level: the clearing skips them, and no reagent detour is made for them. The quests parked today are held with the reason "waiting for wizard404 API".
+  - **Why:** the operator, 2026-10-28 20:21 UTC: "We will continue parked quests after the API from wizard404 is connected, our request for API token is being approved". Parked quests used to come back at the next level.
+  - **Verified:** offline (`tests/test_progress.py`).
+
 - **A wisp-search point the wizard cannot reach is dropped** (`QuestLoop.note_a_dead_search_point`, `RunRecord.dead_search_points`).
   - **What:** a search point whose walk failed every route method twice is left out of that zone's wisp searches from then on, kept in `knowledge.json`.
   - **Why:** in the Commons the walk to (-3339, -2516) got stuck for about 50 s on each of three refills (15:35, 16:02, 16:14); the zone's points are searched again from the start once all are seen, so it kept coming back.

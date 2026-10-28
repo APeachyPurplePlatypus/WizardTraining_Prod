@@ -135,6 +135,7 @@ class RunRecord:
     enemy_hits: dict[str, int] = field(default_factory=dict)
     refill_after_heavy_fight: bool = False
     dead_search_points: dict[str, list] = field(default_factory=dict)
+    held_quests: dict[str, str] = field(default_factory=dict)
     school_quests_checked: dict[str, int] = field(default_factory=dict)
     walk_strategies_tried: dict[str, list[str]] = field(default_factory=dict)
     tried_wisps: dict[str, float] = field(default_factory=dict)
@@ -319,10 +320,15 @@ def worth_pushing_on(health: float | None, distance_to_goal: float | None, *, st
             and (stalled or distance_to_goal <= GOAL_PUSH_DISTANCE))
 
 
-def parked(parked_quests: dict[str, int], title: str | None, level) -> bool:
+def parked(parked_quests: dict[str, int], title: str | None, level, held: dict[str, str] | None = None) -> bool:
     """A quest parked while clearing a world (its fight lost with PARK_AFTER_STRATEGIES strategies) stays parked
-    until the wizard is past the level it was parked at."""
-    parked_at = parked_quests.get(" ".join(title.split())) if title else None
+    until the wizard is past the level it was parked at; a held one (`held`, title to reason) stays parked whatever
+    the level. The operator, 2026-10-28 20:21 UTC: "We will continue parked quests after the API from wizard404 is
+    connected"."""
+    name = " ".join(title.split()) if title else None
+    if name and held and name in held:
+        return True
+    parked_at = parked_quests.get(name) if name else None
     return parked_at is not None and (not isinstance(level, int) or level <= parked_at)
 
 

@@ -319,6 +319,13 @@ class HeavyFightTest(unittest.TestCase):
         self.assertFalse(heavy_fight(1133, 1033, 1133))
         self.assertFalse(heavy_fight(None, 543, 1133))
 
+    def test_a_held_quest_stays_parked_whatever_the_level(self):
+        from wizardtraining.progress import parked
+        held = {"Strange Brew": "waiting for wizard404 API"}
+        self.assertTrue(parked({"Strange Brew": 14}, "Strange Brew", 20, held))
+        self.assertFalse(parked({"Strange Brew": 14}, "Strange Brew", 15))
+        self.assertTrue(parked({}, "Strange  Brew", 15, held))
+
     def test_after_a_heavy_fight_a_near_goal_comes_before_the_refill_at_half_health_or_more(self):
         from wizardtraining.progress import worth_pushing_on
         self.assertTrue(worth_pushing_on(629 / 1164, 3018))
