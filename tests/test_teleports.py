@@ -1,8 +1,14 @@
 import struct
 import unittest
+from types import SimpleNamespace
 
 from wizardtraining.teleports import (LEFT_ZONE, NO_EFFECT, TeleportVolume, choose_crossing, describe_outcome,
                                       parse_teleport_volumes, volume_at)
+
+
+def xyz(x: float, y: float, z: float) -> SimpleNamespace:
+    """A position as the game gives it (x, y, z), without WizWalker."""
+    return SimpleNamespace(x=x, y=y, z=z)
 
 
 def volume_bytes(name: str, x: float, y: float, z: float, radius: float, *, enter_event: bool = False) -> bytes:
@@ -88,12 +94,11 @@ class ExitByHeightTest(unittest.TestCase):
     """Kraken Isle, 1,300 below Triton Avenue's street, left by "Teleport location From Kraken Isle" (18:12)."""
 
     def setUp(self):
-        from wizwalker import XYZ
         from wizardtraining.teleports import TeleportVolume
         self.isle_exit = TeleportVolume("TeleportVol_Teleport location From Kraken Isle", -13961.0, -142.0, -1994.0, 171.0)
         self.tele_up = TeleportVolume("TeleportVol_Teleport location (Tele Up)", -16336.0, 1176.0, -1400.0, 200.0)
-        self.on_the_isle = XYZ(-13180.0, 780.0, -1994.0)
-        self.npc_on_the_street = XYZ(-11139.0, -867.0, -675.0)
+        self.on_the_isle = xyz(-13180.0, 780.0, -1994.0)
+        self.npc_on_the_street = xyz(-11139.0, -867.0, -675.0)
 
     def test_the_way_off_a_level_is_its_from_volume(self):
         from wizardtraining.teleports import exit_by_height
@@ -101,9 +106,8 @@ class ExitByHeightTest(unittest.TestCase):
                          self.isle_exit)
 
     def test_none_on_the_same_level_or_once_seen_to_do_nothing(self):
-        from wizwalker import XYZ
         from wizardtraining.teleports import NO_EFFECT, exit_by_height
-        same_level = XYZ(-13500.0, 1300.0, -1994.0)
+        same_level = xyz(-13500.0, 1300.0, -1994.0)
         self.assertIsNone(exit_by_height([self.isle_exit], self.on_the_isle, same_level, {}))
         self.assertIsNone(exit_by_height([self.isle_exit], self.on_the_isle, self.npc_on_the_street,
                                          {self.isle_exit.name: NO_EFFECT}))

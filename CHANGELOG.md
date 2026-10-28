@@ -210,6 +210,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **The offline tests run without WizWalker again** (`ui.enable_clicks`, `session.attached`, `tests/test_targets.py`, `tests/test_teleports.py`).
+  - **What:** `ui` and `session` import WizWalker inside the two functions that touch the game (turning on clicks, attaching) instead of at the top, so the UI helpers import with the stand-in clients the tests use; the Kraken and Kraken Isle tests give positions as plain (x, y, z) objects, as `tests/test_geometry.py` does, instead of WizWalker's `XYZ`.
+  - **Why:** the CI for the 0.3.0 pull request (Ubuntu and Windows, Python 3.11 and 3.13) has no WizWalker, and 6 tests errored on importing it (`test_gametravel`, `test_questbook`, `test_worldgate`, two in `test_teleports`, one in `test_targets`); on the game machine, where WizWalker is installed, all 457 passed.
+  - **Verified:** offline, 457 tests in a clean environment without WizWalker (Python 3.13).
+
 - **A door known to open on an instance is gone through refilled** (`progress.short_before_entering`, `progress.is_an_instance`, `QuestLoop.door_destination_here`, `QuestLoop.refill_before_entering`, `docs/lessons-learned.md`).
   - **What:** before pressing X at a "to Enter" prompt, the door's destination is taken from the doors learned walking out of zones (`RunRecord.zone_doors`, within 600). One known to open on an instance (a zone named "_T<n>", a tower or a dungeon) waits for 90% health and 80% mana: the wizard marks the door, refills in the Commons and Recalls back. One known to open on a shop, house or room asks for nothing; one not known yet only asks that the wizard not be low (40% health, 20% mana). A dungeon-entry box after X is still left for the operator.
   - **Why:** "Odd Tidings"' waypoint under Triton Avenue was the door of WC_Triton_Underwater_T1, entered at 525 of 1164 health right after a costly fight, and 90 s of standing inside gave no health or mana back (18:40 to 18:42). A first version asked for the full refill at every "to Enter" door, which would have sent the wizard to the Commons before shops and houses; the coordinator asked to narrow it.
