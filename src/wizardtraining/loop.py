@@ -52,7 +52,7 @@ from .navigation import load_planner
 from .policy import LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, SpellTypePolicy, biggest_hits
 from .progress import (DUEL_BLOCKS_THE_WAY, DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY, ENEMY_NEAR_PATH, LimitReached, Limits, PATH_THREATS,
                        PlannedRoute, RunRecord, StopRun, check_limits, leaves_world, health_to_travel, mana_for_a_fight, mana_to_travel, still_to_recharge, worth_marking, worth_recalling,
-                       PARK_AFTER_STRATEGIES, HEAVY_ZONE_FIGHTS, RECALL_MANA_NEEDED, RECHARGE_HEALTH_FRACTION, heavy_fight, parked, worth_pushing_on, made_headway, GOAL_HEADWAY, STALLED_TRIPS_TO_PARK,
+                       PARK_AFTER_STRATEGIES, HEAVY_ZONE_FIGHTS, RECALL_MANA_NEEDED, RECHARGE_HEALTH_FRACTION, heavy_fight, parked, worth_pushing_on, made_headway, GOAL_HEADWAY, STALLED_TRIPS_TO_PARK, forget_obstacles_near, OBSTACLE_FORGET_RADIUS,
                        nav_did_better, progressed, ready_to_recall, remember_obstacles, safe_to_stand, short_for_a_fight,
                        should_drink_potion, stalled, topped_up, travel_outcome, wanted_wisp,
                        WISP_ANY_DIRECTION_BELOW_FRACTION, world_of)
@@ -186,6 +186,7 @@ class QuestLoop:
         self._mark_position = None
         self._trip_distances: dict[str, float] = {}
         self._search_point_failures: dict[tuple, int] = {}
+        self._obstacles_forgotten_at: set[tuple] = set()
         self._stalled_trips: dict[str, int] = {}
         self._level_table: dict[int, int] | None = None
         self._experience: tuple[int, int] | None = None
@@ -1213,8 +1214,10 @@ class QuestLoop:
 
     async def goal_with_a_target(self, goals: list[dict], first: dict):
         """With no quest arrow, work on the first open goal whose target can be found, by its tags or by its
-        enemies in sight, rather than searching for the first goal's while another's is known."""
-        for goal in goals:
+        enemies in sight, rather than searching for the first goal's while another's is known; goals in this zone
+        first. In the Commons with its Smith open, the first goal led through the gate to Unicorn Way (16:58)."""
+        zone = await self.client.zone_name()
+        for goal in sorted(goals, key=lambda goal: goal.get("destination_zone") != zone):
             arrow = await self.target_without_arrow(goal)
             if arrow is not None:
                 return arrow, goal
@@ -1767,6 +1770,18 @@ class QuestLoop:
         if must_come_back and self._marked_in != zone:
             return None
         return await self.go_home_for(stat, state)
+
+    def forget_learned_obstacles_here(self, zone: str, where) -> None:
+        """Every route method failed and the wizard barely moved, with no enemy or players' fight to blame: drop the
+        obstacles learned this run near it, once per spot, so the next turn plans again without them."""
+        spot = (zone, round(where.x / OBSTACLE_FORGET_RADIUS), round(where.y / OBSTACLE_FORGET_RADIUS))
+        if spot in self._obstacles_forgotten_at:
+            return
+        self._obstacles_forgotten_at.add(spot)
+        dropped = forget_obstacles_near(self.record, zone, (where.x, where.y))
+        if dropped:
+            self.events.emit("walk", f"every route failed at ({where.x:.0f}, {where.y:.0f}); dropped {dropped} obstacles "
+                                     f"learned this run within {OBSTACLE_FORGET_RADIUS:.0f} to plan again without them")
 
     def forget_the_mark_in(self, zone: str) -> None:
         """No Recall back to `zone`'s mark: the wizard walks in, and marks again on arriving in the goal's zone."""
@@ -2888,6 +2903,9 @@ class QuestLoop:
                         "methods": [(tried["method"], tried.get("result"), tried.get("reason"),
                                      tried.get("sidesteps"), tried.get("seconds")) for tried in trip["attempts"]]}
         new_obstacles = remember_obstacles(self.record, zone, trip["blocked_at"])
+        if (trip["reason"] == "every route method failed" and moved < BARELY_MOVED_DISTANCE and not around
+                and blocking_duel is None):
+            self.forget_learned_obstacles_here(zone, start)
         methods = ", ".join(f"{tried['method']}: {tried.get('result')}{failure_text(tried)}{reroute_text(tried)}"
                             for tried in trip["attempts"])
         threat = (self.approaches.closest(time.monotonic(), NEAREST_ENEMIES_NOTED) or None

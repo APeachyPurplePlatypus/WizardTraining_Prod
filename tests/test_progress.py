@@ -319,6 +319,13 @@ class HeavyFightTest(unittest.TestCase):
         self.assertFalse(heavy_fight(1133, 1033, 1133))
         self.assertFalse(heavy_fight(None, 543, 1133))
 
+    def test_obstacles_learned_near_a_spot_are_forgotten(self):
+        from wizardtraining.progress import forget_obstacles_near
+        shop = record()
+        shop.obstacles["WizardCity/WC_Shop_Area"] = [(-1500, -2300), (-1600, -2400), (2000, 0)]
+        self.assertEqual(forget_obstacles_near(shop, "WizardCity/WC_Shop_Area", (-1540, -2358)), 2)
+        self.assertEqual(shop.obstacles["WizardCity/WC_Shop_Area"], [(2000, 0)])
+
     def test_a_held_quest_stays_parked_whatever_the_level(self):
         from wizardtraining.progress import parked
         held = {"Strange Brew": "waiting for wizard404 API"}

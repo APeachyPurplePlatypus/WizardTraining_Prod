@@ -402,6 +402,19 @@ def remember_obstacles(record: RunRecord, zone: str, found: list) -> int:
     return len(kept)
 
 
+OBSTACLE_FORGET_RADIUS = 600.0
+
+
+def forget_obstacles_near(record: RunRecord, zone: str, point, radius: float = OBSTACLE_FORGET_RADIUS) -> int:
+    """Drop the obstacles learned this run within `radius` of `point` in the zone; how many were dropped. In the
+    Shopping District, cells learned near the wizard left every route method without a way for two minutes, and a
+    restart, which forgets them, walked on at once (16:54 to 16:58)."""
+    known = record.obstacles.get(zone, [])
+    kept = [cell for cell in known if (cell[0] - point[0]) ** 2 + (cell[1] - point[1]) ** 2 > radius ** 2]
+    record.obstacles[zone] = kept
+    return len(known) - len(kept)
+
+
 class PlannedRoute:
     """How close each enemy was expected to come to a route when walking it began, given where it was heading.
     The planner may accept passing an enemy it could not avoid; only a new enemy, or one now expected to come

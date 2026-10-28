@@ -208,6 +208,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **Learned obstacles near a dead end are forgotten, and a goal in the wizard's zone comes first** (`progress.forget_obstacles_near`, `QuestLoop.forget_learned_obstacles_here`, `QuestLoop.goal_with_a_target`).
+  - **What:** when every route method fails and the wizard barely moves, with no enemy or players' fight to blame, the obstacles learned this run within 600 of it are dropped, once per spot, and the next turn plans again. With no quest arrow, open goals in the wizard's own zone are tried before the others.
+  - **Why:** in the Shopping District, cells learned near the wizard left every route method without a way for two minutes, and a restart, which forgets them, walked on at once (16:54 to 16:58). In the Commons with its Smith open, the first goal in the list led through the gate to Unicorn Way (16:58). The coordinator asked for both.
+  - **Verified:** offline (`tests/test_progress.py`).
+
 - **"Explore" waypoint goals go to their zone's ExploreObject** (`placed.explore_spot`, `QuestLoop.target_without_arrow`).
   - **What:** when the quest arrow shows nothing, a goal named `WizardQuestGoals_Explore` in the wizard's zone targets that zone's one placed `ExploreObject`; reaching it walks the wizard into the trigger volume that completes the goal.
   - **Why:** "Find the Smiths" ("Find all the Smiths for Zeke in Wizard City") has ten such waypoint goals, one per zone, with no tags, so the tag match that found Triton's Cogs had nothing to go on. Each zone's `volumes.xml` holds a "<zone> Smith" volume, and it sits on the zone's only `ExploreObject_WC` in all ten zones (read offline from the game files; the goal list read from memory while the run was stopped). The operator: "the smiths quest is similar to cogs. No quest finder, but you should be able to find the game data".
