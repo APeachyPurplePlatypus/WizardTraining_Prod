@@ -313,24 +313,25 @@ class QuestLoop:
             self.events.emit("mana", f"{state['mana']} mana, under the {TRAVEL_MANA_RESERVE} kept for fights, in "
                                      f"{zone}, where fights are heavy: refilling in the Commons first")
             return trip
-        if not self._refill_after_heavy_fight:
-            return None
         fraction = health_fraction(state)
+        low_among_enemies = fraction is not None and not health_to_travel(fraction) and zone in self.record.zones_with_enemies
+        if not self._refill_after_heavy_fight and not low_among_enemies:
+            return None
         if fraction is None or fraction >= RECHARGE_HEALTH_FRACTION:
             self._refill_after_heavy_fight = False
             return None
-        if in_dungeon(state["zone"], self.record.entered_with_x) and not self.travel_allowed_in(state["zone"]):
+        if in_dungeon(zone, self.record.entered_with_x) and not self.travel_allowed_in(zone):
             return None
         if await self.safe_here():
             return await self.keep_looking_turn("health", state, await self.planner())
-        low_among_enemies = not health_to_travel(fraction) and state["zone"] in self.record.zones_with_enemies
-        if ((self.record.heavy_fights.get(state["zone"], 0) >= HEAVY_ZONE_FIGHTS or low_among_enemies)
-                and self.use_travel_buttons and self._marked_in is None and self.travel_allowed_in(state["zone"])):
+        if ((heavy_zone or low_among_enemies) and self.use_travel_buttons and self._marked_in is None
+                and self.travel_allowed_in(zone)):
             trip = await self.commons_trip_turn("health", state)
             if trip is not None:
-                self.events.emit("health", f"{self.record.heavy_fights[state['zone']]} heavy fights in {state['zone']}: "
-                                           "refilling in the Commons, then Recall back, rather than looking for "
-                                           "wisps among its enemies")
+                why = (f"{self.record.heavy_fights.get(zone, 0)} heavy fights in {zone}" if heavy_zone else
+                       f"{state['health']} of {state['max_health']} health in {zone}, among enemies")
+                self.events.emit("health", f"{why}: refilling in the Commons, then Recall back, rather than looking "
+                                           "for wisps among its enemies")
                 return trip
         return await self.refill_turn("health", state)
 
