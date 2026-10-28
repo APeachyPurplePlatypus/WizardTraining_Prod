@@ -163,6 +163,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **With no quest arrow, the wizard walks to the zone an open goal names; a goal that cannot be found parks its quest while clearing a world** (`QuestLoop.go_to_goal_zone_turn`).
+  - **What:** when the quest arrow shows nothing, the wizard walks one door at a time toward the nearest zone of its world that an open goal names and a way is known to. While clearing a world, a goal still not found parks its quest until the next level instead of stopping the run.
+  - **Why:** "Find the Smiths" (Prospector Zeke) has a "Go To" goal for each hidden Smith (Firecat Alley, Colossus Boulevard, ...). The arrow shows nothing outside the goal's zone, the goals have no tags, and the run stopped in the Dark Cave (10:58).
+  - **Verified:** the goals read in the game (10:58); offline (imports, tests).
+
 - **A finishing blow is the most accurate of the cheapest, and a card that did nothing is not played again in that fight** (`policy.cheapest_finisher`, `SpellTypePolicy.note_last_hit`).
   - **What:** among the cheapest attacks that surely finish an enemy, the most accurate is played. When the attack cast last round left its target's health as it was, that card is passed over for the rest of the fight while another attack is in hand.
   - **Why:** a Field Guard at 45 health took three Thunder Snakes (Storm wand) in three rounds without losing any, while a Fire Cat in hand would have finished it; the wizard went from 759 to 520 health (10:49, Haunted Cave street).

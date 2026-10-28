@@ -511,6 +511,30 @@ class QuestLoop:
         return await self.travel_turn(did, point, arrive_radius=WAYPOINT_ARRIVE_RADIUS,
                                       avoid=await nearby_enemies(self.client))
 
+    async def go_to_goal_zone_turn(self, goals: list[dict], here: str) -> dict | None:
+        """With no quest arrow: walk one door toward the nearest zone of this world that an open goal names
+        (`destination_zone`) and a way is known to. "Find the Smiths" has a "Go To" goal per hidden Smith, one in
+        Firecat Alley, one in Colossus Boulevard and so on; the arrow shows nothing outside the goal's zone, and the run
+        stopped in the Dark Cave (10:58). None when a goal is here, or no goal's zone can be walked to."""
+        zones = {goal.get("destination_zone") for goal in goals} - {None, ""}
+        if here in zones:
+            return None
+        planner = await self.planner()
+        names = [volume.name for volume, _ in planner.teleports]
+        reachable = []
+        for zone in zones:
+            if world_of(zone) != world_of(here):
+                continue
+            way = way_toward_zone(here, zone, names)
+            door = None if way is None else self.door_on_the_way(way, planner)
+            if door is not None:
+                reachable.append((zone_hops(self.record.zone_links, here, zone) or 99, zone, door))
+        if not reachable:
+            return None
+        _, zone, door = min(reachable)
+        self.say_once("quest", f"no quest arrow; an open goal is in {zone}: going there")
+        return await self.walk_to_door_turn(f"walk toward {zone} for the quest", *door)
+
     async def go_to_quest_area_turn(self, quest: dict, goals: list[dict]) -> dict | None:
         """A quest whose goals show no arrow can be in another zone than the wizard's: the quest page names its
         area ("Cyclops Lane", `questbook.Activation.area`). When that zone is known (`training.zone_for_area`) and is
@@ -925,9 +949,14 @@ class QuestLoop:
         if arrow_shows_no_target(arrow):
             if (travelled := await self.go_to_quest_area_turn(quest, goals)) is not None:
                 return travelled
+            if (travelled := await self.go_to_goal_zone_turn(goals, state["zone"])) is not None:
+                return travelled
             arrow, goal = await self.goal_with_a_target(goals, goal)
             if arrow is None and goal["type"] in ("bounty", "bountycollect") and goal.get("target_code"):
                 return await self.explore_turn(goal, goals)
+            if arrow is None and self.record.clearing_world:
+                return await self.park_the_active_quest(f"the quest arrow shows no target for its {goal['type']} goal "
+                                                        "and no open goal's zone can be walked to")
             if arrow is None:
                 raise StopRun(f"the quest arrow shows no target for the {goal['type']} goal of "
                               f"{quest.get('title') or quest['name_key']}, and neither its tags {goal.get('tags')} "
