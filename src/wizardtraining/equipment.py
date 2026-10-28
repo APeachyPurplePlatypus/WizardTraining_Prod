@@ -11,7 +11,8 @@ Memory layout, from the type dump of this game version (wiztype, Wizard_1_610.js
   ReqSchoolOfFocus m_magicSchool at 80.
 - The wizard's school and level: the "BasicMagicSchoolBehavior" behavior, m_schoolOfFocus at 128 and m_level at
   132. `stats.reference_level()` lags behind a level-up until the next zone change; this does not. Its
-  m_experiencePoints at 136 is the experience earned within the level (13,104 at level 13, 2026-10-28).
+  m_experiencePoints at 136 is the wizard's total experience (13,732 at level 13, then 13,765 at level 14 once a fight
+  crossed the level's 13,755, 2026-10-28).
 
 Equipping clicks only these: the HUD's spellbook button, the book's Inventory tab, a category tab, the item, the
 Equip_Item button and the book's Close_Button. Never Trash_Item, RecyclingBinButton or QuickSell_Item.
@@ -127,7 +128,7 @@ async def count_items(client) -> int | None:
 
 
 async def read_experience(client) -> tuple[int, int] | None:
-    """(level, experience within it), read from memory with no clicks; None when unreadable."""
+    """(level, total experience), read from memory with no clicks; None when unreadable."""
     try:
         behavior = await client.client_object.search_behavior_by_name(MAGIC_SCHOOL_BEHAVIOR)
     except Exception:

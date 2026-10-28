@@ -51,8 +51,8 @@ XP_CONFIG = "MagicXPConfig.xml"
 
 
 def load_level_table() -> dict[int, int]:
-    """Each level's m_xpToLevel (what it takes to reach the next level) from the game's MagicXPConfig.xml; {} when it
-    cannot be read."""
+    """Each level's m_xpToLevel (the total experience at which the next level begins) from the game's
+    MagicXPConfig.xml; {} when it cannot be read."""
     try:
         from katsuba.op import STATEFUL_FLAGS, Serializer, SerializerOptions, TypeList
         from katsuba.wad import Archive
