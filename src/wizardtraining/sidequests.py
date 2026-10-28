@@ -16,9 +16,9 @@ UNSUPPORTED = {
                          "placed objects the framework can find; the run walked into a wrong gate four times",
     "The Gravulum Order": "its goal is in Colossus Boulevard, whose tunnel from the Shopping District is closed: a "
                           "blocker (BigGenericBlocker_CollossusGate) stops the wizard about 100 units short of the "
-                          "gate's trigger, with no prompt and no message (2026-10-28, 00:08 to 00:12); players say "
-                          "Merle Ambrose opens it once Wizard City's other assignments are done, and that it may "
-                          "need a membership",
+                          "gate's trigger, with no prompt and no message (2026-10-28, 00:08 to 00:12). It needs a "
+                          "prerequisite quest: the account is a premium member, so it is not membership (the "
+                          "operator, 2026-10-28, relayed: another quest must be completed to gain access)",
 }
 
 

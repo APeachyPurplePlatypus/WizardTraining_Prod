@@ -1371,14 +1371,16 @@ class QuestLoop:
         recharging after a defeat, which goes on with mana over the travel reserve once no blue wisp is left here or
         in the hub (`home_for_wisps_turn`): standing gave about 2 mana a minute. The zone is
         searched once for mana wisps, safe here, then the wizard stands still while mana comes back
-        (`wait_for_mana_turn`) until `progress.topped_up`; health comes back meanwhile."""
+        (`wait_for_mana_turn`) until `progress.topped_up`; health comes back meanwhile.
+        Once the zone and the hub are searched, the search starts over rather than standing (`keep_looking_turn`):
+        wisps come back, and health and mana come back while walking too."""
         if stat == "health" and mana_for_a_fight(mana_fraction(state)):
             if not self.record.recharging:
                 return None
             turn = await self.explore_for_wisps_turn("health", state, planner, reach=refill_reach(True), again=False)
             if turn is None:
                 turn = await self.home_for_wisps_turn("health", state)
-            return turn if turn is not None else await self.wait_for_mana_turn(state, waiting_for="health")
+            return turn if turn is not None else await self.keep_looking_turn("health", state, planner)
         self.top_up_in(state["zone"])
         turn = await self.explore_for_wisps_turn("mana", state, planner, reach=refill_reach(True), again=False)
         if turn is None:
@@ -1389,7 +1391,17 @@ class QuestLoop:
                                      f"{state['mana']} mana, over the {TRAVEL_MANA_RESERVE} kept for fights and "
                                      "Recall, rather than standing for mana (about 2 a minute)")
             return None
-        return turn if turn is not None else await self.wait_for_mana_turn(state)
+        return turn if turn is not None else await self.keep_looking_turn("mana", state, planner)
+
+    async def keep_looking_turn(self, stat: str, state: dict, planner: RoutePlanner) -> dict:
+        """The safe zone was searched for wisps and none is left in sight: search it again from the start, since used-up
+        wisps come back, and health and mana come back while walking as while standing. Standing only when no part of
+        the zone is left to walk to. The operator, 2026-10-28 (relayed): standing to regenerate is fine, but the wizard
+        should go on hunting for wisps in known safe areas, which is faster than waiting, and regenerates as it looks."""
+        turn = await self.explore_for_wisps_turn(stat, state, planner, reach=refill_reach(True), again=True)
+        if turn["progress"]:
+            return turn
+        return await self.wait_for_mana_turn(state, waiting_for=stat)
 
     async def home_for_wisps_turn(self, stat: str, state: dict) -> dict | None:
         """This safe zone was searched and holds no wisp of the kind needed: Go Home, free, to search the world's hub

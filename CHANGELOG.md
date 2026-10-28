@@ -6,6 +6,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Added
 
+- **A safe zone is searched for wisps again rather than stood in** (`QuestLoop.keep_looking_turn`).
+  - **What:** recharging after a defeat, or topping up mana, in a zone where no enemy has been met: once the zone and the hub have been searched and no wisp is in sight, the search starts over from the zone's first point instead of standing still. The wizard stands only when no part of the zone is left to walk to.
+  - **Why:** the operator, 2026-10-28 (relayed at 13:52 UTC): standing to regenerate is fine, but the wizard should go on hunting for wisps in known safe areas, since that is faster than waiting and health comes back while it looks. Used-up wisps come back.
+  - **Verified:** offline (imports; the search itself is `explore_for_wisps_turn`, unchanged); in the game, next recharge.
+
 - **An essence is not searched for on the ground; its quest is parked while clearing a world** (`targets.is_essence`, `QuestLoop.park_the_active_quest`).
   - **What:** a scavenge goal whose item is named "... Essence" is collected by casting an Extract spell on an enemy in battle. The bot does not do that yet, so while clearing a world the quest is parked until the next level and the world's other quests go on. Outside a clearing the run stops for the operator, as before.
   - **Why:** the Quest Finder led to "Know Thine Enemy" in Ravenwood (09:31). It asks for "Lost Soul Essence" and taught Extract Undead (Myth, 0 pips, effect collect_essence), not in the equipped 14-card deck. The ground search found nothing at 11 points of Ravenwood (09:31 to 09:32), and could not.
@@ -128,6 +133,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **"The Gravulum Order" waits for a prerequisite quest, not a membership** (`sidequests.UNSUPPORTED`).
+  - **What:** the reason it is passed over now says the tunnel to Colossus Boulevard needs another quest done first.
+  - **Why:** the operator, 2026-10-28 (relayed at 13:52 UTC): the account is a premium member, and Colossus Boulevard likely needs another quest completed to gain access.
+  - **Verified:** offline (`tests/test_sidequests.py`).
+
 - **X at a quest object waits for the object's own prompt, not a person's** (`screen.prompt_fits`, `dialog.walk_up_to`, `dialog.use_object`).
   - **What:** when using a quest object (or gathering a reagent), a prompt that reads "to Talk" is a person's nearby, and counts as no prompt: the wizard keeps stepping closer to the object until another prompt shows. A talk still needs a "to Talk" prompt, as before.
   - **Why:** "The Facts of Life" (from Farley's menu, through the Quest Finder) asks to look at a seedling in Golem Court. The wizard stood 110 units from the "WC_Gardening_Plant_Seedling" with Farley's "to Talk" prompt showing; Farley was 416 units away. Each X opened his shop menu, and the run stopped after four (09:40).
@@ -151,6 +161,7 @@ Every change, enhancement or addition is listed with its rationale, so later con
 - **A Recall counts only once the load ends in another zone** (`gametravel.recall`, `gametravel.zone_after_loading`).
   - **What:** after Recall Location, the wizard waits for the load to end and checks the zone; the same zone as before is "the zone did not change after Recall", and the mark is forgotten.
   - **Why:** at 01:32 the game began a load after Recall, then refused with a box titled "INFO": "You cannot teleport to that location. The dungeon timer has ended and the dungeon has been reset." The wizard stayed in the Commons, and the run took the Recall for done. A mark pressed inside a dungeon belongs to that dungeon (the Recall button names only the street outside, "Cyclops Lane"); once the wizard leaves, the dungeon's timer runs, and when it ends the dungeon resets. The refill trip out of it had taken about four minutes.
+  - **Correction (2026-10-28, 13:55 UTC):** that the dungeon reset after the four-minute trip is not established. The box's text was read at 01:32 to 01:35, about 25 minutes after the 01:07 mark, and after the wizard had walked back in (01:24) and lost there (01:27). The two Recalls at 01:11 changed no zone and were followed by an INFO box the run did not read; their cause is unknown. The operator says a dungeon can be left for up to 30 minutes, and is sceptical of the reading. `WC_Cyclops_T1` was taken off the list of dungeons that reset (`Knowledge.leaving_resets`).
   - **Verified:** in the game (the box's text read at 01:35); offline (`tests/test_gametravel.py`: a load that begins and ends in the same zone is not a Recall).
 
 - **A teleport must land fewer zones from the goal than the wizard is, and door bounces no longer teach the time to cross a zone** (`travelplan.choose_travel`, `QuestLoop.learn_the_way`).
@@ -161,6 +172,7 @@ Every change, enhancement or addition is listed with its rationale, so later con
 - **Dungeons are refilled in place again unless `--leave-dungeons`; a mark Recall cannot reach is forgotten; a message box that closes by itself no longer stops the run** (`training.travel_buttons_allowed`, `QuestLoop.forget_a_mark_out_of_reach`, `QuestLoop.box_closes_by_itself`).
   - **What:** the travel buttons are not pressed in any dungeon unless `--leave-dungeons` is given (never on a tower floor, nor in a dungeon found reset), and the wizard never recalls into a zone where they are not allowed. A Recall that changes no zone forgets the mark. An open message box is given 10 seconds to close with no click before the run stops for it.
   - **Why:** the first refill trip out of a dungeon (`WC_Cyclops_T1`, "Mad Maximus", 01:07 to 01:12) marked the spot (the Recall button then named "Cyclops Lane") and went home, but Recall could not bring the wizard back, twice; each failed Recall was followed by a box titled "INFO" that closed by itself, and the run stopped for it twice. Until the operator decides between trying each dungeon once and never leaving dungeons, the safer way is the default.
+  - **Later:** the operator's answer (2026-10-28, 13:52 UTC, relayed): stay in the dungeon. Refilling in place is the rule; `--leave-dungeons` stays off.
   - **Verified:** offline (`tests/test_training.py`); in the game: the trip and the failed Recalls (01:07 to 01:13).
 
 - **A door the zone data does not list is learned where a walk went through it by accident, and routed around** (`routes.add_hidden_door`, `routes.hidden_doors_to_keep_out_of`, `QuestLoop.note_hidden_door`).
