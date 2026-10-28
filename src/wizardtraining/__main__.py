@@ -1,7 +1,7 @@
 """Command line.
 
     python -m wizardtraining probe
-    python -m wizardtraining play --level 7 --minutes 25 --battles 20 [--max-defeats N] [--approve-quest TITLE ...] [--use-potions] [--use-travel-buttons] [--wear-gear]
+    python -m wizardtraining play --level 7 --minutes 25 --battles 20 [--max-defeats N] [--approve-quest TITLE ...] [--use-potions] [--use-travel-buttons] [--wear-gear] [--clear-world WORLD]
     python -m wizardtraining stop
 
 Start the game and log in yourself first. Stop a running `play` with `stop` from a second terminal,
@@ -47,6 +47,10 @@ def main(argv=None) -> int:
     play.add_argument("--use-travel-buttons", action="store_true",
                       help="refill mana by the game's own travel buttons: Mark Location, Go to The Commons, then "
                            "Recall Location back (operator's decision of 2026-10-28; nothing is moved by the framework)")
+    play.add_argument("--clear-world", metavar="WORLD",
+                      help="finish a world's quests first, as its zone paths name it (WizardCity): the quests the "
+                           "quest page lists there, then each giver the journal's Quest Finder points to, then back to "
+                           "the quest paused for it (the operator, 2026-10-28)")
     play.add_argument("--wear-gear", action="store_true",
                       help="wear the best gear in the backpack, checked after each level-up or new loot, only in "
                            "zones without enemies; nothing is bought, sold or thrown away")
@@ -71,7 +75,8 @@ def main(argv=None) -> int:
                     stay_in_world=not args.leave_world)
     offers = (TakeAllQuests if args.side_quests else MainQuestsOnly)(approved_titles=args.approve_quest)
     report, path = asyncio.run(play_quests(settings, limits, offer_policy=offers, use_potions=args.use_potions,
-                                            wear_gear=args.wear_gear, use_travel_buttons=args.use_travel_buttons))
+                                            wear_gear=args.wear_gear, use_travel_buttons=args.use_travel_buttons,
+                                            clear_world=args.clear_world))
     print(f"stopped: {report['stopped']}\nreport: {path}")
     return 0
 

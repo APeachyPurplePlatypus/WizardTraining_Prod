@@ -121,7 +121,7 @@ TRITON, CYCLOPS, FIRECAT = ("WizardCity/WC_Streets/WC_Triton", "WizardCity/WC_St
                             "WizardCity/WC_Streets/WC_Firecat")
 UNICORN_WAY, HAUNTED_CAVE, DARK_CAVE = ("WizardCity/WC_Streets/WC_Unicorn", "WizardCity/WC_Streets/WC_HauntedCave",
                                         "WizardCity/WC_Streets/WC_DarkCave")
-ZONE_PARENT = {RAVENWOOD: COMMONS, SHOPPING_DISTRICT: COMMONS, UNICORN_WAY: COMMONS, "WizardCity/WC_NightSide": COMMONS,
+ZONE_PARENT = {"WizardCity/WC_Ravenwood_Teleporter": RAVENWOOD, RAVENWOOD: COMMONS, SHOPPING_DISTRICT: COMMONS, UNICORN_WAY: COMMONS, "WizardCity/WC_NightSide": COMMONS,
                OLDE_TOWN: SHOPPING_DISTRICT, TRITON: OLDE_TOWN, CYCLOPS: OLDE_TOWN, FIRECAT: OLDE_TOWN,
                HAUNTED_CAVE: TRITON, DARK_CAVE: CYCLOPS}
 # Wizard City's zones as a tree around the Commons: each zone and the zone one door nearer to it. From the zone files

@@ -29,6 +29,7 @@ ENTRY_NAME = re.compile(r"wndQuestInfo\d+")
 ENTRY_TITLE = ["questInfoWindow", "wndQuestInfo", "txtName"]
 ENTRY_ACTIVATE = ["questInfoWindow", "wndQuestInfo", "btnActivate"]
 ENTRY_AREA = ["questInfoWindow", "wndQuestInfo", "txtWorld"]
+ENTRY_ZONE = ["questInfoWindow", "wndQuestInfo", "txtZone"]
 FORBIDDEN_BUTTONS = ("btnHideQuest",)
 MAX_PAGES = 8
 BOOK_OPEN_SECONDS = 2.0
@@ -78,6 +79,37 @@ async def go_to_first_page(client) -> None:
         await asyncio.sleep(PAGE_SETTLE_SECONDS)
         if [title for _, title in await quest_entries(client)] == before:
             return
+
+
+async def journal_zones(client) -> dict[str, str]:
+    """Each quest the quest page lists, by title, with the world it shows for it ("Wizard City", "Krokotopia"; ""
+    for the Quest Finder), over every page; the book is opened and closed again with the allowed clicks only."""
+    zones: dict[str, str] = {}
+    try:
+        if not await showing(client, BOOK):
+            await click(client, SPELLBOOK_BUTTON)
+            await asyncio.sleep(BOOK_OPEN_SECONDS)
+        await wait_for_window(client, QUEST_TAB)
+        await click(client, QUEST_TAB)
+        await asyncio.sleep(PAGE_SETTLE_SECONDS)
+        await go_to_first_page(client)
+        for _ in range(MAX_PAGES):
+            entries = await quest_entries(client)
+            new = [(entry, title) for entry, title in entries if title and title not in zones]
+            if not new:
+                break
+            for entry, title in new:
+                try:
+                    zones[title] = plain_text(await text_under(entry, ENTRY_ZONE))
+                except Exception:
+                    zones[title] = ""
+            await click(client, NEXT_PAGE)
+            await asyncio.sleep(PAGE_SETTLE_SECONDS)
+    finally:
+        if await showing(client, BOOK):
+            await click(client, CLOSE_BOOK)
+            await asyncio.sleep(PAGE_SETTLE_SECONDS)
+    return zones
 
 
 async def activate_quest(client, title: str, *, click_activate: bool = True) -> Activation:

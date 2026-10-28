@@ -87,6 +87,25 @@ def run(book, title):
             patch.stop()
 
 
+class JournalZonesTest(unittest.TestCase):
+    def test_every_page_is_read_for_its_quests_worlds_with_the_allowed_clicks_only(self):
+        book = QuestBook([["Gather the Troops", "So Many Nirini"], ["The Lore You Know", "Quest Finder"]])
+        for page in book.pages:
+            for index, window in enumerate(page):
+                info = window._children[0]._children[0]
+                world = "Wizard City" if index == 0 and page is book.pages[1] else "Krokotopia"
+                info._children.append(StandIn("txtZone", text=f"<center>{world}</center>"))
+        client = book.client()
+        with mock.patch.object(questbook, "click", book.click), mock.patch.object(questbook, "showing", book.showing), \
+                mock.patch.object(questbook, "PAGE_SETTLE_SECONDS", 0), mock.patch.object(questbook, "BOOK_OPEN_SECONDS", 0):
+            zones = asyncio.run(questbook.journal_zones(client))
+        self.assertEqual(zones["The Lore You Know"], "Wizard City")
+        self.assertEqual(zones["Gather the Troops"], "Krokotopia")
+        self.assertEqual(len(zones), 4)
+        self.assertLessEqual(set(book.clicked), {"btnSpellbook", "Quest", "btnPrevPage", "btnNextPage", "Close_Button"})
+        self.assertFalse(book.book_open)
+
+
 class SameTitleTest(unittest.TestCase):
     def test_stray_spaces_do_not_matter(self):
         self.assertTrue(questbook.same_title("The Lore You Know ", "The Lore You Know"))

@@ -49,12 +49,13 @@ from .progress import (DUEL_BLOCKS_THE_WAY, DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY, 
                        nav_did_better, progressed, ready_to_recall, remember_obstacles, safe_to_stand, short_for_a_fight,
                        should_drink_potion, stalled, topped_up, travel_outcome, wanted_wisp,
                        WISP_ANY_DIRECTION_BELOW_FRACTION, world_of)
-from .questbook import activate_quest
+from .questbook import journal_zones, same_title, activate_quest
 from .quests import arrow_shows_no_target, game_language, open_goals, read_quest_arrow, read_quests
 from .reports import plain, save_report
 from .patrols import VIEWS_TO_JUDGE, note_sightings, unwalked_paths
 from .routes import GapStep, Hazards, RoutePlanner, duel_clearance
-from .sidequests import unsupported_reason
+from .sidequests import (FINDER_SAME_GIVER_LIMIT, QUEST_FINDER, WORLD_DOOR, WORLD_DOOR_ROOMS, finder_points_into,
+                         in_world, leads_to_the_world_door, next_quest_in_world, unsupported_reason)
 from .strategies import (COMBAT_STRATEGIES, CROWD_STRATEGIES, NO_CLOSER_SECONDS, CombatStrategy, GoalApproach,
                          fight_situation, next_combat_strategy, next_walk_strategy)
 from .travelplan import (GO_HOME, HUBS, RECALL, TRAVEL_MANA_RESERVE, WALK, TravelCosts, choose_travel, link_zones,
@@ -162,6 +163,9 @@ class QuestLoop:
         self._no_teleport_until = 0.0
         self._left_dungeon: tuple[str, int] | None = None
         self._went_home_for_wisps: set[str] = set()
+        self._journal_zones: tuple[frozenset, dict] | None = None
+        self._finder_givers: dict[tuple, int] = {}
+        self._finder_just_activated = False
         self._dungeons_give_nothing_back = False
         self._refill_fully = False
         self._fight_situation: str | None = None
@@ -817,9 +821,13 @@ class QuestLoop:
         if quest is None:
             if await wait_for_dialog(self.client, FOLLOW_UP_WAIT_SECONDS, poll=0.5):
                 return await self.dialog_turn()
+            if (cleared := await self.clear_world_turn(None, state)) is not None:
+                return cleared
             if (switched := await self.switch_quest_turn()) is not None:
                 return switched
             raise StopRun("no active main quest and no dialog offering one")
+        if (cleared := await self.clear_world_turn(quest, state)) is not None:
+            return cleared
         if (reason := unsupported_reason(quest.get("title"))) is not None:
             self.say_once("quest", f"skipping {quest['title']}: {reason}")
             if (switched := await self.switch_quest_turn()) is not None:
@@ -827,6 +835,10 @@ class QuestLoop:
         goals = open_goals(quest)
         goal = goals[0] if goals else {"type": "persona", "destination_zone": ""}
         arrow = await read_quest_arrow(self.client)
+        goal_world, here_world = world_of(goal.get("destination_zone")), world_of(state["zone"])
+        if (arrow_shows_no_target(arrow) and goal_world and goal_world != here_world
+                and not self.record.limits.stay_in_world):
+            return await self.to_the_world_turn(goal_world, state["zone"])
         if arrow_shows_no_target(arrow):
             if (travelled := await self.go_to_quest_area_turn(quest, goals)) is not None:
                 return travelled
@@ -990,6 +1002,131 @@ class QuestLoop:
         self.events.emit("door", "closed the Spiral Map: the goal is not in another world the run may go to")
         return stalled("closed the Spiral Map")
 
+    async def clear_world_turn(self, quest: dict | None, state: dict) -> dict | None:
+        """While clearing a world of its quests (`--clear-world`; the operator, 2026-10-28: "I feel like we did not
+        actually clear wizard city. There is a quest finder you can use in the quest journal. Go there and finish the
+        quests. That will make continuing easier"): outside that world, go there by the Spiral Door
+        (`to_the_world_turn`); in it, do the quests the quest page lists there, then make the journal's Quest Finder
+        the active quest and talk to the giver it points to, until it points out of the world or keeps pointing to a
+        giver with nothing new; then the quest paused for it is the active one again. None to play the active quest
+        as usual."""
+        world = self.record.clearing_world
+        if not world:
+            return None
+        here = state["zone"]
+        title = " ".join(((quest or {}).get("title") or "").split())
+        goals = open_goals(quest) if quest and quest.get("goals") is not None else []
+        goal_zone = goals[0].get("destination_zone") if goals else None
+        if title and title != QUEST_FINDER and self.record.paused_quest is None and not finder_points_into(goal_zone, world):
+            self.record.paused_quest = title
+        if world_of(here) != world:
+            return await self.to_the_world_turn(world, here)
+        if title == QUEST_FINDER:
+            return await self.follow_the_finder(world, goals)
+        if title and not unsupported_reason(title):
+            if finder_points_into(goal_zone, world) or in_world((await self.journal_zones()).get(title), world):
+                return None
+        zones = await self.journal_zones()
+        skip = {name for name, count in self.record.quests_activated.items() if count >= MAX_ACTIVATIONS_PER_QUEST}
+        if (target := next_quest_in_world(zones, world, skip=skip)) is not None:
+            return await self.activate_for_world(target, f"a quest of {world} in the journal")
+        if QUEST_FINDER not in zones:
+            return await self.finish_clearing(world, "the journal has no Quest Finder")
+        self._finder_just_activated = True
+        return await self.activate_for_world(QUEST_FINDER, f"to find the next quest giver in {world}")
+
+    async def follow_the_finder(self, world: str, goals: list[dict]) -> dict | None:
+        """The Quest Finder is active: when it points into the world, the talk goal leads to the giver (None); when it
+        points elsewhere, at nothing, or a third time to the same giver, the world is cleared."""
+        goal = goals[0] if goals else {}
+        goal_zone = goal.get("destination_zone")
+        if not finder_points_into(goal_zone, world):
+            return await self.finish_clearing(world, f"the Quest Finder points to {goal_zone or 'nothing'}")
+        arrow = await read_quest_arrow(self.client)
+        if arrow_shows_no_target(arrow):
+            return await self.finish_clearing(world, f"the Quest Finder shows no giver in {goal_zone}")
+        if self._finder_just_activated:
+            self._finder_just_activated = False
+            self.record.talks_leaving_goal_open.pop(str(goal.get("id")), None)
+            giver = (goal_zone, round(arrow.x, -2), round(arrow.y, -2))
+            self._finder_givers[giver] = self._finder_givers.get(giver, 0) + 1
+            self.events.emit("quest", f"the Quest Finder points to a quest giver in {goal_zone} at "
+                                      f"({arrow.x:.0f}, {arrow.y:.0f})")
+            if self._finder_givers[giver] > FINDER_SAME_GIVER_LIMIT:
+                return await self.finish_clearing(world, f"the Quest Finder keeps pointing to the same giver in "
+                                                         f"{goal_zone}, who offers nothing new")
+        if self.record.talks_leaving_goal_open.get(str(goal.get("id")), 0) >= 2:
+            return await self.finish_clearing(world, f"the giver the Quest Finder points to in {goal_zone} offered "
+                                                     "nothing")
+        return None
+
+    async def finish_clearing(self, world: str, why: str) -> dict:
+        paused = self.record.paused_quest
+        self.record.clearing_world = self.record.paused_quest = None
+        self.events.emit("world", f"{world} cleared: {why}" + (f"; back to {paused}" if paused else ""))
+        if paused:
+            return await self.activate_for_world(paused, "the quest paused to clear the world")
+        return progressed(f"cleared {world}")
+
+    async def activate_for_world(self, title: str, why: str) -> dict:
+        activation = await activate_quest(self.client, title)
+        active = (await read_quests(self.client))["active"]
+        switched = activation.problem is None and active is not None and same_title(active.get("title") or "", title)
+        if title != QUEST_FINDER:
+            self.record.quests_activated[title] = self.record.quests_activated.get(title, 0) + 1
+        self.events.emit("quest", f"made {title} the active quest ({why})" if switched else
+                                  f"could not make {title} the active quest: "
+                                  f"{activation.problem or 'another quest is active after Activate'}")
+        return (progressed if switched else stalled)("switched the active quest", to=title)
+
+    async def journal_zones(self) -> dict[str, str]:
+        """The world the quest page shows for each quest (`questbook.journal_zones`), read again only when the journal
+        changed, and logged."""
+        titles = frozenset(" ".join((entry.get("title") or "").split())
+                           for entry in (await read_quests(self.client))["journal"])
+        if self._journal_zones is None or self._journal_zones[0] != titles:
+            zones = await journal_zones(self.client)
+            self._journal_zones = (titles, zones)
+            self.events.emit("quest", "the quest page lists: " + "; ".join(f"{title} ({zone or '-'})"
+                                                                           for title, zone in zones.items()))
+        return self._journal_zones[1]
+
+    async def to_the_world_turn(self, world: str, here: str) -> dict:
+        """Toward another world: at the Spiral Map, choose it (`world_gate_turn`); in this world's teleporter room,
+        walk to the Spiral Door ("Universe Teleport") and press X at its prompt; elsewhere, walk into a volume toward
+        the teleporter room, or one door of the way there (`training.way_toward_zone`), else Go Home first."""
+        if await spiral_map_open(self.client):
+            return await self.world_gate_turn({"destination_zone": f"{world}/"}, here)
+        planner = await self.planner()
+        room = WORLD_DOOR_ROOMS.get(world_of(here))
+        if here == room:
+            door = next((placed for placed in planner.placed_objects if placed.template == WORLD_DOOR), None)
+            if door is None:
+                raise StopRun(f"no Spiral Door found in {room} to go to {world}; left for the operator")
+            self.say_once("world", f"walking to the Spiral Door in {room} to go to {world}")
+            return await self.walk_to_door_turn(f"walk to the Spiral Door for {world}", XYZ(door.x, door.y, door.z), 0.0)
+        volume = next((volume for volume, _ in planner.teleports if leads_to_the_world_door(volume.name)), None)
+        if volume is not None:
+            self.say_once("world", f"walking into {volume.name} toward the Spiral Door, to go to {world}")
+            return await self.walk_to_door_turn(f"walk toward the Spiral Door for {world}",
+                                                XYZ(volume.x, volume.y, volume.z), volume.radius)
+        if room is not None:
+            way = way_toward_zone(here, room, [volume.name for volume, _ in planner.teleports])
+            door = None if way is None else self.door_on_the_way(way, planner)
+            if door is not None:
+                self.say_once("world", f"walking toward {room} by way of {way.name}, to go to {world}")
+                return await self.walk_to_door_turn(f"walk toward {room} for {world}", *door)
+        hub = self.record.hubs.get(world_of(here)) or HUBS.get(world_of(here))
+        if self.travel_allowed_in(here) and hub and here != hub:
+            started = time.monotonic()
+            problem = await go_to_the_commons(self.client)
+            if problem is None:
+                self._teleport_pressed = (GO_HOME, started)
+                self.record.last_place = None
+                self.events.emit("travel", f"went home to {hub}, on the way to the Spiral Door for {world}")
+                return progressed("went home toward the Spiral Door", world=world)
+        raise StopRun(f"no way to the Spiral Door is known from {here} to go to {world}; left for the operator")
+
     async def switch_quest_turn(self, *, side_quests_only: bool = False) -> dict | None:
         """Make another quest the active one through the quest book (`questbook.activate_quest`), when the offer
         policy takes side quests: the next side quest, the one ready to hand in first, each at most
@@ -1001,6 +1138,7 @@ class QuestLoop:
         journal, active_title = quests["journal"], (quests["active"] or {}).get("title")
         active_title = " ".join(active_title.split()) if active_title else None
         titled = [entry for entry in journal if entry.get("title") and " ".join(entry["title"].split()) != active_title
+                  and entry["title"] != QUEST_FINDER
                   and not unsupported_reason(entry["title"])
                   and self.record.quests_activated.get(" ".join(entry["title"].split()), 0) < MAX_ACTIVATIONS_PER_QUEST]
         side_quests = [entry for entry in titled if entry["mainline"] is not True]
@@ -2015,12 +2153,16 @@ def reroute_text(attempt: dict) -> str:
 
 async def play(settings: Settings, limits: Limits, *, combat_policy: CombatPolicy | None = None,
                offer_policy: OfferPolicy | None = None, loop_class: type[QuestLoop] = QuestLoop,
-               use_potions: bool = False, wear_gear: bool = False, use_travel_buttons: bool = False):
+               use_potions: bool = False, wear_gear: bool = False, use_travel_buttons: bool = False,
+               clear_world: str | None = None):
     """Attach to the game, play, remove the hooks, and always save the report, even when interrupted.
-    Returns the report and the path it was saved to."""
+    Returns the report and the path it was saved to. `clear_world` starts clearing that world of its quests
+    (`QuestLoop.clear_world_turn`); a clearing begun by an earlier run goes on without it."""
     record = RunRecord(limits=limits)
     knowledge = Knowledge.load(settings.knowledge_file)
     knowledge.give_to(record)
+    if clear_world and record.clearing_world != clear_world:
+        record.clearing_world = clear_world
     events = EventLog.in_folder(settings.runtime_folder)
     events.emit("knowledge", f"from earlier runs: {knowledge.summary()}")
     record.events_file = str(events.path)

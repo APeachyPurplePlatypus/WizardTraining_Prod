@@ -124,6 +124,7 @@ class KnowledgeTest(unittest.TestCase):
         run.travel_costs = {"walk_speed": 359.0}
         run.hubs = {"Krokotopia": "Krokotopia/KT_Hub"}
         run.leaving_resets = ["WizardCity/WC_Streets/Interiors/WC_OldeTown_T2"]
+        run.clearing_world, run.paused_quest = "WizardCity", "Gather the Troops"
         knowledge.learn_from(run)
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "knowledge.json"
@@ -137,6 +138,7 @@ class KnowledgeTest(unittest.TestCase):
                                             "Krokotopia/KT_Pyramid/KT_AltarOfKings": ["Krokotopia/KT_Hub"]})
         self.assertEqual((later.travel_costs, later.hubs), ({"walk_speed": 359.0}, {"Krokotopia": "Krokotopia/KT_Hub"}))
         self.assertEqual(later.leaving_resets, ["WizardCity/WC_Streets/Interiors/WC_OldeTown_T2"])
+        self.assertEqual((later.clearing_world, later.paused_quest), ("WizardCity", "Gather the Troops"))
 
     def test_a_new_run_starts_with_it(self):
         run = RunRecord(limits=Limits())

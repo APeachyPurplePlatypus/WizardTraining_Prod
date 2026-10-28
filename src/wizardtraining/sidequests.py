@@ -17,6 +17,42 @@ UNSUPPORTED = {
 }
 
 
+QUEST_FINDER = "Quest Finder"
+# The journal's Quest Finder: an entry named "Quest Finder" (its name is no language code, so it has no other title),
+# whose one goal, once it is made the active quest, is a talk with the nearest giver of a quest not yet taken in the
+# wizard's world. In the Krokotopia world teleporter room it pointed at the NPC standing there.
+WORLD_DOOR = "Universe Teleport"
+WORLD_DOOR_ROOMS = {"Krokotopia": "Krokotopia/KT_WorldTeleporter", "WizardCity": "WizardCity/WC_Ravenwood_Teleporter"}
+WORLD_DOOR_WORDS = ("teleporter", "worldspiral")
+# The Spiral Door is the placed object "Universe Teleport" in each world's teleporter room; the Krokotopia hub leads
+# there by "Krok_Hub WorldSpiral Entrance". A quest in another world shows no quest arrow ((0, 0, 0) for "The Lore
+# You Know" from Krokotopia), so the way there is known from these, not from the arrow.
+FINDER_SAME_GIVER_LIMIT = 2
+
+
 def unsupported_reason(title: str | None) -> str | None:
     """Why the framework cannot do the side quest called `title`, or None."""
     return UNSUPPORTED.get(" ".join(title.split())) if title else None
+
+
+def in_world(page_zone: str | None, world: str) -> bool:
+    """The quest page names a quest's world as "Wizard City"; zone paths begin with "WizardCity"."""
+    return bool(page_zone) and page_zone.replace(" ", "").lower() == world.lower()
+
+
+def next_quest_in_world(zones: dict[str, str], world: str, *, skip: set[str]) -> str | None:
+    """The first quest the quest page lists in `world` that the framework can do, other than the Quest Finder and
+    those in `skip`."""
+    return next((title for title, zone in zones.items()
+                 if in_world(zone, world) and title != QUEST_FINDER and not unsupported_reason(title)
+                 and " ".join(title.split()) not in skip), None)
+
+
+def finder_points_into(goal_zone: str | None, world: str) -> bool:
+    return bool(goal_zone) and goal_zone.split("/", 1)[0] == world
+
+
+def leads_to_the_world_door(volume_name: str) -> bool:
+    """A teleport volume into a world's teleporter room, such as the Krokotopia hub's "WorldSpiral Entrance"."""
+    name = volume_name.lower().replace(" ", "").replace("_", "")
+    return any(word in name for word in WORLD_DOOR_WORDS)
