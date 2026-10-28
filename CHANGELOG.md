@@ -116,6 +116,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **A zone load that lasts over a minute stops the run as a likely lost connection** (`QuestLoop.play_turn`, `LOAD_STUCK_SECONDS`).
+  - **What:** when the game has been loading for more than 60 s in a row, the run stops for the operator, naming a likely lost connection to the game's server, instead of waiting turn after turn.
+  - **Why:** after about six idle hours (01:32 to 07:41), the walk into the Shopping District began a load that never ended: the game showed only "TransitionWindow" and "WizardPatchingWindow", the zone could not be read, and the run waited for loading every 3 s until it was stopped; the operator restarted the game.
+  - **Verified:** offline (imports and the suite); the stuck load in the game (07:41 to 07:50).
+
 - **A Recall counts only once the load ends in another zone** (`gametravel.recall`, `gametravel.zone_after_loading`).
   - **What:** after Recall Location, the wizard waits for the load to end and checks the zone; the same zone as before is "the zone did not change after Recall", and the mark is forgotten.
   - **Why:** at 01:32 the game began a load after Recall, then refused with a box titled "INFO": "You cannot teleport to that location. The dungeon timer has ended and the dungeon has been reset." The wizard stayed in the Commons, and the run took the Recall for done. A mark pressed inside a dungeon belongs to that dungeon (the Recall button names only the street outside, "Cyclops Lane"); once the wizard leaves, the dungeon's timer runs, and when it ends the dungeon resets. The refill trip out of it had taken about four minutes.

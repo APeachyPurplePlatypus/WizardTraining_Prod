@@ -125,6 +125,7 @@ MAX_TELEPORTS_PER_GOAL = 2
 GATHER_SETTLE_SECONDS = 3.0
 GATHERED_FORGET_SECONDS = 120.0
 BOX_CLOSE_WAIT_SECONDS = 10.0
+LOAD_STUCK_SECONDS = 60.0
 BOX_CLOSE_POLL_SECONDS = 0.5
 WAY_BACK, AFTER_A_DEFEAT, FOR_A_REFILL = "way back", "after a defeat", "refill"
 FEW_PLACES_TO_LOOK = 2
@@ -177,6 +178,7 @@ class QuestLoop:
         self._finder_givers: dict[tuple, int] = {}
         self._finder_just_activated = False
         self._walking_at: tuple[str, dict] | None = None
+        self._loading_since: float | None = None
         self._gathered: list[tuple[int, float]] = []
         self._searched_for: dict[str, set[str]] = {}
         self._dungeons_give_nothing_back = False
@@ -422,12 +424,17 @@ class QuestLoop:
     async def play_turn(self, state: dict) -> dict:
         if state["loading"] is True:
             self._settled_in = None
+            self._loading_since = self._loading_since or time.monotonic()
+            if time.monotonic() - self._loading_since > LOAD_STUCK_SECONDS:
+                raise StopRun(f"a zone load has lasted {time.monotonic() - self._loading_since:.0f} s, likely a lost "
+                              "connection to the game's server; left for the operator")
             self.record.loading_waits_in_a_row += 1
             await asyncio.sleep(LOADING_WAIT_SECONDS)
             if self.record.loading_waits_in_a_row > self.limits.max_loading_waits_in_a_row:
                 return stalled("waited for loading")
             return progressed("waited for loading")
         self.record.loading_waits_in_a_row = 0
+        self._loading_since = None
         if state["zone"] != self._settled_in:
             await self.settle()
             return progressed("settled after arriving")
