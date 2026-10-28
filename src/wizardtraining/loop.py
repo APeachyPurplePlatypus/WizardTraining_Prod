@@ -46,6 +46,7 @@ from .navigation import load_planner
 from .policy import LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, SpellTypePolicy
 from .progress import (DUEL_BLOCKS_THE_WAY, DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY, ENEMY_NEAR_PATH, LimitReached, Limits, PATH_THREATS,
                        PlannedRoute, RunRecord, StopRun, check_limits, leaves_world, health_to_travel, mana_for_a_fight, mana_to_travel, still_to_recharge, worth_marking, worth_recalling,
+                       PARK_AFTER_STRATEGIES, parked,
                        nav_did_better, progressed, ready_to_recall, remember_obstacles, safe_to_stand, short_for_a_fight,
                        should_drink_potion, stalled, topped_up, travel_outcome, wanted_wisp,
                        WISP_ANY_DIRECTION_BELOW_FRACTION, world_of)
@@ -687,6 +688,19 @@ class QuestLoop:
                                          f"playing '{strategy.name}'")
         return strategy
 
+    def park_the_quest_if_lost_too_often(self, situation: str, tried: list[str], battle: dict) -> None:
+        """While clearing a world, a quest whose fight was lost with PARK_AFTER_STRATEGIES strategies is parked
+        (`progress.parked`) until the wizard levels up: the Quest Finder goes on to other givers, and the quest is
+        tried again, with the next strategy, from the next level on. Eyus Maximus, who resists Myth by 40%, beat
+        the wizard at level 13 on its first try (01:27)."""
+        title = " ".join(((self.record.quest or {}).get("title") or "").split())
+        level = (battle.get("after") or {}).get("level")
+        if not self.record.clearing_world or not title or len(tried) < PARK_AFTER_STRATEGIES or not isinstance(level, int):
+            return
+        self.record.parked_quests[title] = level
+        self.events.emit("strategy", f"lost to {situation} with {', '.join(tried)}; parking {title} until the wizard "
+                                     f"is past level {level}, then trying it again with the next strategy")
+
     def change_combat_strategy(self, battle: dict) -> None:
         """After a lost fight, the next fight against these enemies plays by the next combat strategy not yet tried
         against them (`strategy_against`), and says which and why. The operator: "There should be no retry limit as
@@ -700,6 +714,7 @@ class QuestLoop:
             raise StopRun(f"lost to {situation}; the combat policy has no strategies to change; left for the operator")
         if current.name not in tried:
             tried.append(current.name)
+        self.park_the_quest_if_lost_too_often(situation, tried, battle)
         following = next_combat_strategy(tried)
         if following is None:
             raise StopRun(f"lost to {situation} with every combat strategy ({', '.join(tried)}); left for the operator")
@@ -1044,11 +1059,12 @@ class QuestLoop:
             return await self.to_the_world_turn(world, here)
         if title == QUEST_FINDER:
             return await self.follow_the_finder(world, goals)
-        if title and not unsupported_reason(title):
+        if title and not unsupported_reason(title) and not parked(self.record.parked_quests, title, state["level"]):
             if finder_points_into(goal_zone, world) or in_world((await self.journal_zones()).get(title), world):
                 return None
         zones = await self.journal_zones()
         skip = {name for name, count in self.record.quests_activated.items() if count >= MAX_ACTIVATIONS_PER_QUEST}
+        skip |= {name for name in self.record.parked_quests if parked(self.record.parked_quests, name, state["level"])}
         if (target := next_quest_in_world(zones, world, skip=skip)) is not None:
             return await self.activate_for_world(target, f"a quest of {world} in the journal")
         if QUEST_FINDER not in zones:
@@ -1442,6 +1458,7 @@ class QuestLoop:
             if problem is None:
                 self.record.marked_in, self.record.mark_tip = zone, await recall_tip(self.client)
                 self.record.mark_purpose, self.record.mark_quest = FOR_A_REFILL, None
+                self.record.mark_door_for = None
         if must_come_back and self._marked_in != zone:
             return None
         started = time.monotonic()
@@ -1508,6 +1525,7 @@ class QuestLoop:
             return
         self.record.marked_in, self.record.mark_tip = here, await recall_tip(self.client)
         self.record.mark_purpose, self.record.mark_quest = WAY_BACK, quest_name
+        self.record.mark_door_for = None
         self.events.emit("travel", f"marked the way back in {here} before leaving for {goal_zone} "
                                    f"({state['mana']} mana before)")
 
@@ -1568,6 +1586,7 @@ class QuestLoop:
             return
         self.record.marked_in, self.record.mark_tip = zone, await recall_tip(self.client)
         self.record.mark_purpose, self.record.mark_quest = AFTER_A_DEFEAT, None
+        self.record.mark_door_for = None
         self.events.emit("travel", f"marked the spot in {zone}, the goal's zone, to recall to after a defeat "
                                    f"({state['mana']} mana before)")
 
@@ -1578,7 +1597,8 @@ class QuestLoop:
         failed Recall (cooling down), the wizard walks for a minute before trying again."""
         marked_in = self.record.marked_in
         if (time.monotonic() < self._no_recall_until or marked_in is None or not self.travel_allowed_in(marked_in)
-                or not worth_recalling(state["zone"], goal.get("destination_zone"), marked_in, state["mana"])):
+                or not worth_recalling(state["zone"], goal.get("destination_zone"), marked_in, state["mana"],
+                                       self.record.mark_door_for)):
             return None
         if await recall_tip(self.client) != self.record.mark_tip:
             self.events.emit("travel", f"the Recall button no longer names the mark in {marked_in}; forgetting it")
@@ -1798,6 +1818,30 @@ class QuestLoop:
         npc = await or_default(nearest_npc(self.client), None)
         return npc is None or flat_distance(here, npc) > NPC_PROMPT_RANGE
 
+    async def mark_at_the_door(self, zone: str) -> None:
+        """At the door of a tower or dungeon (one entered with X), in the open zone outside it: Mark Location, with
+        mana to spare, so a defeat inside, or any way back to the quest's goal inside, is a Recall to the door
+        (`recall_toward_the_goal_turn`, `progress.worth_recalling`) instead of the walk from the hub: after the
+        defeat at the Cyclops Lane dungeon's boss the way back was four zones on foot (01:27). The mark is for the
+        active goal's zone; not pressed when one is already set here for it."""
+        goal_zone = (self.record.quest or {}).get("goal_zone")
+        if not self.travel_allowed_in(zone) or zone in self._unmarkable or goal_zone in (None, "", zone):
+            return
+        if self.record.marked_in == zone and self.record.mark_door_for == goal_zone:
+            return
+        if not spare_mana(await attempt(self.client.stats.current_mana())):
+            return
+        problem = await mark_here(self.client)
+        if problem is not None:
+            self._unmarkable.add(zone)
+            self.events.emit("travel", f"could not mark the door in {zone}: {problem}")
+            return
+        self.record.marked_in, self.record.mark_tip = zone, await recall_tip(self.client)
+        self.record.mark_purpose, self.record.mark_quest = AFTER_A_DEFEAT, None
+        self.record.mark_door_for = goal_zone
+        self.events.emit("travel", f"marked the door in {zone} before entering {goal_zone}, to recall to after a "
+                                   "defeat or on the way back")
+
     async def enter_with_x_turn(self) -> dict:
         """Press X at a door's interact prompt and give the zone change a few seconds to start. When a dialog opens
         instead, the prompt was a person's: prompts within NOT_A_DOOR_RADIUS of that spot are not taken for a door
@@ -1806,6 +1850,7 @@ class QuestLoop:
         zone = await self.client.zone_name()
         here = await self.client.body.position()
         action = prompt_action(await or_default(interact_prompt_text(self.client), ""))
+        await self.mark_at_the_door(zone)
         await tap(self.client, Keycode.X, TALK_KEY_SECONDS)
         self.events.emit("door", f"the interact prompt showed near a door into another zone (\"to {action}\"); "
                                  "pressed X to enter")

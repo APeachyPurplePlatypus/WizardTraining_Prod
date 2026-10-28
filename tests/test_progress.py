@@ -3,7 +3,7 @@ import unittest
 from wizardtraining.progress import (APPROACH_MARGIN, DUEL_BLOCKS_THE_WAY, ENEMY_NEAR_PATH, ENEMY_PATH_CLEARANCE, ENGAGE_HEALTH_FRACTION,
                                      ENGAGE_MANA_FRACTION, MEANINGFUL_TRAVEL_DISTANCE, LimitReached, Limits,
                                      PlannedRoute, RunRecord, StopRun, check_limits, health_for_a_fight, leaves_world,
-                                     health_to_travel, mana_for_a_fight, mana_to_travel, still_to_recharge, worth_marking, worth_recalling, nav_did_better, progressed, remember_obstacles,
+                                     health_to_travel, mana_for_a_fight, mana_to_travel, still_to_recharge, worth_marking, worth_recalling, parked, nav_did_better, progressed, remember_obstacles,
                                      safe_to_stand, short_for_a_fight, should_drink_potion, stalled, topped_up,
                                      travel_outcome,
                                      ready_to_recall,
@@ -242,6 +242,18 @@ class WispTest(unittest.TestCase):
                                        refused=False))
         self.assertFalse(worth_marking(chamber, chamber, None, 4, enemies_here=True, refused=False))
         self.assertFalse(worth_marking(chamber, chamber, None, 80, enemies_here=True, refused=True))
+
+    def test_recall_to_the_door_of_the_dungeon_the_goal_is_in(self):
+        lane, dungeon, hub = "WizardCity/WC_Streets/WC_Cyclops", "WizardCity/WC_Streets/Interiors/WC_Cyclops_T1", "WizardCity/WC_Hub"
+        self.assertTrue(worth_recalling(hub, dungeon, lane, 80, door_for=dungeon))
+        self.assertFalse(worth_recalling(hub, dungeon, lane, 80))
+        self.assertFalse(worth_recalling(lane, dungeon, lane, 80, door_for=dungeon))
+
+    def test_a_parked_quest_waits_for_the_next_level(self):
+        self.assertTrue(parked({"Mad Maximus": 13}, "Mad Maximus", 13))
+        self.assertFalse(parked({"Mad Maximus": 13}, "Mad Maximus", 14))
+        self.assertFalse(parked({"Mad Maximus": 13}, "Bear Market", 13))
+        self.assertFalse(parked({}, None, 13))
 
     def test_recall_into_the_goals_zone_from_elsewhere(self):
         chamber, hub = "Krokotopia/KT_Pyramid/KT_Chamber", "Krokotopia/KT_Hub"

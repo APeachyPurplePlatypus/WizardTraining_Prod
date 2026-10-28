@@ -122,6 +122,8 @@ class RunRecord:
     clearing_world: str | None = None
     paused_quest: str | None = None
     hidden_doors: dict[str, list[tuple[int, int]]] = field(default_factory=dict)
+    mark_door_for: str | None = None
+    parked_quests: dict[str, int] = field(default_factory=dict)
     walk_strategies_tried: dict[str, list[str]] = field(default_factory=dict)
     tried_wisps: dict[str, float] = field(default_factory=dict)
     visited_objects: list[str] = field(default_factory=list)
@@ -258,12 +260,22 @@ def worth_marking(here: str, goal_zone: str | None, marked_in: str | None, mana,
             and spare_mana(mana))
 
 
-def worth_recalling(here: str, goal_zone: str | None, marked_in: str | None, mana) -> bool:
-    """The Recall button holds a mark in the zone the goal is in, the wizard is elsewhere, and it has the mana for
-    Recall Location (about 5). The operator: "you might have forgot to use the teleport to the chamber of fire you
-    created to get back there"."""
-    return (marked_in is not None and goal_zone == marked_in and here != marked_in
+def worth_recalling(here: str, goal_zone: str | None, marked_in: str | None, mana, door_for: str | None = None) -> bool:
+    """The Recall button holds a mark in the zone the goal is in, or at the door of the dungeon the goal is in
+    (`door_for`), the wizard is elsewhere, and it has the mana for Recall Location (about 5). The operator: "you might
+    have forgot to use the teleport to the chamber of fire you created to get back there"."""
+    return (marked_in is not None and goal_zone in (marked_in, door_for) and here != marked_in
             and isinstance(mana, int) and mana >= RECALL_MANA_NEEDED)
+
+
+PARK_AFTER_STRATEGIES = 3
+
+
+def parked(parked_quests: dict[str, int], title: str | None, level) -> bool:
+    """A quest parked while clearing a world (its fight lost with PARK_AFTER_STRATEGIES strategies) stays parked
+    until the wizard is past the level it was parked at."""
+    parked_at = parked_quests.get(" ".join(title.split())) if title else None
+    return parked_at is not None and (not isinstance(level, int) or level <= parked_at)
 
 
 def ready_to_recall(mana: float | None, health: float | None) -> bool:
