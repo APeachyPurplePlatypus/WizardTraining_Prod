@@ -117,6 +117,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **A scavenge goal recharges first, as any other goal** (`QuestLoop.recharge_first_turn`).
+  - **What:** before a scavenge goal's search, the wizard recharges after a defeat or below 40% health, and refills mana below the travel line, as the usual refills do for other goals (not in a tower, nor in a dungeon refilled in place).
+  - **Why:** the scavenge branch came before the refills, and the wizard searched Cyclops Lane for Mist Wood at 409 of 1133 among its Cyclops (08:51).
+  - **Verified:** offline (imports and the suite); in the game: next run.
+
 - **A talk presses X only at a prompt that reads "to Talk"** (`screen.prompt_for_a_talk`, `dialog.walk_up_to`).
   - **What:** while walking up to an NPC to talk, an interact prompt that does not read "to Talk" counts as no prompt, so the wizard steps closer instead of pressing X at it.
   - **Why:** handing in "Mad Maximus" to Private Emerson in Cyclops Lane, the wizard stood about 500 units from him with another prompt showing; the trusted-prompt rule took it for his, and X, three times (08:14 to 08:22), took the wizard 17,000 units to the top of the lane, by the dungeon, each time ("X pressed but no dialog appeared").
