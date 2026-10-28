@@ -6,6 +6,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **Only a mark the map leaves no way from is kept as a trap** (`progress.trapped_by`, `QuestLoop.forget_a_trapping_mark`).
+  - **What:** a mark with no route out is still forgotten either way, so the way back is walked. It is kept in `RunRecord.trapping_marks` (never marked within 600 again, across runs) only when every route method failed with no enemy to blame. When enemies crowd every route, the mark is only forgotten.
+  - **Why:** at (479, -4081) in Triton's underwater zone, the mark set after a fight was recalled to among 13 crab guards and counted as a trap, though they move. Kept, such spots would pile up in busy zones over runs (the coordinator, 19:15).
+  - **Verified:** offline (`tests/test_progress.py`); in the game: the next mark crowded by enemies.
+
 - **No Recall back to a door the wizard just walked through** (`QuestLoop.mark_the_door_for`, `progress.worth_recalling`).
   - **What:** a door marked for the goal's zone (`mark_at_the_door`) that opens on another zone becomes that zone's door, so it is not recalled to on the way to the goal further in; the door further in is marked when the wizard reaches it. And a Recall toward the goal is not worth it when the wizard walked here from the mark's zone.
   - **Why:** Triton Avenue's "to Jump" door to the underwater zone was marked for the instance below it (WC_Triton_Underwater_T1). Once the underwater zone counted as a street, where the travel buttons work, the wizard came through the door and recalled back to Triton at once, pressed X again, and found Recall cooling down (19:09:43 to 19:10:06).

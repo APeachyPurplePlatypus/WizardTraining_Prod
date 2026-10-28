@@ -250,6 +250,13 @@ class WispTest(unittest.TestCase):
         self.assertFalse(worth_recalling(lane, dungeon, lane, 80, door_for=dungeon))
         self.assertTrue(worth_recalling(hub, dungeon, lane, 80, door_for=dungeon, came_from="WizardCity/WC_Streets/WC_Cyclops_Cave"))
 
+    def test_only_the_map_makes_a_trap_kept_across_runs(self):
+        from wizardtraining.progress import ENEMIES_IN_THE_WAY, trapped_by
+        self.assertEqual(trapped_by("every route method failed"), "the map")
+        self.assertEqual(trapped_by(ENEMIES_IN_THE_WAY), "enemies")
+        self.assertIsNone(trapped_by("battle"))
+        self.assertIsNone(trapped_by(None))
+
     def test_no_recall_back_to_the_door_just_walked_through(self):
         triton, underwater = "WizardCity/WC_Streets/WC_Triton", "WizardCity/WC_Streets/WC_Triton_Underwater/WC_Triton_Underwater"
         instance = "WizardCity/WC_Streets/WC_Triton_Underwater/Interiors/WC_Triton_Underwater_T1"

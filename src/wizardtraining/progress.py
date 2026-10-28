@@ -277,6 +277,13 @@ def worth_marking(here: str, goal_zone: str | None, marked_in: str | None, mana,
             and spare_mana(mana))
 
 
+def trapped_by(reason: str | None) -> str | None:
+    """What leaves the wizard no route from where it stands, from a walk's failure `reason`: "the map" when every
+    route method failed with no enemy to blame, as on Kraken Isle; "enemies" when enemies crowd every route
+    (ENEMIES_IN_THE_WAY), which they stop doing as they move; None for any other reason."""
+    return {"every route method failed": "the map", ENEMIES_IN_THE_WAY: "enemies"}.get(reason)
+
+
 def worth_recalling(here: str, goal_zone: str | None, marked_in: str | None, mana, door_for: str | None = None,
                     came_from: str | None = None) -> bool:
     """The Recall button holds a mark in the zone the goal is in, or at the door of the dungeon the goal is in

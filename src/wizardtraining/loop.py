@@ -51,7 +51,7 @@ from .movement import LOADING, KeysIgnored, Reroute, face, travel
 from .navigation import load_planner
 from .policy import LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, SpellTypePolicy, biggest_hits
 from .progress import (DUEL_BLOCKS_THE_WAY, DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY, ENEMY_NEAR_PATH, LimitReached, Limits, PATH_THREATS,
-                       PlannedRoute, RunRecord, StopRun, check_limits, leaves_world, health_to_travel, mana_for_a_fight, mana_to_travel, still_to_recharge, worth_marking, worth_recalling,
+                       PlannedRoute, RunRecord, StopRun, check_limits, leaves_world, health_to_travel, mana_for_a_fight, mana_to_travel, still_to_recharge, trapped_by, worth_marking, worth_recalling,
                        PARK_AFTER_STRATEGIES, HEAVY_ZONE_FIGHTS, RECALL_MANA_NEEDED, RECHARGE_HEALTH_FRACTION, heavy_fight, parked, worth_pushing_on, short_before_entering, made_headway, GOAL_HEADWAY, STALLED_TRIPS_TO_PARK, forget_obstacles_near, OBSTACLE_FORGET_RADIUS,
                        nav_did_better, progressed, ready_to_recall, remember_obstacles, safe_to_stand, short_for_a_fight,
                        should_drink_potion, stalled, topped_up, travel_outcome, wanted_wisp,
@@ -1844,17 +1844,25 @@ class QuestLoop:
             self.events.emit("quest", f"the spot at ({spot.x:.0f}, {spot.y:.0f}) could not be walked to "
                                       f"{EXPLORE_FAILED_WALKS_TO_SKIP} times; its goal is left for this run")
 
-    def forget_a_trapping_mark(self, zone: str, where) -> None:
+    def forget_a_trapping_mark(self, zone: str, where, *, by_enemies: bool = False) -> None:
         """No route leads anywhere from where the wizard stands, and that is its mark: forget the mark, so a Recall
         does not bring it back here, and a trip to the Commons walks back instead. A mark set where the Kraken fight
         ended stood on Kraken Isle, which no route leaves; each strategy that went to the Commons recalled straight
-        back to it, and the run stopped (18:09 to 18:12)."""
+        back to it, and the run stopped (18:09 to 18:12). Only a mark the map leaves no way from is kept as a trap
+        (`near_a_trapping_mark`); one that enemies crowded round (`by_enemies`) is only forgotten, since they move:
+        13 crab guards round a mark in Triton's underwater zone would have kept the spot from being marked in any
+        later run (the coordinator, 19:15)."""
         mark = self._mark_position
         if self.record.marked_in != zone or mark is None or flat_distance(mark, where) > MARK_TRAP_RADIUS:
             return
-        self.events.emit("travel", f"no route leads anywhere from the mark in {zone} at ({mark.x:.0f}, {mark.y:.0f}); "
-                                   "forgetting it, so the way back is walked, and not marking near here again this run")
-        self.record.trapping_marks.setdefault(zone, []).append((round(mark.x), round(mark.y)))
+        if by_enemies:
+            self.events.emit("travel", f"enemies leave no route from the mark in {zone} at ({mark.x:.0f}, "
+                                       f"{mark.y:.0f}); forgetting it, so the way back is walked")
+        else:
+            self.events.emit("travel", f"no route leads anywhere from the mark in {zone} at ({mark.x:.0f}, "
+                                       f"{mark.y:.0f}); forgetting it, so the way back is walked, and not marking "
+                                       "near here again")
+            self.record.trapping_marks.setdefault(zone, []).append((round(mark.x), round(mark.y)))
         self.forget_the_mark_in(zone)
 
     def near_a_trapping_mark(self, zone: str, where) -> bool:
@@ -3079,8 +3087,8 @@ class QuestLoop:
         if (trip["reason"] == "every route method failed" and moved < BARELY_MOVED_DISTANCE and not around
                 and blocking_duel is None):
             self.forget_learned_obstacles_here(zone, start)
-        if trip["reason"] in ("every route method failed", ENEMIES_IN_THE_WAY) and moved < BARELY_MOVED_DISTANCE:
-            self.forget_a_trapping_mark(zone, start)
+        if (trapped := trapped_by(trip["reason"])) is not None and moved < BARELY_MOVED_DISTANCE:
+            self.forget_a_trapping_mark(zone, start, by_enemies=trapped == "enemies")
         methods = ", ".join(f"{tried['method']}: {tried.get('result')}{failure_text(tried)}{reroute_text(tried)}"
                             for tried in trip["attempts"])
         threat = (self.approaches.closest(time.monotonic(), NEAREST_ENEMIES_NOTED) or None
