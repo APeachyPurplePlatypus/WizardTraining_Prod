@@ -66,6 +66,13 @@ def quest_targets(enemies: list[dict], arrow) -> list[dict]:
             if not enemy["in_a_duel"] and flat_distance(enemy["position"], arrow) <= QUEST_TARGET_ARROW_RADIUS]
 
 
+def named_enemies_not_in_a_duel(enemies: list[dict], code: str | None) -> list[dict]:
+    """The enemies whose display code is `code`, leaving out those seated in another player's duel: walking to one
+    ends at the circle, which routes keep 900 units away from, and a walk near a duel always ends. In Cyclops Lane
+    the four Cyclops Legionnaires in sight were all in one, and the run stopped for turns without progress."""
+    return [enemy for enemy in enemies if code and enemy.get("display_code") == code and not enemy["in_a_duel"]]
+
+
 def bystanders(enemies: list[dict], targets: list[dict]) -> list[dict]:
     target_ids = {target["id"] for target in targets}
     return [enemy for enemy in enemies if enemy["id"] not in target_ids]

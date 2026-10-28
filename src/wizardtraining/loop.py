@@ -62,7 +62,8 @@ from .session import NoClient, attached, hooks_ready
 from .state import attempt, battle_showing, free_to_move, health_fraction, mana_fraction, snapshot
 from .placed import gate_toward, objects_for_goal
 from .targets import (bystanders, enemies_to_route_around, in_grace_after_battle, keeps_blocking,
-                      leads_to_another_zone, next_area_to_explore, others, quest_targets, refill_reach, safe_wisps,
+                      leads_to_another_zone, named_enemies_not_in_a_duel, next_area_to_explore, others, quest_targets,
+                      refill_reach, safe_wisps,
                       summary, too_close, WISP_REACH)
 from .teleports import LEFT_ZONE, NO_EFFECT, TeleportVolume, describe_outcome, volume_at
 from .trainer import OPENED_DIALOG, OPENED_MENU, close_training, learn_free_spells, open_training, open_with_professor
@@ -743,7 +744,7 @@ class QuestLoop:
                                        f"({objects[0].x:.0f}, {objects[0].y:.0f}), {len(objects)} not yet used")
             return XYZ(objects[0].x, objects[0].y, objects[0].z)
         code = goal.get("target_code")
-        matching = [enemy for enemy in await nearby_enemies(self.client) if code and enemy.get("display_code") == code]
+        matching = named_enemies_not_in_a_duel(await nearby_enemies(self.client), code)
         if matching:
             self.events.emit("target", f"no quest arrow; going to {matching[0]['name']} ({code}), "
                                        f"{matching[0]['distance']:.0f} away, {len(matching)} in sight")

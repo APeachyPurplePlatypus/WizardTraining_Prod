@@ -5,7 +5,7 @@ from wizardtraining.routes import ENEMY_KEEP_OUT
 from wizardtraining.targets import (AFTER_BATTLE_GRACE_SECONDS, ENEMY_CLEARANCE, WISP_DETOUR, WISP_REACH,
                                     back_away, bystanders, detour, enemies_to_route_around, in_grace_after_battle,
                                     is_duel_circle, is_dungeon_entrance, keeps_blocking, leads_to_another_zone,
-                                    measured,
+                                    measured, named_enemies_not_in_a_duel,
                                     next_area_to_explore, others, quest_targets,
                                     refill_reach, safe_wisps, threat_centre, too_close)
 
@@ -112,6 +112,15 @@ class TargetsTest(unittest.TestCase):
         self.assertTrue(back_away(0.1, 2 * math.pi - 0.1))
         self.assertFalse(back_away(1.0, 1.0 + math.pi))
         self.assertFalse(back_away(0.0, 2.0))
+
+
+class NamedEnemiesTest(unittest.TestCase):
+    def test_an_enemy_seated_in_a_duel_is_not_a_target(self):
+        seated = {"id": 1, "name": "Cyclops-Blue-L02", "display_code": "WizardMobs_00000008", "in_a_duel": True}
+        free = {"id": 2, "name": "Cyclops-Blue-L02", "display_code": "WizardMobs_00000008", "in_a_duel": False}
+        other = {"id": 3, "name": "Troll-Green-L01", "display_code": "WizardMobs_00000001", "in_a_duel": False}
+        self.assertEqual(named_enemies_not_in_a_duel([seated, free, other], "WizardMobs_00000008"), [free])
+        self.assertEqual(named_enemies_not_in_a_duel([seated, free, other], None), [])
 
 
 class LeadsToAnotherZoneTest(unittest.TestCase):
