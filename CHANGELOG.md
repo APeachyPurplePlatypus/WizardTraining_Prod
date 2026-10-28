@@ -208,6 +208,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **Colossus Boulevard is in the Wizard City zone tree, and gate names match despite doubled letters** (`training.ZONE_PARENT`, `placed.single_letters`).
+  - **What:** Colossus Boulevard hangs off the Shopping District; the Shopping District's gate to it, "BigGenericBlocker_CollossusGate", now matches the zone's name with doubled letters written once.
+  - **Why:** after the Triton Avenue Smith, the last open goal was on Colossus Boulevard, no way there was known from anywhere, and "Find the Smiths" was parked (17:38).
+  - **Verified:** offline (`tests/test_placed.py`; the way from Triton Avenue, Olde Town and the Shopping District checked against the zones' files).
+
 - **One lookup for goals the quest arrow does not lead to** (`untracked.py`, `QuestLoop.untried_spots`, `QuestLoop.try_the_spot`, `navigation._trigger_volumes`, `docs/lessons-learned.md`).
   - **What:** with no quest arrow, a goal in the wizard's zone is looked for in the zone's files, in order: placed objects named by its tags, trigger volumes in `volumes.xml` named after the quest (every volume with an "Enter_" event is now read, `untracked.parse_trigger_volumes`), and the zone's Explore object for an "Explore" goal. The wizard walks to the nearest spot not yet tried; one it stepped into without the goal moving on is not tried again, and one that three walks could not reach is left; with none left, the quest is parked as before. The cog and Smith handling are now cases of it.
   - **Why:** the operator, 2026-10-28 21:34 UTC: "Please add a similar framework update regarding quests where we need to pick up items that the quest arrow does not assist with. Like the cogs or smiths". Wizard City's zones each hold 8 to 38 named trigger volumes; the quest's words ("smith") pick its one "<zone> Smith" volume in each of the ten zones.

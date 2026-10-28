@@ -106,13 +106,20 @@ def words(text: str) -> set[str]:
     return {word.lower() for word in re.findall(r"[A-Z]?[a-z]+|[A-Z]+(?![a-z])|\d+", text)}
 
 
+def single_letters(text: str) -> str:
+    """`text` with each run of a repeated letter written once, so a misspelt name still matches: the Shopping
+    District's gate to Colossus Boulevard is "BigGenericBlocker_CollossusGate"."""
+    return re.sub(r"(.)\1+", r"\1", text)
+
+
 def gate_toward(placed: list[PlacedObject], destination_zone: str, *, arrival=None) -> PlacedObject | None:
     """The street gate leading to `destination_zone`: one whose name holds a word of at least MIN_SHARED_WORD
     letters of the zone's name ("TritonLane" and "WC_Triton", "ToRavenWood" and "WC_Ravenwood"), else the gate
     nearest `arrival`, the point where the wizard came in from that zone, if given."""
     gates = [thing for thing in placed if GATE_WORD in thing.template.lower()]
-    zone_words = {word for word in words(destination_zone.rsplit("/", 1)[-1]) if len(word) >= MIN_SHARED_WORD}
-    named = [gate for gate in gates if any(word in gate.template.lower() for word in zone_words)]
+    zone_words = {single_letters(word) for word in words(destination_zone.rsplit("/", 1)[-1])
+                  if len(word) >= MIN_SHARED_WORD}
+    named = [gate for gate in gates if any(word in single_letters(gate.template.lower()) for word in zone_words)]
     if named:
         return named[0]
     if arrival is not None and gates:

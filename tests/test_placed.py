@@ -14,6 +14,12 @@ def placed_bytes(name: str, x: float, y: float, z: float) -> bytes:
 
 
 class ParseTest(unittest.TestCase):
+    def test_a_misspelt_gate_name_still_leads_to_its_zone(self):
+        from wizardtraining.placed import gate_toward
+        gate = PlacedObject("BigGenericBlocker_CollossusGate", -2058, -7061, 0)
+        self.assertEqual(gate_toward([PlacedObject("WC_GateShop_ToCommons", 0, 0, 0), gate],
+                                     "WizardCity/WC_Streets/WC_Colossus"), gate)
+
     def test_an_explore_goal_goes_to_the_zones_one_explore_object(self):
         from wizardtraining.placed import explore_spot
         spot = PlacedObject("ExploreObject_WC", -5089, -2734, 253)
