@@ -29,6 +29,8 @@ MANA_BELOW_FRACTION = 0.2
 ENGAGE_MANA_FRACTION = 0.4
 ENGAGE_HEALTH_FRACTION = 0.6
 TOP_UP_MANA_FRACTION = 0.9
+RECALL_MANA_FRACTION = 0.8
+RECALL_HEALTH_FRACTION = 0.9
 
 
 def world_of(zone: str | None) -> str | None:
@@ -205,6 +207,13 @@ def mana_to_travel(mana: float | None) -> bool:
     only before a fight the quest asks for: walking to a Firecat Alley waypoint with 3 of 32, any fight on the way
     would be lost, and the zones that give mana back are next door."""
     return mana is None or mana >= MANA_BELOW_FRACTION
+
+
+def ready_to_recall(mana: float | None, health: float | None) -> bool:
+    """After a trip to the Commons for a refill: mana at least RECALL_MANA_FRACTION and health at least
+    RECALL_HEALTH_FRACTION of their pools, or unknown. Recall costs about 5 mana, and the fights it returns to
+    are the ones that sent the wizard away."""
+    return ((mana is None or mana >= RECALL_MANA_FRACTION) and (health is None or health >= RECALL_HEALTH_FRACTION))
 
 
 def topped_up(mana: float | None) -> bool:

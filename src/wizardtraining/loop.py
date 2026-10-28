@@ -46,10 +46,9 @@ from .navigation import load_planner
 from .policy import LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, SpellTypePolicy
 from .progress import (DUEL_BLOCKS_THE_WAY, DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY, ENEMY_NEAR_PATH, LimitReached, Limits, PATH_THREATS,
                        PlannedRoute, RunRecord, StopRun, check_limits, leaves_world, mana_for_a_fight, mana_to_travel,
-                       nav_did_better,
-                       progressed, remember_obstacles, safe_to_stand, short_for_a_fight, should_drink_potion, stalled,
-                       topped_up,
-                       travel_outcome, wanted_wisp, WISP_ANY_DIRECTION_BELOW_FRACTION, world_of)
+                       nav_did_better, progressed, ready_to_recall, remember_obstacles, safe_to_stand, short_for_a_fight,
+                       should_drink_potion, stalled, topped_up, travel_outcome, wanted_wisp,
+                       WISP_ANY_DIRECTION_BELOW_FRACTION, world_of)
 from .questbook import activate_quest
 from .quests import arrow_shows_no_target, game_language, open_goals, read_quest_arrow, read_quests
 from .reports import plain, save_report
@@ -106,6 +105,7 @@ ENEMIES_IN_THE_WAY_WAIT_SECONDS = 4.0
 DUEL_WAIT_SECONDS = 30.0
 MAX_ACTIVATIONS_PER_QUEST = 2
 MARK_MANA_NEEDED = 8
+FEW_PLACES_TO_LOOK = 2
 DUEL_WAIT_POLL_SECONDS = 3.0
 DEFEATED_HEALTH_FRACTION = 0.05
 NOT_FREE_TO_MOVE_WAIT_SECONDS = 3.0
@@ -667,6 +667,9 @@ class QuestLoop:
         if self.use_potions and not self._potion_failed:
             if should_drink_potion(fraction, await attempt(self.client.stats.potion_charge())):
                 return await self.potion_turn(state)
+        if self.use_travel_buttons and self._marked_in is not None:
+            if (back := await self.back_from_the_commons_turn(state)) is not None:
+                return back
         wanted = wanted_wisp(fraction, mana_fraction(state))
         if wanted is not None:
             turn = await self.wisp_turn(wanted, state, heading=await self.wisp_heading(wanted, state))
@@ -711,8 +714,6 @@ class QuestLoop:
                           "to follow it")
         if topped_up(mana_fraction(state)):
             self._topping_up_in = None
-            if (recalled := await self.recall_turn(state)) is not None:
-                return recalled
         refill = short_for_a_fight(health_fraction(state), mana_fraction(state)) if goal["type"] in FIGHT_GOALS else None
         if refill is None and (self._topping_up_in == state["zone"] or not mana_to_travel(mana_fraction(state))):
             refill = "mana"
@@ -902,8 +903,9 @@ class QuestLoop:
             self.saw_enemies(state["zone"])
         if safe_zone:
             return await self.safe_zone_refill_turn(stat, state, planner)
-        if stat == "mana" and not indoors and self.use_travel_buttons:
-            turn = await self.mana_trip_turn(state)
+        too_small_to_search = len(planner.exploration_points) <= FEW_PLACES_TO_LOOK
+        if (stat == "mana" or too_small_to_search) and not indoors and self.use_travel_buttons:
+            turn = await self.commons_trip_turn(stat, state)
             if turn is not None:
                 return turn
         if indoors or stat == "mana":
@@ -951,14 +953,17 @@ class QuestLoop:
                 break
         self.events.emit("mana", f"waited in {state['zone']} for mana: {state['mana']} -> {now['mana']} of "
                                  f"{now['max_mana']}, health {state['health']} -> {now['health']}")
-        gained = isinstance(now["mana"], int) and isinstance(state["mana"], int) and now["mana"] > state["mana"]
+        gained = any(isinstance(now[stat], int) and isinstance(state[stat], int) and now[stat] > state[stat]
+                     for stat in ("mana", "health"))
         return (progressed if gained else stalled)("waited for mana", before=state["mana"], after=now["mana"])
 
-    async def mana_trip_turn(self, state: dict) -> dict | None:
-        """Short of mana in a street with no wisp to fetch: mark the spot (Mark Location costs about 5 mana, so only
-        with MARK_MANA_NEEDED), then Go to The Commons, the world's hub, where mana comes back (free; a
-        walk back through the exits met enemies, and in Cyclops Lane fetching wisps cost more mana than it
-        gave). `recall_turn` returns to the mark. None when the tools cannot be used now, so the wizard walks."""
+    async def commons_trip_turn(self, stat: str, state: dict) -> dict | None:
+        """Short of mana in a street with no wisp to fetch, or of health in a zone too small to look for wisps in
+        (a Golem Tower floor has one place to look): mark the spot (Mark Location costs about 5 mana, so only with
+        MARK_MANA_NEEDED), then Go to The Commons, the world's hub, where mana and health come back (free; a walk
+        back through the exits met enemies, and in Cyclops Lane fetching wisps cost more mana than it gave).
+        `back_from_the_commons_turn` returns to the mark. None when the tools cannot be used now, so the wizard
+        walks."""
         zone = state["zone"]
         if self._marked_in is None and isinstance(state["mana"], int) and state["mana"] >= MARK_MANA_NEEDED:
             problem = await mark_here(self.client)
@@ -969,12 +974,26 @@ class QuestLoop:
         if problem is not None:
             self.events.emit("travel", f"could not go to the Commons for mana: {problem}")
             return None
-        self.events.emit("travel", f"went to the Commons from {zone} with {state['mana']} mana, to refill it there")
-        return progressed("went to the Commons for mana", mana=state["mana"])
+        self.events.emit("travel", f"went to the Commons from {zone} with {state['mana']} mana and {state['health']} "
+                                   f"health, to refill {stat} there")
+        return progressed("went to the Commons for a refill", stat=stat)
+
+    async def back_from_the_commons_turn(self, state: dict) -> dict | None:
+        """After a trip to the Commons: refill there (mana wisps, then standing still, as in any zone without
+        enemies; health comes back as the wizard stands), and Recall Location once `progress.ready_to_recall`.
+        None when no spot is marked or the wizard is where it was marked."""
+        if self._marked_in is None or state["zone"] == self._marked_in:
+            self._marked_in = None
+            return None
+        if ready_to_recall(mana_fraction(state), health_fraction(state)):
+            return await self.recall_turn(state)
+        if not ready_to_recall(mana_fraction(state), None):
+            return await self.safe_zone_refill_turn("mana", state, await self.planner())
+        return await self.wait_for_mana_turn(state)
 
     async def recall_turn(self, state: dict) -> dict | None:
-        """Mana is back after a trip to the Commons: Recall Location to the spot marked before leaving. Recall costs
-        about 5 mana, which the refill covers. None when nothing is marked or the wizard is where it was."""
+        """Recall Location to the spot marked before leaving. Recall costs about 5 mana. None when nothing is
+        marked or the wizard is where it was."""
         marked_in = self._marked_in
         if marked_in is None:
             return None

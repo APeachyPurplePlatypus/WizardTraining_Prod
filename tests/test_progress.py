@@ -6,6 +6,7 @@ from wizardtraining.progress import (APPROACH_MARGIN, DUEL_BLOCKS_THE_WAY, ENEMY
                                      mana_for_a_fight, mana_to_travel, nav_did_better, progressed, remember_obstacles,
                                      safe_to_stand, short_for_a_fight, should_drink_potion, stalled, topped_up,
                                      travel_outcome,
+                                     ready_to_recall,
                                      wanted_wisp, world_of)
 
 
@@ -163,6 +164,14 @@ class TravelOutcomeTest(unittest.TestCase):
         run.duel_waits_in_a_row += 1
         self.assertFalse(travel_outcome("travel", DUEL_BLOCKS_THE_WAY, 0, run)["progress"])
         self.assertGreater(Limits().max_duel_waits_in_a_row, Limits().max_immobile_threat_stops_in_a_row)
+
+
+class ReadyToRecallTest(unittest.TestCase):
+    def test_recall_waits_for_mana_and_health_to_be_back(self):
+        self.assertFalse(ready_to_recall(0.5, 1.0))
+        self.assertFalse(ready_to_recall(0.9, 0.5))
+        self.assertTrue(ready_to_recall(0.8, 0.9))
+        self.assertTrue(ready_to_recall(None, None))
 
 
 class PlannedRouteTest(unittest.TestCase):
