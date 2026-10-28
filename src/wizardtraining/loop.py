@@ -173,7 +173,6 @@ class QuestLoop:
         self._deck_retry_at = 0.0
         self._photos_taken = 0
         self._refill_after_heavy_fight = False
-        self._heavy_fights: dict[str, int] = {}
         self._level_table: dict[int, int] | None = None
         self._experience: tuple[int, int] | None = None
         self._run_start_experience: tuple[int, int] | None = None
@@ -314,11 +313,11 @@ class QuestLoop:
             return None
         if in_dungeon(state["zone"], self.record.entered_with_x) and not self.travel_allowed_in(state["zone"]):
             return None
-        if (self._heavy_fights.get(state["zone"], 0) >= HEAVY_ZONE_FIGHTS and self.use_travel_buttons
+        if (self.record.heavy_fights.get(state["zone"], 0) >= HEAVY_ZONE_FIGHTS and self.use_travel_buttons
                 and self._marked_in is None and self.travel_allowed_in(state["zone"])):
             trip = await self.commons_trip_turn("health", state)
             if trip is not None:
-                self.events.emit("health", f"{self._heavy_fights[state['zone']]} heavy fights in {state['zone']}: "
+                self.events.emit("health", f"{self.record.heavy_fights[state['zone']]} heavy fights in {state['zone']}: "
                                            "refilling in the Commons, then Recall back, rather than looking for "
                                            "wisps among its enemies")
                 return trip
@@ -794,11 +793,11 @@ class QuestLoop:
             raise StopRun(battle["stopped"])
         battle["after"] = {key: after[key] for key in ("zone", "level", "health", "max_health", "mana", "gold")}
         if not defeated and not fled and heavy_fight(before["health"], after["health"], after["max_health"]):
-            self._heavy_fights[before["zone"]] = self._heavy_fights.get(before["zone"], 0) + 1
+            self.record.heavy_fights[before["zone"]] = self.record.heavy_fights.get(before["zone"], 0) + 1
             self._refill_after_heavy_fight = True
             self.events.emit("health", f"the fight cost {before['health'] - after['health']} of {after['max_health']} "
                                        f"health; refilling to {RECHARGE_HEALTH_FRACTION:.0%} from wisps before going on")
-        if defeated and self.record.clearing_world and self._heavy_fights.get(before["zone"], 0) >= HEAVY_ZONE_FIGHTS:
+        if defeated and self.record.clearing_world and self.record.heavy_fights.get(before["zone"], 0) >= HEAVY_ZONE_FIGHTS:
             self.park_the_quest_in_a_heavy_zone(before["zone"], battle)
         if defeated:
             self.record.defeats += 1
@@ -820,7 +819,7 @@ class QuestLoop:
         if not title or not isinstance(level, int):
             return
         self.record.parked_quests[title] = level
-        self.events.emit("strategy", f"lost in {zone}, where {self._heavy_fights[zone]} fights cost a third of the "
+        self.events.emit("strategy", f"lost in {zone}, where {self.record.heavy_fights[zone]} fights cost a third of the "
                                      f"wizard's health or more; parking {title} until past level {level}")
 
     def strategy_against(self, situation: str) -> CombatStrategy:
