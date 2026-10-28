@@ -133,6 +133,7 @@ class RunRecord:
     trainers: dict[str, dict] = field(default_factory=dict)
     heavy_fights: dict[str, int] = field(default_factory=dict)
     enemy_hits: dict[str, int] = field(default_factory=dict)
+    refill_after_heavy_fight: bool = False
     school_quests_checked: dict[str, int] = field(default_factory=dict)
     walk_strategies_tried: dict[str, list[str]] = field(default_factory=dict)
     tried_wisps: dict[str, float] = field(default_factory=dict)

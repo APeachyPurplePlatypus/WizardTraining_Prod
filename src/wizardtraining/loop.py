@@ -182,7 +182,6 @@ class QuestLoop:
         self._trip_stat: str | None = None
         self._trip_started = 0.0
         self._mark_position = None
-        self._refill_after_heavy_fight = False
         self._level_table: dict[int, int] | None = None
         self._experience: tuple[int, int] | None = None
         self._run_start_experience: tuple[int, int] | None = None
@@ -315,7 +314,9 @@ class QuestLoop:
     async def refill_after_heavy_fight_turn(self, state: dict) -> dict | None:
         """After a heavy fight (`progress.heavy_fight`), refill health from wisps to RECHARGE_HEALTH_FRACTION before
         walking on, not only below the travel line: fights there start when pairs walk in. Health only; mana keeps
-        its own refills. Not in a dungeon refilled in place, where the wizard does not leave to refill."""
+        its own refills. Not in a dungeon refilled in place, where the wizard does not leave to refill. Kept in
+        knowledge.json, so a restart in the middle of the refill finishes it (the coordinator, after a restart in the
+        Commons at 50% health would have Recalled at once, 15:26)."""
         zone = state["zone"]
         heavy_zone = self.record.heavy_fights.get(zone, 0) >= HEAVY_ZONE_FIGHTS
         low_mana = isinstance(state["mana"], int) and state["mana"] < TRAVEL_MANA_RESERVE
@@ -326,10 +327,10 @@ class QuestLoop:
             return trip
         fraction = health_fraction(state)
         low_among_enemies = fraction is not None and not health_to_travel(fraction) and zone in self.record.zones_with_enemies
-        if not self._refill_after_heavy_fight and not low_among_enemies:
+        if not self.record.refill_after_heavy_fight and not low_among_enemies:
             return None
         if fraction is None or fraction >= RECHARGE_HEALTH_FRACTION:
-            self._refill_after_heavy_fight = False
+            self.record.refill_after_heavy_fight = False
             return None
         if in_dungeon(zone, self.record.entered_with_x) and not self.travel_allowed_in(zone):
             return None
@@ -822,7 +823,7 @@ class QuestLoop:
         battle["after"] = {key: after[key] for key in ("zone", "level", "health", "max_health", "mana", "gold")}
         if not defeated and not fled and heavy_fight(before["health"], after["health"], after["max_health"]):
             self.record.heavy_fights[before["zone"]] = self.record.heavy_fights.get(before["zone"], 0) + 1
-            self._refill_after_heavy_fight = True
+            self.record.refill_after_heavy_fight = True
             self.events.emit("health", f"the fight cost {before['health'] - after['health']} of {after['max_health']} "
                                        f"health; refilling to {RECHARGE_HEALTH_FRACTION:.0%} from wisps before going on")
         if defeated and self.record.clearing_world and self.record.heavy_fights.get(before["zone"], 0) >= HEAVY_ZONE_FIGHTS:
