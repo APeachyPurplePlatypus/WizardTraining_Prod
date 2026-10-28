@@ -143,6 +143,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **"Say Cheese!" is passed over: its goal is a Photo** (`sidequests.UNSUPPORTED`).
+  - **What:** the quest is listed as one the framework cannot do, so the clearing goes on to the next giver instead of searching zones for its scavenge item.
+  - **Why:** the Quest Finder led to Annie in Golem Court (10:16), whose quest asks for a Photo taken with Photomancy's Viewfinder, opened with Z or the spellbook's Photomancy page. Z is not an allowed key, and that page is not among the allowed clicks. The scavenge goal names "Photomancy", and the ground of Golem Court was searched for it as if it were a reagent (10:17).
+  - **Verified:** offline (`tests/test_sidequests.py`).
+
 - **Golem Court is in Wizard City's zone tree** (`training.ZONE_PARENT`).
   - **What:** Golem Court (`WC_Golem_Tower`) leads to the Commons through its "WC_Golem_Tower Hub Exit" volume, so a walk to another zone, such as an essence hunt's, can start there.
   - **Why:** "Know Thine Enemy", taken up in Golem Court (10:15), was parked at once: "no way is known to a zone where a Lost Soul was fought". The run had walked between the Commons and Golem Court several times that morning.

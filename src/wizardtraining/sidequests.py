@@ -20,6 +20,10 @@ UNSUPPORTED = {
                           "prerequisite quest: the account is a premium member, so it is not membership (the "
                           "operator, 2026-10-28: \"it's likely you can't get into Colossus boulevard because you need "
                           "need to compete another quest to gain access\")",
+    "Say Cheese!": "its goal is a Photo taken with Photomancy's Viewfinder (Annie, Golem Court: \"press the Z hotkey, "
+                   "or use the Photomancy page in your Spellbook\"); Z is not an allowed key and the Photomancy page "
+                   "is not among the allowed clicks, so the ground was searched for \"Photomancy\" as if it were a "
+                   "reagent (10:17)",
 }
 
 
