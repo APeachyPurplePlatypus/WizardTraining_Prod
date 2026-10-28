@@ -140,6 +140,8 @@ class RunRecord:
     held_quests: dict[str, str] = field(default_factory=dict)
     trapping_marks: dict[str, list] = field(default_factory=dict)
     zone_doors: dict[str, dict] = field(default_factory=dict)
+    left_dungeon: dict | None = None
+    dungeon_zones: list[str] = field(default_factory=list)
     school_quests_checked: dict[str, int] = field(default_factory=dict)
     walk_strategies_tried: dict[str, list[str]] = field(default_factory=dict)
     tried_wisps: dict[str, float] = field(default_factory=dict)
@@ -159,8 +161,13 @@ class RunRecord:
 
     def note_place(self, zone, quest_goal) -> None:
         """Count zone changes since the quest goal last changed. Doors count as progress, so a wizard
-        walking back and forth through the same doors would otherwise never trip a limit."""
-        if self.last_place is not None:
+        walking back and forth through the same doors would otherwise never trip a limit. A travel button (Go Home,
+        Recall, a dungeon's return button) clears `last_place` and starts the count again: a refill trip is no door
+        loop, and the walk from the Commons to Curfew!'s door five zones on, with three refill trips on the way,
+        stopped the run at the door (19:28)."""
+        if self.last_place is None:
+            self.zone_changes_without_quest_change = 0
+        else:
             last_zone, last_goal = self.last_place
             if quest_goal != last_goal:
                 self.zone_changes_without_quest_change = 0
@@ -255,6 +262,26 @@ def health_to_travel(health: float | None) -> bool:
     return health is None or health >= HEALTH_TO_TRAVEL_FRACTION
 
 
+RESUME_TRIP_SECONDS = 20 * 60.0
+
+
+def resume_in_time(left_at, now: float) -> bool:
+    """A trip out of a dungeon is back within RESUME_TRIP_SECONDS of leaving it (wall-clock seconds, kept across
+    restarts). The dungeon's timer runs 30 minutes (the operator, 2026-10-28 20:48 UTC: "This confirms the 30 min
+    timer"); the margin covers the refill and the load back in."""
+    return isinstance(left_at, (int, float)) and 0 <= now - left_at <= RESUME_TRIP_SECONDS
+
+
+def dungeon_held(left: dict, zone_now: str | None, enemies_now: int | None) -> bool:
+    """Back by the dungeon's return button: it held when the wizard is in the zone it left and, when the enemies near
+    it were counted on leaving (`left["enemies"]`), no more than one more stand near it now; killed ones that came
+    back mean the dungeon reset."""
+    if zone_now != left.get("zone"):
+        return False
+    before = left.get("enemies")
+    return not (isinstance(before, int) and isinstance(enemies_now, int) and enemies_now > before + 1)
+
+
 def still_to_recharge(health: float | None, mana: float | None) -> str | None:
     """After a defeat, or with health below HEALTH_TO_TRAVEL_FRACTION: "health" or "mana", whichever is still below
     RECHARGE_HEALTH_FRACTION or RECHARGE_MANA_FRACTION of its pool, health first; None when both are there or
@@ -333,7 +360,7 @@ def is_an_instance(zone: str | None) -> bool:
 
 
 def short_before_entering(action: str | None, health: float | None, mana: float | None,
-                          destination: str | None = None) -> str | None:
+                          destination: str | None = None, dungeons: list[str] = ()) -> str | None:
     """Before pressing X at a "to Enter" door, "health" or "mana" when the wizard should refill first, health first;
     None otherwise or for other prompts. A door known to open on an instance (`destination`, from the doors learned
     walking, `is_an_instance`) asks for a full recharge (RECHARGE_HEALTH_FRACTION, RECHARGE_MANA_FRACTION): Triton
@@ -343,7 +370,7 @@ def short_before_entering(action: str | None, health: float | None, mana: float 
     MANA_BELOW_FRACTION), so shops and houses do not cost a trip to the Commons."""
     if (action or "").strip().lower() != ENTER_ACTION:
         return None
-    if destination is not None and not is_an_instance(destination):
+    if destination is not None and not is_an_instance(destination) and destination not in dungeons:
         return None
     health_bar, mana_bar = ((RECHARGE_HEALTH_FRACTION, RECHARGE_MANA_FRACTION) if destination is not None
                             else (HEALTH_TO_TRAVEL_FRACTION, MANA_BELOW_FRACTION))

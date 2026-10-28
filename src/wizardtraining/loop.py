@@ -42,7 +42,8 @@ from .experience import progress_text, xp_gained, xp_to_reach
 from .events import (EventLog, describe_battle, describe_changes, describe_round, dialog_text, enemies_at_once,
                      enemy_names, health_text, threat_text)
 from .gear import describe_stats, upgrades
-from .gametravel import RECALL_NOT_REACHED, go_home_ready, go_to_the_commons, has_mark, mark_here, recall, recall_ready, recall_tip
+from .gametravel import (RECALL_NOT_REACHED, go_home_ready, go_to_the_commons, has_mark, mark_here, recall, recall_ready,
+                         recall_tip, resume_instance, resume_tip)
 from .geometry import Point, distance_to_path, flat_distance, path_within, xy
 from .keys import tap
 from .knowledge import Knowledge
@@ -51,7 +52,7 @@ from .movement import LOADING, KeysIgnored, Reroute, face, travel
 from .navigation import load_planner
 from .policy import LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, SpellTypePolicy, biggest_hits
 from .progress import (DUEL_BLOCKS_THE_WAY, DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY, ENEMY_NEAR_PATH, LimitReached, Limits, PATH_THREATS,
-                       PlannedRoute, RunRecord, StopRun, check_limits, leaves_world, health_to_travel, mana_for_a_fight, mana_to_travel, still_to_recharge, trapped_by, worth_marking, worth_recalling,
+                       PlannedRoute, RunRecord, StopRun, check_limits, leaves_world, health_to_travel, mana_for_a_fight, mana_to_travel, still_to_recharge, trapped_by, worth_marking, worth_recalling, dungeon_held, resume_in_time, RESUME_TRIP_SECONDS,
                        PARK_AFTER_STRATEGIES, HEAVY_ZONE_FIGHTS, RECALL_MANA_NEEDED, RECHARGE_HEALTH_FRACTION, heavy_fight, parked, worth_pushing_on, short_before_entering, made_headway, GOAL_HEADWAY, STALLED_TRIPS_TO_PARK, forget_obstacles_near, OBSTACLE_FORGET_RADIUS,
                        nav_did_better, progressed, ready_to_recall, remember_obstacles, safe_to_stand, short_for_a_fight,
                        should_drink_potion, stalled, topped_up, travel_outcome, wanted_wisp,
@@ -84,10 +85,11 @@ from .targets import (area_in_zone, essence_enemy, fought_in, found_in, is_essen
                       summary, too_close, WISP_REACH)
 from .teleports import LEFT_ZONE, NO_EFFECT, TeleportVolume, describe_outcome, exit_by_height, volume_at
 from .trainer import OPENED_DIALOG, OPENED_MENU, close_training, learn_free_spells, open_training, open_with_professor
-from .training import (COMMONS, GATE, SCHOOLS, TRAINER, School, in_dungeon, in_tower, travel_buttons_allowed, spells_to_learn, way_to_school, way_toward_zone,
+from .training import (COMMONS, GATE, SCHOOLS, TRAINER, School, in_dungeon, in_tower, may_leave_to_refill, travel_buttons_allowed, spells_to_learn, way_to_school, way_toward_zone,
                        zone_for_area)
 from .worldgate import go_to_world, leave_the_map, spiral_map_open
-from .ui import POTION_BUTTON, answer_known_popup, click, interact_prompt_text, message_box, visible_children
+from .ui import (POTION_BUTTON, answer_dungeon_entry, answer_known_popup, click, dungeon_entry_box, interact_prompt_text,
+                 message_box, visible_children)
 
 TARGET_REACH = 1200.0
 ARROW_ARRIVE_RADIUS = 250.0
@@ -115,6 +117,8 @@ SPELL_CHECK_SECONDS = 60.0
 BARELY_MOVED_DISTANCE = 100.0
 ENEMY_PASS_WAIT_SECONDS = 1.5
 ARRIVAL_SETTLE_SECONDS = 1.5
+RESUME = "the dungeon's return button"
+ENTERED_THE_DUNGEON = "pressed Yes on the dungeon-entry box"
 SETTLE_LOOK_SECONDS = 0.25
 NEAREST_ENEMIES_NOTED = 3
 EXIT_WORD = "exit"
@@ -219,6 +223,7 @@ class QuestLoop:
         self._travel_planned_for: tuple | None = None
         self._no_teleport_until = 0.0
         self._left_dungeon: tuple[str, int] | None = None
+        self._declined_dungeons: set[str | None] = set()
         self._went_home_for_wisps: set[str] = set()
         self._journal_zones: tuple[frozenset, dict] | None = None
         self._finder_givers: dict[tuple, int] = {}
@@ -346,7 +351,8 @@ class QuestLoop:
         if fraction is None or fraction >= RECHARGE_HEALTH_FRACTION:
             self.record.refill_after_heavy_fight = False
             return None
-        if in_dungeon(zone, self.record.entered_with_x) and not self.travel_allowed_in(zone):
+        if (in_dungeon(zone, self.record.entered_with_x, self.record.dungeon_zones) and not self.travel_allowed_in(zone)
+                and not self.may_leave_dungeon(zone)):
             return None
         distance = await self.distance_to_the_goal_here(zone)
         title = " ".join(((self.record.quest or {}).get("title") or "").split())
@@ -542,6 +548,8 @@ class QuestLoop:
         if answered := await answer_known_popup(self.client):
             self.events.emit("popup", answered)
             return progressed(answered)
+        if (answered := await self.dungeon_entry_turn(state["zone"], (self.record.quest or {}).get("goal_zone"))):
+            return answered
         if (box := await message_box(self.client)) is not None:
             if await self.box_closes_by_itself():
                 self.events.emit("popup", f"a message box titled {box.title!r} closed by itself")
@@ -616,7 +624,7 @@ class QuestLoop:
         if wizard is None:
             return None
         school, wanted = SCHOOLS[wizard.school], ", ".join(self._to_learn)
-        if in_dungeon(zone, self.record.entered_with_x):
+        if in_dungeon(zone, self.record.entered_with_x, self.record.dungeon_zones):
             self.say_once("training", f"level {level} allows {wanted}, but the wizard is in a dungeon ({zone}); "
                                       "training waits until it is out")
             return None
@@ -869,6 +877,8 @@ class QuestLoop:
         if defeated and self.record.clearing_world and self.record.heavy_fights.get(before["zone"], 0) >= HEAVY_ZONE_FIGHTS:
             self.park_the_quest_in_a_heavy_zone(before["zone"], battle)
         if defeated:
+            if self.may_leave_dungeon(before["zone"]):
+                self.note_leaving_the_dungeon(before, None, "after a defeat")
             self.record.defeats += 1
             self.record.recharging = True
             self._defeated_at = time.monotonic()
@@ -1142,7 +1152,7 @@ class QuestLoop:
                           "to follow it")
         if topped_up(mana_fraction(state)):
             self._topping_up_in = None
-        stuck_inside = (in_dungeon(state["zone"], self.record.entered_with_x)
+        stuck_inside = (in_dungeon(state["zone"], self.record.entered_with_x, self.record.dungeon_zones)
                         and not self.travel_allowed_in(state["zone"]))
         mana_for_the_gate = 1.0 if stuck_inside else mana_fraction(state)
         refill = short_for_a_fight(health_fraction(state), mana_for_the_gate) if goal["type"] in FIGHT_GOALS else None
@@ -1162,6 +1172,8 @@ class QuestLoop:
             if turn is not None:
                 return turn
         if refill is None and self.use_travel_buttons and not stuck_inside:
+            if (resumed := await self.back_into_the_dungeon_turn(state, goal)) is not None:
+                return resumed
             if (recalled := await self.recall_toward_the_goal_turn(state, goal)) is not None:
                 return recalled
             await self.mark_the_way_back(state, goal)
@@ -1577,8 +1589,10 @@ class QuestLoop:
         nine to thirteen enemies lost mana, since the fights it led into cost 5 to 10 each and a wisp gives 3 to 6.
         The exit leads back toward the hub: from Cyclops Lane, to Olde Town. For health in a street, explore it:
         wisps are spawned, not placed, and load only nearby. Potions are never bought."""
-        if in_dungeon(state["zone"], self.record.entered_with_x):
+        if in_dungeon(state["zone"], self.record.entered_with_x, self.record.dungeon_zones):
             if self.travel_allowed_in(state["zone"]) and (trip := await self.dungeon_trip_turn(stat, state)) is not None:
+                return trip
+            if self.may_leave_dungeon(state["zone"]) and (trip := await self.resume_trip_turn(stat, state)) is not None:
                 return trip
             return await self.dungeon_refill_turn(stat, state)
         indoors = INTERIOR_WORD in state["zone"]
@@ -1727,10 +1741,88 @@ class QuestLoop:
                      for stat in ("mana", "health"))
         return (progressed if gained else stalled)(f"waited for {waiting_for}", before=state["mana"], after=now["mana"])
 
+    def may_leave_dungeon(self, zone: str) -> bool:
+        """A dungeon the wizard may leave to refill and come back to by its return button
+        (`training.may_leave_to_refill`)."""
+        return may_leave_to_refill(zone, self.record.entered_with_x, self.record.leaving_resets,
+                                   use_travel_buttons=self.use_travel_buttons, dungeons=self.record.dungeon_zones)
+
+    def note_leaving_the_dungeon(self, state: dict, enemies: int | None, why: str) -> None:
+        """Keep where the wizard left a dungeon, when and why, in knowledge.json (`RunRecord.left_dungeon`), for
+        `back_into_the_dungeon_turn` to come back to, also after a restart."""
+        position = state["position"] if isinstance(state.get("position"), dict) else {}
+        self.record.left_dungeon = {"zone": state["zone"], "at": time.time(), "x": position.get("x"),
+                                    "y": position.get("y"), "enemies": enemies, "why": why}
+        near = "" if enemies is None else f", {enemies} enemies near"
+        self.events.emit("dungeon", f"left {state['zone']} {why}, at ({position.get('x', 0):.0f}, "
+                                    f"{position.get('y', 0):.0f}){near}; its return button is to bring the wizard "
+                                    f"back within {RESUME_TRIP_SECONDS / 60:.0f} minutes")
+
+    async def resume_trip_turn(self, stat: str, state: dict) -> dict | None:
+        """In a dungeon the wizard may leave (`may_leave_dungeon`), short of `stat` where health and mana do not come
+        back: a wisp in reach, else Go Home and refill in the Commons to the recharge marks
+        (`progress.still_to_recharge`), then back in by the dungeon's return button (`back_into_the_dungeon_turn`).
+        No mark: Recall did not bring the wizard back into WC_Cyclops_T1 (01:07 to 01:12)."""
+        if (turn := await self.wisp_turn(stat, state, reach=refill_reach(False))) is not None:
+            return turn
+        enemies = len(await nearby_enemies(self.client))
+        turn = await self.go_home_for(stat, state)
+        if turn is not None:
+            self.note_leaving_the_dungeon(state, enemies, f"by Go Home to refill {stat}")
+            self.record.recharging = True
+        return turn
+
+    async def back_into_the_dungeon_turn(self, state: dict, goal: dict) -> dict | None:
+        """Out of a dungeon the wizard left (`RunRecord.left_dungeon`), refilled, with the goal still in it: press the
+        dungeon's return button (`gametravel.resume_instance`) within RESUME_TRIP_SECONDS of leaving, and log where
+        it landed, how far from where the wizard left, and whether the enemies killed there stayed down
+        (`progress.dungeon_held`); a dungeon that reset is refilled in place from then on (`RunRecord.leaving_resets`).
+        Too late, the button not showing, or a press that does not land: the wizard walks back in through the door.
+        None when there is nothing to come back to."""
+        left = self.record.left_dungeon
+        if left is None:
+            return None
+        zone, elapsed = left.get("zone"), time.time() - float(left.get("at") or 0.0)
+        if state["zone"] == zone or goal.get("destination_zone") != zone:
+            self.record.left_dungeon = None
+            return None
+        self.record.left_dungeon = None
+        if not resume_in_time(left.get("at"), time.time()):
+            self.events.emit("dungeon", f"{elapsed / 60:.0f} minutes since leaving {zone}, past the "
+                                        f"{RESUME_TRIP_SECONDS / 60:.0f} kept within its 30-minute timer: walking back "
+                                        "in through the door")
+            return None
+        tip = await resume_tip(self.client)
+        started = time.monotonic()
+        problem = await resume_instance(self.client)
+        if problem is not None:
+            self.events.emit("dungeon", f"could not go back into {zone} by its return button ({tip!r}): {problem}; "
+                                        "walking back in through the door")
+            return None
+        self._teleport_pressed = (RESUME, started)
+        self.record.last_place = None
+        await asyncio.sleep(ARRIVAL_SETTLE_SECONDS)
+        now = await snapshot(self.client)
+        here = now["position"] if isinstance(now.get("position"), dict) else None
+        distance = (None if here is None or left.get("x") is None else
+                    flat_distance(XYZ(here["x"], here["y"], 0.0), XYZ(float(left["x"]), float(left["y"]), 0.0)))
+        enemies = len(await nearby_enemies(self.client))
+        held = dungeon_held(left, now["zone"], enemies)
+        if not held and zone not in self.record.leaving_resets:
+            self.record.leaving_resets.append(zone)
+        away = "" if distance is None else f", {distance:.0f} from where it left"
+        before = "" if left.get("enemies") is None else f" ({left['enemies']} when it left)"
+        verdict = ("the dungeon held" if held else "the dungeon reset, so it is refilled in place from now on")
+        self.events.emit("dungeon", f"pressed the dungeon's return button ({tip!r}) {elapsed:.0f} s after leaving "
+                                    f"{zone} {left.get('why')}: landed in {now['zone']}{away}, {enemies} enemies "
+                                    f"near{before}; {verdict}", held=held, distance=distance)
+        return progressed("went back into the dungeon by its return button", zone=now["zone"], held=held)
+
     def travel_allowed_in(self, zone: str) -> bool:
         """The travel buttons may be pressed here (`training.travel_buttons_allowed`)."""
         return travel_buttons_allowed(zone, self.record.entered_with_x, self.record.leaving_resets,
-                                      use_travel_buttons=self.use_travel_buttons, leave_dungeons=self.leave_dungeons)
+                                      use_travel_buttons=self.use_travel_buttons, leave_dungeons=self.leave_dungeons,
+                                      dungeons=self.record.dungeon_zones)
 
     async def dungeon_trip_turn(self, stat: str, state: dict) -> dict | None:
         """In a dungeon, not a tower: a wisp in reach, else mark the spot, Go Home, refill and Recall back
@@ -1951,7 +2043,7 @@ class QuestLoop:
         now = time.monotonic()
         if self._teleport_pressed is not None:
             way, pressed = self._teleport_pressed
-            if now - pressed <= TELEPORT_LOAD_LIMIT_SECONDS:
+            if now - pressed <= TELEPORT_LOAD_LIMIT_SECONDS and way in (GO_HOME, RECALL):
                 self.learn_cost("go_home_seconds" if way == GO_HOME else "recall_seconds", now - pressed)
             if way == GO_HOME and world_of(arrived):
                 self.record.hubs[world_of(arrived)] = arrived
@@ -2280,7 +2372,7 @@ class QuestLoop:
         HEALTH_TO_TRAVEL_FRACTION, and refill mana below the travel line, as any other goal would (outside a tower or a
         dungeon refilled in place). Searching Cyclops Lane for Mist Wood, the wizard went on at 409 of 1133 among its
         Cyclops (08:51)."""
-        if in_dungeon(state["zone"], self.record.entered_with_x) and not self.travel_allowed_in(state["zone"]):
+        if in_dungeon(state["zone"], self.record.entered_with_x, self.record.dungeon_zones) and not self.travel_allowed_in(state["zone"]):
             return None
         if not health_to_travel(health_fraction(state)):
             self.record.recharging = True
@@ -2558,7 +2650,7 @@ class QuestLoop:
         key = (tuple(sorted(self.record.known_spells)), tuple(sorted(self.record.essence_quests)))
         if key == self._deck_checked or time.monotonic() < self._deck_retry_at:
             return None
-        if in_dungeon(state["zone"], self.record.entered_with_x):
+        if in_dungeon(state["zone"], self.record.entered_with_x, self.record.dungeon_zones):
             return None
         if self.record.recharging or not health_to_travel(health_fraction(state)):
             return None
@@ -2674,7 +2766,7 @@ class QuestLoop:
     async def reagent_detour_turn(self, state: dict) -> dict | None:
         """A reagent a parked quest wants is in sight, near, with no enemy near it (`targets.worth_a_detour`): gather it,
         and make that quest one to do again. Not in a tower or dungeon, nor while recharging."""
-        if not self.record.wanted_reagents or in_dungeon(state["zone"], self.record.entered_with_x) or self.record.recharging:
+        if not self.record.wanted_reagents or in_dungeon(state["zone"], self.record.entered_with_x, self.record.dungeon_zones) or self.record.recharging:
             return None
         wanted = {reagent: title for reagent, title in self.record.wanted_reagents.items()
                   if " ".join(title.split()) not in self.record.held_quests}
@@ -2734,7 +2826,7 @@ class QuestLoop:
             return await self.park_for_the_reagent(reagent, searched)
         candidates = [other for other in self.record.zone_links
                       if world_of(other) == world_of(zone) and other not in searched and INTERIOR_WORD not in other
-                      and not in_dungeon(other, self.record.entered_with_x)]
+                      and not in_dungeon(other, self.record.entered_with_x, self.record.dungeon_zones)]
         reachable = [(hops, other) for other in candidates
                      if (hops := zone_hops(self.record.zone_links, zone, other)) is not None]
         for other in zones_to_search_for(self.record.reagent_zones, reagent, reachable):
@@ -2884,6 +2976,11 @@ class QuestLoop:
             if await self.zone_changing(zone):
                 self._entering_with_x_from = zone
                 return progressed("entered with X at the interact prompt")
+            if (answered := await self.dungeon_entry_turn(zone, goal_zone)) is not None:
+                if answered["did"] != ENTERED_THE_DUNGEON:
+                    return answered
+                deadline = time.monotonic() + DOOR_WAIT_SECONDS
+                continue
             if await dialog_open(self.client):
                 self._not_doors.append((zone, xy(here)))
                 self.events.emit("door", f"X at the interact prompt opened a dialog, not a door; prompts within "
@@ -2892,6 +2989,33 @@ class QuestLoop:
                 return progressed("pressed X at the interact prompt: a dialog opened")
             await asyncio.sleep(DOOR_POLL_SECONDS)
         return stalled("pressed X at the interact prompt, but the zone did not change")
+
+    async def dungeon_entry_turn(self, zone: str, goal_zone: str | None) -> dict | None:
+        """The game's dungeon-entry box is showing: the zone it opens on (the goal's, `goal_zone`) is kept as a dungeon
+        (`RunRecord.dungeon_zones`), and the box is answered Yes, with the box's text logged; the operator, 2026-10-28
+        23:22 UTC: "Yes, from now entry box does not need user approval from now on". Short of the recharge
+        (`progress.still_to_recharge`, 90% health and 80% mana), No, once per dungeon in a run, so the wizard refills
+        before the door (`refill_before_entering`, which then knows the door's dungeon), for health and mana do not
+        come back inside. None when no such box shows."""
+        box = await dungeon_entry_box(self.client)
+        if box is None:
+            return None
+        if goal_zone and goal_zone not in self.record.dungeon_zones:
+            self.record.dungeon_zones.append(goal_zone)
+        state = await snapshot(self.client)
+        short = still_to_recharge(health_fraction(state), mana_fraction(state))
+        enter = short is None or goal_zone in self._declined_dungeons
+        await answer_dungeon_entry(self.client, box, enter)
+        if enter:
+            self._entering_with_x_from = zone
+        else:
+            self._declined_dungeons.add(goal_zone)
+        answer = ("Yes" if enter else f"No for now: {short} is short of the recharge for a dungeon, so the wizard "
+                                      "refills first")
+        self.events.emit("dungeon", f"the dungeon-entry box {box.title!r} ({box.caption!r}) for {goal_zone}, at "
+                                    f"{health_text(state)} health and {state['mana']} mana: pressed {answer}")
+        return progressed(ENTERED_THE_DUNGEON if enter else "declined the dungeon-entry box to refill first",
+                          box=box.title)
 
     async def door_destination_here(self, zone: str, goal_zone: str | None = None) -> str | None:
         """The zone the door the wizard stands at opens on, when a walk has come out of it here before
@@ -2911,7 +3035,8 @@ class QuestLoop:
         door and the wizard goes in refilled. None to go in now."""
         state = await snapshot(self.client)
         destination = await self.door_destination_here(zone, goal_zone)
-        stat = short_before_entering(action, health_fraction(state), mana_fraction(state), destination)
+        stat = short_before_entering(action, health_fraction(state), mana_fraction(state), destination,
+                                     self.record.dungeon_zones)
         if stat is None or not self.use_travel_buttons or not self.travel_allowed_in(zone):
             return None
         trip = await self.commons_trip_turn(stat, state)

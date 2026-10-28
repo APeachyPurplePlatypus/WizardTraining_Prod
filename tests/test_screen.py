@@ -111,5 +111,22 @@ class ScreenTest(unittest.TestCase):
         self.assertEqual(prompt_action(""), "")
 
 
+
+class DungeonEntryBoxTest(unittest.TestCase):
+    caption = ("You are about to enter a Dungeon! This Dungeon takes around 1 hour and 30 minutes to finish. "
+               "Are you sure you want to enter this Dungeon?")
+
+    def test_the_games_dungeon_entry_box_with_yes_and_no(self):
+        from wizardtraining.screen import is_dungeon_entry
+        self.assertTrue(is_dungeon_entry(self.caption, ["centerButton", "rightButton"]))
+        self.assertTrue(is_dungeon_entry(self.caption, ["rightButton", "centerButton"]))
+
+    def test_not_another_players_box_nor_one_with_other_buttons(self):
+        from wizardtraining.screen import is_dungeon_entry
+        self.assertFalse(is_dungeon_entry("Accept a player as your friend?", ["centerButton", "rightButton"]))
+        self.assertFalse(is_dungeon_entry(self.caption, ["rightButton"]))
+        self.assertFalse(is_dungeon_entry(self.caption, ["leftButton", "centerButton", "rightButton"]))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -160,5 +160,34 @@ class TravelButtonsAllowedTest(unittest.TestCase):
         self.assertFalse(travel_buttons_allowed(street, [], [], use_travel_buttons=False, leave_dungeons=True))
 
 
+
+class DungeonBehindAnEntryBoxTest(unittest.TestCase):
+    sunken = "WizardCity/WC_Streets/WC_Sunken_City"
+
+    def test_a_zone_behind_a_dungeon_entry_box_and_the_zones_under_it_are_dungeons(self):
+        from wizardtraining.training import in_dungeon
+        self.assertFalse(in_dungeon(self.sunken, [self.sunken]))
+        self.assertTrue(in_dungeon(self.sunken, [], [self.sunken]))
+        self.assertTrue(in_dungeon(self.sunken + "/Interiors/WC_Sunken_Palace", [], [self.sunken]))
+        self.assertFalse(in_dungeon("WizardCity/WC_Streets/WC_Sunken_CityGate", [], [self.sunken]))
+
+    def test_a_dungeon_may_be_left_to_refill_but_not_a_tower_floor_or_one_that_reset(self):
+        from wizardtraining.training import may_leave_to_refill
+        cave = "WizardCity/WC_Streets/Interiors/WC_HauntedCave_T1"
+        tower = "WizardCity/WC_Streets/WC_Golem_Tower/WC_Golem_Tower_3"
+        self.assertTrue(may_leave_to_refill(cave, [], [], use_travel_buttons=True))
+        self.assertTrue(may_leave_to_refill(self.sunken, [], [], use_travel_buttons=True, dungeons=[self.sunken]))
+        self.assertFalse(may_leave_to_refill(tower, [], [], use_travel_buttons=True))
+        self.assertFalse(may_leave_to_refill(cave, [], [cave], use_travel_buttons=True))
+        self.assertFalse(may_leave_to_refill(cave, [], [], use_travel_buttons=False))
+        self.assertFalse(may_leave_to_refill("WizardCity/WC_Streets/WC_Triton", [], [], use_travel_buttons=True))
+
+    def test_the_travel_buttons_stay_off_in_a_dungeon_behind_an_entry_box(self):
+        from wizardtraining.training import travel_buttons_allowed
+        self.assertFalse(travel_buttons_allowed(self.sunken, [], [], use_travel_buttons=True, leave_dungeons=False,
+                                                dungeons=[self.sunken]))
+        self.assertTrue(travel_buttons_allowed(self.sunken, [], [], use_travel_buttons=True, leave_dungeons=False))
+
+
 if __name__ == "__main__":
     unittest.main()

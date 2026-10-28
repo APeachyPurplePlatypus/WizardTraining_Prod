@@ -377,5 +377,44 @@ class HeavyFightTest(unittest.TestCase):
         self.assertTrue(made_headway(6800, None))
         self.assertTrue(made_headway(None, 6800))
 
+
+class RefillTripsAreNoDoorLoopTest(unittest.TestCase):
+    def test_a_travel_button_starts_the_count_of_zone_changes_again(self):
+        run = RunRecord(limits=Limits(max_zone_changes_without_quest_change=2))
+        for zone in ("Hub", "Shops", "Olde Town"):
+            run.note_place(zone, ("Curfew!", 1))
+        self.assertEqual(run.zone_changes_without_quest_change, 2)
+        run.last_place = None
+        run.note_place("Triton", ("Curfew!", 1))
+        self.assertEqual(run.zone_changes_without_quest_change, 0)
+
+
+class TripOutOfADungeonTest(unittest.TestCase):
+    sunken = "WizardCity/WC_Streets/WC_Sunken_City"
+
+    def test_the_way_back_in_is_within_the_margin_of_the_dungeon_timer(self):
+        from wizardtraining.progress import RESUME_TRIP_SECONDS, resume_in_time
+        self.assertTrue(resume_in_time(1000.0, 1000.0 + 300))
+        self.assertTrue(resume_in_time(1000.0, 1000.0 + RESUME_TRIP_SECONDS))
+        self.assertFalse(resume_in_time(1000.0, 1000.0 + RESUME_TRIP_SECONDS + 1))
+        self.assertFalse(resume_in_time(None, 1000.0))
+        self.assertFalse(resume_in_time(2000.0, 1000.0))
+
+    def test_a_dungeon_held_when_the_wizard_is_back_in_it_and_its_enemies_stayed_down(self):
+        from wizardtraining.progress import dungeon_held
+        left = {"zone": self.sunken, "enemies": 2}
+        self.assertTrue(dungeon_held(left, self.sunken, 2))
+        self.assertTrue(dungeon_held(left, self.sunken, 3))
+        self.assertFalse(dungeon_held(left, self.sunken, 6))
+        self.assertFalse(dungeon_held(left, "WizardCity/WC_Hub", 0))
+        self.assertTrue(dungeon_held({"zone": self.sunken, "enemies": None}, self.sunken, 6))
+
+    def test_a_door_to_a_dungeon_behind_an_entry_box_waits_for_the_full_refill(self):
+        from wizardtraining.progress import short_before_entering
+        self.assertEqual(short_before_entering("Enter", 0.7, 0.9, self.sunken, [self.sunken]), "health")
+        self.assertEqual(short_before_entering("Enter", 0.95, 0.7, self.sunken, [self.sunken]), "mana")
+        self.assertIsNone(short_before_entering("Enter", 0.7, 0.9, self.sunken))
+
+
 if __name__ == "__main__":
     unittest.main()

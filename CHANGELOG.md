@@ -4,7 +4,24 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ## Unreleased
 
+### Added
+
+- **Refill trips out of dungeons, back in by the dungeon's return button** (`gametravel.resume_instance`, `gametravel.resume_tip`, `training.may_leave_to_refill`, `progress.resume_in_time`, `progress.dungeon_held`, `QuestLoop.resume_trip_turn`, `QuestLoop.back_into_the_dungeon_turn`, `RunRecord.left_dungeon`, `docs/safety.md`).
+  - **What:** in a dungeon (not a tower floor, not one found reset), short of a refill with no wisp in reach, the wizard goes Home, refills in the Commons to 90% health and 80% mana, and presses the HUD's `ResumeInstanceButton` ("Teleport to <dungeon>") within 20 minutes of leaving; after a defeat in a dungeon, the same. Where and when it left is kept in knowledge.json, so a restart keeps the trip. On landing it logs the zone, the distance from where it left and the enemies near it then and now; a dungeon whose killed enemies came back is refilled in place from then on. Too late, or the button not showing, it walks back in through the door.
+  - **Why:** the operator, 2026-10-28 23:18 UTC: "ResumeInstanceButton can be used without approval to get back to where you were in the dungeon faster"; health and mana do not come back inside an instance, and the dungeon's timer runs 30 minutes from leaving (20:48 UTC: "This confirms the 30 min timer"). Recall did not bring the wizard back into a dungeon (WC_Cyclops_T1, 01:07 to 01:12). Tower floors keep the old rule until a dungeon trip shows progress is kept.
+  - **Verified:** offline (`tests/test_gametravel.py` with stand-in buttons, `tests/test_progress.py`, `tests/test_training.py`, `tests/test_knowledge.py`); in the game: the first trip out of Sunken City.
+
+- **The dungeon-entry box is answered, and what it opens on is a dungeon** (`screen.is_dungeon_entry`, `ui.dungeon_entry_box`, `ui.answer_dungeon_entry`, `QuestLoop.dungeon_entry_turn`, `RunRecord.dungeon_zones`, `training.in_dungeon`, `progress.short_before_entering`).
+  - **What:** the game's "You are about to enter a Dungeon!" box, with Yes (`centerButton`) and No (`rightButton`) only, is answered Yes, its title and text logged, at the door's X or whenever it shows. Short of 90% health or 80% mana it is answered No, once per dungeon in a run, and the door then waits for the full refill. The goal's zone behind the box is kept as a dungeon in knowledge.json, with the zones under it.
+  - **Why:** the operator, 2026-10-28 23:22 UTC: "Yes, from now entry box does not need user approval from now on", after "Before we move to krok, clear sunken city" (23:19). Sunken City is WizardCity/WC_Streets/WC_Sunken_City, named like a street, so neither its name nor the X at its door would have made it a dungeon.
+  - **Verified:** offline (`tests/test_screen.py`, `tests/test_training.py`, `tests/test_progress.py`); in the game: Sunken City's door.
+
 ### Fixed
+
+- **A refill trip starts the door-loop count again** (`RunRecord.note_place`).
+  - **What:** a travel button (Go Home, Recall, the dungeon's return button) starts the count of zone changes without the quest changing again.
+  - **Why:** the walk from the Commons to Curfew!'s door, five zones on, with three refill trips on the way, passed the limit of 10 and stopped the run at the door (19:28).
+  - **Verified:** offline (`tests/test_progress.py`).
 
 - **Only a mark the map leaves no way from is kept as a trap** (`progress.trapped_by`, `QuestLoop.forget_a_trapping_mark`).
   - **What:** a mark with no route out is still forgotten either way, so the way back is walked. It is kept in `RunRecord.trapping_marks` (never marked within 600 again, across runs) only when every route method failed with no enemy to blame. When enemies crowd every route, the mark is only forgotten.

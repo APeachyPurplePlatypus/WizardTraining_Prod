@@ -169,5 +169,23 @@ class KnowledgeTest(unittest.TestCase):
         self.assertEqual(run.teleport_outcomes, {TRITON: {"Tele Up": 0}})
 
 
+
+class TripOutOfADungeonKnowledgeTest(unittest.TestCase):
+    def test_keeps_the_dungeon_left_and_the_dungeons_behind_entry_boxes_across_runs(self):
+        sunken = "WizardCity/WC_Streets/WC_Sunken_City"
+        run = RunRecord(limits=Limits())
+        run.left_dungeon = {"zone": sunken, "at": 1000.0, "x": 1.0, "y": 2.0, "enemies": 3, "why": "after a defeat"}
+        run.dungeon_zones.append(sunken)
+        knowledge = Knowledge()
+        knowledge.learn_from(run)
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "knowledge.json"
+            knowledge.save(path)
+            fresh = RunRecord(limits=Limits())
+            Knowledge.load(path).give_to(fresh)
+        self.assertEqual(fresh.left_dungeon, run.left_dungeon)
+        self.assertEqual(fresh.dungeon_zones, [sunken])
+
+
 if __name__ == "__main__":
     unittest.main()

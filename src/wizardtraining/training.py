@@ -81,31 +81,44 @@ def spells_to_learn(school: str | None, level: int, known: list[str]) -> list[st
             if needed <= level and not any(same_spell(name, spell) for spell in known)]
 
 
-def in_dungeon(zone: str | None, entered_with_x: list[str]) -> bool:
-    """A tower floor or dungeon: named as one, or an interior entered with X. A street entered with X is not one:
-    Triton Avenue's underwater zone (WC_Triton_Underwater/WC_Triton_Underwater) opens with X, and counted as a
-    dungeon, it had no refill trips, so after each heavy fight the wizard walked on at under half health into the
-    next pair of guards (18:48 to 19:02)."""
+def in_dungeon(zone: str | None, entered_with_x: list[str], dungeons: list[str] = ()) -> bool:
+    """A tower floor or dungeon: named as one, an interior entered with X, or a zone behind a dungeon-entry box
+    (`dungeons`, `RunRecord.dungeon_zones`) or under one: Sunken City is WizardCity/WC_Streets/WC_Sunken_City, named
+    like a street. A street entered with X is not one: Triton Avenue's underwater zone
+    (WC_Triton_Underwater/WC_Triton_Underwater) opens with X, and counted as a dungeon, it had no refill trips, so
+    after each heavy fight the wizard walked on at under half health into the next pair of guards (18:48 to 19:02)."""
     return isinstance(zone, str) and ((zone in entered_with_x and INTERIOR_PART in zone)
+                                      or any(zone == dungeon or zone.startswith(dungeon + "/") for dungeon in dungeons)
                                       or TOWER_OR_DUNGEON_NAME.search(zone) is not None)
 
 
-def in_tower(zone: str | None, entered_with_x: list[str]) -> bool:
+def in_tower(zone: str | None, entered_with_x: list[str], dungeons: list[str] = ()) -> bool:
     """A tower floor: a dungeon whose zone is named for a tower. The game's travel buttons do not work there (the
     operator, 2026-10-28: "it works in dungeons but not towers"; Mark Location did nothing on a Golem Tower floor),
     and a walk out gives up its progress ("I don't think you can leave a tower without losing progress")."""
-    return in_dungeon(zone, entered_with_x) and TOWER_WORD in zone.rsplit("/", 1)[-1].lower()
+    return in_dungeon(zone, entered_with_x, dungeons) and TOWER_WORD in zone.rsplit("/", 1)[-1].lower()
 
 
 def travel_buttons_allowed(zone: str | None, entered_with_x: list[str], leaving_resets: list[str], *,
-                           use_travel_buttons: bool, leave_dungeons: bool) -> bool:
+                           use_travel_buttons: bool, leave_dungeons: bool, dungeons: list[str] = ()) -> bool:
     """Whether Mark Location, Recall Location and Go Home may be pressed in `zone`: with the travel buttons on, never
     on a tower floor nor in a dungeon found reset after a trip out, and in any other dungeon only with
     `leave_dungeons`. The first trip out of a dungeon (WC_Cyclops_T1, 01:07 to 01:12) marked the spot and went home,
     but Recall could not bring the wizard back in; until the operator decides, dungeons are refilled in place."""
-    if not use_travel_buttons or in_tower(zone, entered_with_x) or zone in leaving_resets:
+    if not use_travel_buttons or in_tower(zone, entered_with_x, dungeons) or zone in leaving_resets:
         return False
-    return leave_dungeons or not in_dungeon(zone, entered_with_x)
+    return leave_dungeons or not in_dungeon(zone, entered_with_x, dungeons)
+
+
+def may_leave_to_refill(zone: str | None, entered_with_x: list[str], leaving_resets: list[str], *,
+                        use_travel_buttons: bool, dungeons: list[str] = ()) -> bool:
+    """A dungeon the wizard may leave by Go Home to refill and come back to by its return button
+    (`gametravel.resume_instance`): with the travel buttons on, any dungeon but a tower floor and one found reset
+    after a trip out. The operator, 2026-10-28 23:18 UTC: "ResumeInstanceButton can be used without approval to get
+    back to where you were in the dungeon faster". Tower floors keep the old rule until a trip out of a dungeon has
+    shown the button brings the wizard back with its progress kept."""
+    return (use_travel_buttons and in_dungeon(zone, entered_with_x, dungeons)
+            and not in_tower(zone, entered_with_x, dungeons) and zone not in leaving_resets)
 
 
 def way_out_toward_the_commons(volume_names: list[str]) -> str | None:

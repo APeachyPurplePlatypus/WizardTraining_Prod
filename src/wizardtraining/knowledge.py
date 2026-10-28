@@ -51,6 +51,8 @@ class Knowledge:
     combat_strategies_tried: dict[str, list[str]] = field(default_factory=dict)
     recharging: bool = False
     refill_after_heavy_fight: bool = False
+    left_dungeon: dict | None = None
+    dungeon_zones: list[str] = field(default_factory=list)
     marked_in: str | None = None
     mark_tip: str | None = None
     zone_links: dict[str, list[str]] = field(default_factory=dict)
@@ -101,6 +103,8 @@ class Knowledge:
                                             for enemies, names in data.get("combat_strategies_tried", {}).items()},
                    recharging=bool(data.get("recharging", False)),
                    refill_after_heavy_fight=bool(data.get("refill_after_heavy_fight", False)),
+                   left_dungeon=data.get("left_dungeon"),
+                   dungeon_zones=list(data.get("dungeon_zones", [])),
                    marked_in=data.get("marked_in"), mark_tip=data.get("mark_tip"),
                    zone_links={zone: list(others) for zone, others in data.get("zone_links", {}).items()},
                    travel_costs={name: float(value) for name, value in data.get("travel_costs", {}).items()},
@@ -149,6 +153,8 @@ class Knowledge:
         record.combat_strategies_tried = {enemies: list(names) for enemies, names in self.combat_strategies_tried.items()}
         record.recharging = self.recharging
         record.refill_after_heavy_fight = self.refill_after_heavy_fight
+        record.left_dungeon = self.left_dungeon
+        record.dungeon_zones = list(self.dungeon_zones)
         record.marked_in, record.mark_tip = self.marked_in, self.mark_tip
         record.mark_purpose, record.mark_quest = self.mark_purpose, self.mark_quest
         record.zone_links = {zone: list(others) for zone, others in self.zone_links.items()}
@@ -186,6 +192,8 @@ class Knowledge:
         self.trained_at_level = max(self.trained_at_level, record.trained_at_level)
         self.recharging = record.recharging
         self.refill_after_heavy_fight = record.refill_after_heavy_fight
+        self.left_dungeon = record.left_dungeon
+        self.dungeon_zones = list(dict.fromkeys([*self.dungeon_zones, *record.dungeon_zones]))
         self.marked_in, self.mark_tip = record.marked_in, record.mark_tip
         self.mark_purpose, self.mark_quest = record.mark_purpose, record.mark_quest
         for zone, others in record.zone_links.items():

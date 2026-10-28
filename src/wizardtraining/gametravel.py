@@ -5,7 +5,10 @@ using in game tools"; docs/safety.md). What stays forbidden is the framework mov
 position, no Deimos or WizWalker teleport. These are buttons a player presses, found by the tooltips they show:
 `MarkButton` "Mark Location", `GoHomeButton` "Go to The Commons", `RecallButton` "Recall Location", or "No Mark Set"
 until a spot is marked. After a use, Go to The Commons and Recall show a timer (`txtGoHomeTimer`, `txtRecallTimer`)
-while they cool down. `GotoDormButton` and `ResumeInstanceButton` are never clicked.
+while they cool down. `ResumeInstanceButton`, "Teleport to <dungeon>", shows after the wizard leaves a dungeon
+and takes it back to where it was inside, within the dungeon's 30-minute timer (the operator, 2026-10-28 23:18 UTC:
+"ResumeInstanceButton can be used without approval to get back to where you were in the dungeon faster").
+`GotoDormButton` is never clicked.
 """
 
 from __future__ import annotations
@@ -20,6 +23,7 @@ BUTTONS = ["WorldView", "windowHUD", "compassAndTeleporterButtons"]
 MARK_BUTTON = [*BUTTONS, "MarkButton"]
 HUB_BUTTON = [*BUTTONS, "GoHomeButton"]
 RECALL_BUTTON = [*BUTTONS, "RecallButton"]
+RESUME_BUTTON = [*BUTTONS, "ResumeInstanceButton"]
 HUB_TIMER = [*HUB_BUTTON, "txtGoHomeTimer"]
 RECALL_TIMER = [*RECALL_BUTTON, "txtRecallTimer"]
 TIP_OFFSET = 520
@@ -30,6 +34,8 @@ NO_MARK = "the Recall button still shows no mark after Mark Location"
 ZONE_CHANGE_WAIT_SECONDS = 25.0
 ZONE_CHANGE_POLL_SECONDS = 0.5
 RECALL_NOT_REACHED = "the zone did not change after Recall"
+RESUME_TIP_START = "Teleport to"
+RESUME_NOT_SHOWING = "the dungeon's return button is not showing"
 
 
 async def tip_of(client, path: list[str]) -> str:
@@ -134,6 +140,27 @@ async def recall(client) -> str | None:
     if not await wait_for_zone_change(client, zone):
         return RECALL_NOT_REACHED
     return None if await zone_after_loading(client) not in (None, zone) else RECALL_NOT_REACHED
+
+
+async def resume_tip(client) -> str | None:
+    """What the dungeon's return button names ("Teleport to <dungeon>") while it shows; None when it does not."""
+    if not await showing(client, RESUME_BUTTON):
+        return None
+    tip = await tip_of(client, RESUME_BUTTON)
+    return tip if tip.startswith(RESUME_TIP_START) else None
+
+
+async def resume_instance(client) -> str | None:
+    """Press the dungeon's return button and wait for the zone to change and the load to end. None when the wizard
+    is in another zone then, else what went wrong."""
+    if await resume_tip(client) is None:
+        return RESUME_NOT_SHOWING
+    zone = await client.zone_name()
+    await click(client, RESUME_BUTTON)
+    if not await wait_for_zone_change(client, zone):
+        return "the zone did not change after the dungeon's return button"
+    landed = await zone_after_loading(client)
+    return None if landed not in (None, zone) else "the load after the dungeon's return button did not end elsewhere"
 
 
 async def zone_after_loading(client) -> str | None:

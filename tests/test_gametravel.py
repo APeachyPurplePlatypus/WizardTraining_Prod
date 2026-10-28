@@ -28,14 +28,16 @@ class Game:
     """The HUD's travel buttons, a zone name, and the clicks the code makes."""
 
     def __init__(self, zone="WizardCity/WC_Streets/WC_Cyclops", marked=False, hub_timer=False, recall_timer=False,
-                 mana=84, refuses_marks=False, refuses_first_marks=0):
+                 mana=84, refuses_marks=False, refuses_first_marks=0, resume_tip=None):
         self.zone, self.clicked, self.loading, self.mana, self.refuses_marks = zone, [], False, mana, refuses_marks
         self.refuses_first_marks = refuses_first_marks
         self.mark = StandIn("MarkButton", tip="Mark Location")
         self.hub = StandIn("GoHomeButton", [StandIn("txtGoHomeTimer", visible=hub_timer)], tip="Go to The Commons")
         self.recall = StandIn("RecallButton", [StandIn("txtRecallTimer", visible=recall_timer)],
                               tip="Recall Location" if marked else "No Mark Set")
-        buttons = StandIn("compassAndTeleporterButtons", [self.mark, self.hub, self.recall, StandIn("GotoDormButton")])
+        self.resume = StandIn("ResumeInstanceButton", tip=resume_tip or "", visible=resume_tip is not None)
+        buttons = StandIn("compassAndTeleporterButtons", [self.mark, self.hub, self.recall, StandIn("GotoDormButton"),
+                                                         self.resume])
         self.root = StandIn("root", [StandIn("WorldView", [StandIn("windowHUD", [buttons])])])
 
     def client(self):
@@ -62,6 +64,11 @@ class Game:
             self.mana -= 5
         if path[-1] in ("GoHomeButton", "RecallButton"):
             self.zone = "WizardCity/WC_Hub" if path[-1] == "GoHomeButton" else "WizardCity/WC_Streets/WC_Cyclops"
+        if path[-1] == "ResumeInstanceButton":
+            self.zone = SUNKEN_CITY
+
+
+SUNKEN_CITY = "WizardCity/WC_Streets/Interiors/WC_Sunken_City_T1"
 
 
 def run(game, function):
@@ -144,12 +151,27 @@ class GameTravelTest(unittest.TestCase):
         self.assertEqual(run(game, gametravel.recall), gametravel.RECALL_NOT_REACHED)
         self.assertEqual(game.zone, "WizardCity/WC_Hub")
 
-    def test_only_the_three_travel_buttons_are_ever_clicked(self):
-        game = Game()
+    def test_the_dungeons_return_button_takes_the_wizard_back_in(self):
+        game = Game(zone="WizardCity/WC_Hub", resume_tip="Teleport to Sunken City")
+        self.assertEqual(run(game, gametravel.resume_tip), "Teleport to Sunken City")
+        self.assertIsNone(run(game, gametravel.resume_instance))
+        self.assertEqual(game.clicked, ["ResumeInstanceButton"])
+        self.assertEqual(game.zone, SUNKEN_CITY)
+
+    def test_the_return_button_is_pressed_only_while_it_shows_a_teleport(self):
+        game = Game(zone="WizardCity/WC_Hub")
+        self.assertEqual(run(game, gametravel.resume_instance), gametravel.RESUME_NOT_SHOWING)
+        game = Game(zone="WizardCity/WC_Hub", resume_tip="<string;GUI_00000654>")
+        self.assertEqual(run(game, gametravel.resume_instance), gametravel.RESUME_NOT_SHOWING)
+        self.assertEqual(game.clicked, [])
+
+    def test_only_the_travel_buttons_are_ever_clicked(self):
+        game = Game(resume_tip="Teleport to Sunken City")
         run(game, gametravel.mark_here)
         run(game, gametravel.go_to_the_commons)
         run(game, gametravel.recall)
-        self.assertLessEqual(set(game.clicked), {"MarkButton", "GoHomeButton", "RecallButton"})
+        run(game, gametravel.resume_instance)
+        self.assertLessEqual(set(game.clicked), {"MarkButton", "GoHomeButton", "RecallButton", "ResumeInstanceButton"})
         self.assertNotIn("GotoDormButton", game.clicked)
 
 

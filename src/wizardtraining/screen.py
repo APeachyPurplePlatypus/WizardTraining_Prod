@@ -80,6 +80,18 @@ def is_game_notice(title: str, buttons: list[str]) -> bool:
     return title.strip().lower() == GAME_NOTICE_TITLE and buttons == GAME_NOTICE_BUTTONS
 
 
+DUNGEON_ENTRY_WORDS = "you are about to enter a dungeon"
+DUNGEON_ENTRY_BUTTONS = ["centerButton", "rightButton"]
+
+
+def is_dungeon_entry(caption: str, buttons: list[str]) -> bool:
+    """The game's box before a dungeon's door opens: "You are about to enter a Dungeon! ... This Dungeon takes around
+    1 hour and 30 minutes to finish ... Are you sure you want to enter this Dungeon?", titled with the dungeon's name
+    (Sunken City, 2026-10-28), with Yes (`centerButton`) and No (`rightButton`). Another player's request has other
+    words and is never one."""
+    return DUNGEON_ENTRY_WORDS in caption.lower() and sorted(buttons) == DUNGEON_ENTRY_BUTTONS
+
+
 TALK, USE = "talk", "use"
 
 

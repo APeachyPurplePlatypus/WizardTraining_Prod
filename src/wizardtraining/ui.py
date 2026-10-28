@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 
-from .screen import is_friend_request, is_game_notice, or_default, plain_text, visible_named
+from .screen import is_dungeon_entry, is_friend_request, is_game_notice, or_default, plain_text, visible_named
 from .session import HOOK_TIMEOUT_SECONDS
 
 POTION_BUTTON = ["WorldView", "windowHUD", "btnPotions"]
@@ -145,6 +145,21 @@ async def close_game_notice(client) -> str | None:
     await click_window(client, await window_at(box.window, BOX_NO))
     await asyncio.sleep(BOX_SETTLE_SECONDS)
     return f"pressed OK on a game notice: {box.caption}"
+
+
+async def dungeon_entry_box(client) -> MessageBox | None:
+    """The game's dungeon-entry box (`screen.is_dungeon_entry`) when it shows, else None."""
+    box = await message_box(client)
+    if box is None or not is_dungeon_entry(box.caption, await visible_buttons(box.window)):
+        return None
+    return box
+
+
+async def answer_dungeon_entry(client, box: MessageBox, enter: bool) -> None:
+    """Press Yes (`centerButton`) or No (`rightButton`) on the dungeon-entry box. The operator, 2026-10-28 23:22 UTC:
+    "Yes, from now entry box does not need user approval from now on"."""
+    await click_window(client, await window_at(box.window, BOX_YES if enter else BOX_NO))
+    await asyncio.sleep(BOX_SETTLE_SECONDS)
 
 
 async def answer_known_popup(client) -> str | None:
