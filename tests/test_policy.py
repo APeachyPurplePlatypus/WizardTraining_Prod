@@ -446,6 +446,13 @@ class TrapTest(unittest.TestCase):
         choice = SpellTypePolicy().choose(view([self.TRAP, fire_cat, self.SNOWMAN], pips=1, enemies=nearly_down))
         self.assertEqual(choice, Cast(1, "enemy", 0))
 
+    def test_a_kept_trap_is_not_spent_on_a_smaller_hit_of_its_school(self):
+        trapped = (Combatant("Evil Snowman", 310, resistances={"Ice": 0.2, "Fire": -0.2},
+                             incoming=(DamageModifier("Ice", 40),)),)
+        imp = Card("Imp - Starter Wand", "Damage", True, "Life", 1, item_card=True)
+        choice = SpellTypePolicy().choose(view([self.BEETLE, imp, self.SNOWMAN], pips=2, enemies=trapped))
+        self.assertEqual(choice, Cast(1, "enemy", 0))
+
     def test_a_trap_instead_of_a_pass(self):
         far_off = Card("Blizzard", "Damage", False, "Ice", 6)
         choice = SpellTypePolicy().choose(view([self.TRAP, far_off], pips=0, enemies=self.COLOSSUS))

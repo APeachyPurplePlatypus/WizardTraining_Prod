@@ -276,8 +276,9 @@ class SpellTypePolicy:
         if not attacks:
             return trap_instead_of_passing(view, self.strategy.target, "no attack castable")
         enemy = most_dangerous(view.enemies) if self.strategy.target == MOST_DANGEROUS else weakest(view.enemies)
-        attack = max(unresisted(view, attacks, enemy) or attacks,
-                     key=lambda index: expected_damage(view.cards[index], view.enemies[enemy]))
+        choices = unresisted(view, attacks, enemy) or attacks
+        choices = [index for index in choices if not spends_a_kept_trap(view, index, enemy)] or choices
+        attack = max(choices, key=lambda index: expected_damage(view.cards[index], view.enemies[enemy]))
         return Cast(attack, ATTACK_TARGETS[view.cards[attack].spell_type], enemy)
 
 
@@ -363,6 +364,17 @@ def unresisted(view: RoundView, attacks: list[int], enemy: int) -> list[int]:
     resistance against ice enemies". Colossus Boulevard's Evil Snowmen resist Ice by 20% and are weak to Fire, until
     they shield against it; the pip-weighted estimate still sent a resisted 3-pip Evil Snowman before a wand."""
     return [index for index in attacks if view.enemies[enemy].damage_factor(view.cards[index].school) >= 1.0]
+
+
+def spends_a_kept_trap(view: RoundView, attack: int, enemy: int) -> bool:
+    """The attack would use up a trap of its school on the target while a bigger attack of that school waits in hand
+    for pips: Ice Trap went on an Evil Snowman for the 3-pip Evil Snowman card, and a 1-pip Frost Beetle took it
+    the next round (15:24)."""
+    card, target = view.cards[attack], view.enemies[enemy]
+    if not any(modifier.percent > 0 and modifier.school in (card.school, UNIVERSAL) for modifier in target.incoming):
+        return False
+    return any(other.spell_type in ATTACK_TARGETS and not other.castable and other.school == card.school
+               and (other.pips or 0) > (card.pips or 0) for other in view.cards)
 
 
 def weakest(enemies: tuple[Combatant, ...]) -> int:
