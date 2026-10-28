@@ -48,8 +48,11 @@ class Activation:
 
 
 async def quest_entries(client) -> list[tuple[object, str]]:
-    """The quests shown on the current page, as (entry window, title), in page order."""
+    """The quests shown on the current page, as (entry window, title), in page order; none while the quest list is not
+    there (a moment after the Quest tab is clicked, it was not yet, and the run stopped, 13:51)."""
     page = await window_at(client.root_window, QUEST_LIST)
+    if page is None:
+        return []
     entries = []
     for child in await or_default(page.children(), []):
         if not ENTRY_NAME.fullmatch(await or_default(child.name(), "")) or not await or_default(child.is_visible(), False):
@@ -92,6 +95,7 @@ async def journal_zones(client) -> dict[str, str]:
         await wait_for_window(client, QUEST_TAB)
         await click(client, QUEST_TAB)
         await asyncio.sleep(PAGE_SETTLE_SECONDS)
+        await wait_for_window(client, QUEST_LIST)
         await go_to_first_page(client)
         for _ in range(MAX_PAGES):
             entries = await quest_entries(client)

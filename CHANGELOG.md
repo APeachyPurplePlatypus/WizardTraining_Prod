@@ -204,6 +204,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **The quest page is waited for, and a quest list not there yet reads as empty** (`questbook.journal_zones`, `questbook.quest_entries`).
+  - **What:** after the Quest tab is clicked, its quest list is waited for (up to 6 seconds, as the tab itself); a list still missing gives no entries rather than an error.
+  - **Why:** right after a restart in Colossus Boulevard, the quest list was not there yet when it was read, and the run stopped with `AttributeError: 'NoneType' object has no attribute 'children'` (13:51).
+  - **Verified:** offline (imports, tests); in the game: the stop of 13:51:49.
+
 - **Before the Recall back from the Commons, the wizard walks the wisp search instead of standing** (`QuestLoop.back_from_the_commons_turn`).
   - **What:** after a refill trip, with mana over the Recall line and health not, the return waits by walking the safe zone's wisp search (`keep_looking_turn`), as the other safe-zone refills do.
   - **Why:** after the heavy-fight trip from Colossus Boulevard the wizard stood still in the Commons for 90 seconds (13:37). The operator, 2026-10-28: "Standing to regenerate is fine, but it should continue to hunt for wisps in known safe areas since that is faster than just waiting around plus you regen health as you are looking."
