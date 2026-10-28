@@ -7,7 +7,7 @@ Every change, enhancement or addition is listed with its rationale, so later con
 ### Added
 
 - **In a zone where fights are heavy, the wizard walks on refilled** (`progress.short_for_a_heavy_zone`, `QuestLoop.out_into_a_heavy_zone_turn`, `QuestLoop.refill_after_heavy_fight_turn`).
-  - **What:** in a zone with two or more heavy fights (kept per zone in knowledge.json), the wizard refills to 90% health before walking on, by the heavy-fight refill (wisps, else a Commons trip), unless the goal is within the push-on distance; and in a dungeon or instance (not a tower floor) whose goal is out in such a zone, it goes Home and refills in the Commons before stepping out.
+  - **What:** in a zone with two or more heavy fights (kept per zone in knowledge.json), the wizard refills to 90% health before walking on, by the heavy-fight refill (wisps, else a Commons trip), unless the goal is within the push-on distance; in a dungeon or instance (not a tower floor) whose goal is out in such a zone, it goes Home and refills in the Commons before stepping out; and in a zone without enemies with the goal in such a zone, it recharges there to 90% health and 80% mana before a Recall or a walk back in.
   - **Why:** in Triton's underwater zone every walk met a pair of guards and each fight cost 39 to 59% of the wizard's health; it walked on at 46% and lost (19:02), and came out of Curfew!'s instance at 59% into a pair at the door (19:45). The coordinator, 2026-10-28 23:46 UTC, asked for this rule.
   - **Verified:** offline (`tests/test_progress.py`); in the game: the next walk in the underwater zone.
 

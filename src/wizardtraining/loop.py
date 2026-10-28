@@ -336,9 +336,19 @@ class QuestLoop:
         (`progress.short_for_a_heavy_zone`), short of the recharge: Go Home and refill in the Commons
         (`RunRecord.recharging`), from where the travel plan goes on to the goal, rather than stepping out short among
         its pairs; health does not come back inside. Out of Curfew!'s instance at 59%, the wizard met a Royal Guard
-        and a Riverclaw Guard at the door (19:45). None when that is not the case."""
+        and a Riverclaw Guard at the door (19:45). In a zone without enemies (the Commons) with the goal in such a zone,
+        recharge there first (`RunRecord.recharging`) instead of a Recall or a walk back in short. None when that is not
+        the case, or once the recharge is asked for."""
         zone = state["zone"]
         goal_zone = (self.record.quest or {}).get("goal_zone")
+        if (goal_zone not in (None, "", zone) and goal_zone in self.record.zones_with_enemies
+                and zone not in self.record.zones_with_enemies and not self.record.recharging
+                and not in_dungeon(zone, self.record.entered_with_x, self.record.dungeon_zones)
+                and short_for_a_heavy_zone(fraction, self.record.heavy_fights.get(goal_zone, 0))):
+            self.record.recharging = True
+            self.events.emit("health", f"{state['health']} of {state['max_health']} health in {zone}, and the goal is in "
+                                       f"{goal_zone}, where fights are heavy: recharging here before going")
+            return None
         if (goal_zone in (None, "", zone) or goal_zone not in self.record.zones_with_enemies or not self.use_travel_buttons
                 or not in_dungeon(zone, self.record.entered_with_x, self.record.dungeon_zones)
                 or in_tower(zone, self.record.entered_with_x, self.record.dungeon_zones)
