@@ -105,7 +105,6 @@ class RunRecord:
     teleport_outcomes: dict[str, dict[str, object]] = field(default_factory=dict)
     failed_gaps: dict[str, list[tuple[int, int]]] = field(default_factory=dict)
     quests_activated: dict[str, int] = field(default_factory=dict)
-    combat_strategy: str = "default"
     combat_strategies_tried: dict[str, list[str]] = field(default_factory=dict)
     walk_strategies_tried: dict[str, list[str]] = field(default_factory=dict)
     tried_wisps: dict[str, float] = field(default_factory=dict)

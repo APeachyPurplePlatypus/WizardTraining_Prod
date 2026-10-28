@@ -113,21 +113,18 @@ class KnowledgeTest(unittest.TestCase):
         self.assertEqual(later.entered_with_x, ["WizardCity/WC_Streets/Interiors/WC_OldeTown_T2"])
         self.assertEqual(later.trained_at_level, 10)
 
-    def test_keeps_the_combat_strategy_a_defeat_changed_to(self):
-        knowledge = Knowledge()
+    def test_keeps_the_combat_strategies_lost_with_against_each_group_of_enemies(self):
+        knowledge = Knowledge(combat_strategies_tried={"Flame Servant": ["default"]})
         run = RunRecord(limits=Limits())
         knowledge.give_to(run)
-        self.assertEqual(run.combat_strategy, "default")
-        run.combat_strategy = "heal earlier"
-        run.combat_strategies_tried["Flame Servant"] = ["default"]
+        run.combat_strategies_tried.setdefault("Nirini Sentry", []).append("heal earlier")
         knowledge.learn_from(run)
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "knowledge.json"
             knowledge.save(path)
             later = RunRecord(limits=Limits())
             Knowledge.load(path).give_to(later)
-        self.assertEqual(later.combat_strategy, "heal earlier")
-        self.assertEqual(later.combat_strategies_tried, {"Flame Servant": ["default"]})
+        self.assertEqual(later.combat_strategies_tried, {"Flame Servant": ["default"], "Nirini Sentry": ["heal earlier"]})
 
     def test_a_new_run_starts_with_it(self):
         run = RunRecord(limits=Limits())

@@ -55,8 +55,8 @@ from .reports import plain, save_report
 from .patrols import VIEWS_TO_JUDGE, note_sightings, unwalked_paths
 from .routes import GapStep, Hazards, RoutePlanner, duel_clearance
 from .sidequests import unsupported_reason
-from .strategies import (CROWD_STRATEGIES, NO_CLOSER_SECONDS, GoalApproach, combat_strategy_named, fight_situation, next_combat_strategy,
-                         next_walk_strategy)
+from .strategies import (COMBAT_STRATEGIES, CROWD_STRATEGIES, NO_CLOSER_SECONDS, CombatStrategy, GoalApproach,
+                         fight_situation, next_combat_strategy, next_walk_strategy)
 from .screen import or_default, prompt_action, prompt_offers_talk
 from .spellbook import SpellCatalog, deck_spells, learned_spell_ids
 from .spells import KNOWN_AT_FIRST_CHECK, LEARNED, SpellLog, learned_text, newly_learned, spell_entry
@@ -140,7 +140,10 @@ class QuestLoop:
         self.use_travel_buttons = use_travel_buttons
         self._marked_in: str | None = None
         self._dungeons_give_nothing_back = False
-        self._refill_fully = getattr(getattr(combat_policy, "strategy", None), "refill_fully_first", False)
+        self._refill_fully = False
+        self._fight_situation: str | None = None
+        if isinstance(combat_policy, SpellTypePolicy):
+            combat_policy.strategy_for = self.strategy_against
         self.goal_approach = GoalApproach()
         self._gear_checked: tuple | None = None
         self._finishing_since: float | None = None
@@ -592,6 +595,9 @@ class QuestLoop:
         self.saw_enemies(before["zone"])
         started = time.monotonic()
         self.events.emit("battle", f"battle {self.record.battles} started in {before['zone']}, health {health_text(before)}")
+        self._fight_situation = None
+        if isinstance(self.combat_policy, SpellTypePolicy):
+            self.combat_policy.new_fight()
         battle = await fight(self.client, self.combat_policy,
                              on_round=lambda entry: self.events.emit("round", describe_round(entry)))
         self.record.battle_log.append(battle)
@@ -617,13 +623,24 @@ class QuestLoop:
         return progressed("battle", rounds=len(battle["rounds"]), casts=casts, final_phase=battle["final_phase"],
                           after=battle["after"])
 
+    def strategy_against(self, situation: str) -> CombatStrategy:
+        """The first combat strategy not yet lost with against these enemies, in this run or an earlier one
+        (`strategies.next_combat_strategy`); asked by the combat policy at a fight's first round."""
+        self._fight_situation = situation
+        lost_with = self.record.combat_strategies_tried.get(situation, [])
+        strategy = next_combat_strategy(lost_with) or COMBAT_STRATEGIES[0]
+        if lost_with:
+            self.events.emit("strategy", f"against {situation}, lost before with {', '.join(lost_with)}; "
+                                         f"playing '{strategy.name}'")
+        return strategy
+
     def change_combat_strategy(self, battle: dict) -> None:
-        """After a lost fight, the next fight plays by the next combat strategy not yet tried against these enemies
-        (`strategies.next_combat_strategy`), and says which and why. The operator: "There should be no retry limit as
+        """After a lost fight, the next fight against these enemies plays by the next combat strategy not yet tried
+        against them (`strategy_against`), and says which and why. The operator: "There should be no retry limit as
         you should be trying different strategies if something isn't working." When every strategy has lost against
         them, the run stops for the operator."""
         _, names = enemies_at_once(battle.get("rounds", []))
-        situation = fight_situation(list(names))
+        situation = self._fight_situation or fight_situation(list(names))
         tried = self.record.combat_strategies_tried.setdefault(situation, [])
         current = getattr(self.combat_policy, "strategy", None)
         if current is None:
@@ -633,11 +650,9 @@ class QuestLoop:
         following = next_combat_strategy(tried)
         if following is None:
             raise StopRun(f"lost to {situation} with every combat strategy ({', '.join(tried)}); left for the operator")
-        self.combat_policy.strategy = following
-        self.record.combat_strategy = following.name
         self._refill_fully = following.refill_fully_first
-        self.events.emit("strategy", f"lost to {situation} playing '{current.name}'; the next fight plays "
-                                     f"'{following.name}': {following.why}")
+        self.events.emit("strategy", f"lost to {situation} playing '{current.name}'; the next fight against them "
+                                     f"plays '{following.name}': {following.why}")
 
     async def dialog_turn(self) -> dict:
         record = {}
@@ -1738,7 +1753,7 @@ async def play(settings: Settings, limits: Limits, *, combat_policy: CombatPolic
         async with attached() as attachment:
             record.hooks = attachment.hooks
             loop = loop_class(attachment.client, settings, record,
-                              combat_policy=combat_policy or SpellTypePolicy(combat_strategy_named(record.combat_strategy)),
+                              combat_policy=combat_policy or SpellTypePolicy(),
                               offer_policy=offer_policy or MainQuestsOnly(), events=events,
                               use_potions=use_potions, wear_gear=wear_gear, use_travel_buttons=use_travel_buttons)
             await loop.play()

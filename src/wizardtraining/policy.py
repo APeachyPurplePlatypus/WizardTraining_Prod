@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from typing import Literal, Protocol
 
-from .strategies import COMBAT_STRATEGIES, MOST_DANGEROUS, CombatStrategy
+from .strategies import COMBAT_STRATEGIES, MOST_DANGEROUS, CombatStrategy, fight_situation
 
 ATTACK_TARGETS = {"Damage": "enemy", "Steal": "enemy", "AOE": "all enemies"}
 HEAL_SPELL_TYPES = {"Heal"}
@@ -147,16 +147,26 @@ class SpellTypePolicy:
     share the target's shields, wards, traps and resistances let through, times the card's accuracy; the first in
     hand on a tie. It knows nothing of blades.
 
-    It plays by a `strategies.CombatStrategy`, which the loop changes after a lost fight: when to heal, how big an
-    enemy's saved-up hit is counted, which enemy is attacked first, and whether pips are saved for a bigger card.
+    It plays by a `strategies.CombatStrategy`: when to heal, how big an enemy's saved-up hit is counted, which enemy
+    is attacked first, and whether pips are saved for a bigger card. With `strategy_for`, the strategy is chosen at
+    the first round of each fight (after `new_fight`) from the enemies in it, so a strategy that lost to Flame
+    Servants is not played against them again because a later fight against Nirini Sentries changed it.
     Pips are saved for a heal only in danger (below LOW_HEALTH_FRACTION, or within reach of a big hit), whatever the
     strategy's heal line: playing "heal earlier" (below 60%) against two Nirini Sentries, the wizard passed for Pixie
     at 49%, healed, fell below 60% again, and passed again, while the last Sentry stood at 220 for eight rounds."""
 
-    def __init__(self, strategy: CombatStrategy = COMBAT_STRATEGIES[0]):
+    def __init__(self, strategy: CombatStrategy = COMBAT_STRATEGIES[0], strategy_for=None):
         self.strategy = strategy
+        self.strategy_for = strategy_for
+        self._strategy_chosen = False
+
+    def new_fight(self) -> None:
+        self._strategy_chosen = False
 
     def choose(self, view: RoundView) -> Cast | Pass | Flee | None:
+        if self.strategy_for is not None and not self._strategy_chosen and view.enemies:
+            self.strategy = self.strategy_for(fight_situation([enemy.name for enemy in view.enemies]))
+            self._strategy_chosen = True
         if out_of_mana(view) and view.can_flee:
             return Flee(f"out of mana ({view.mana} left)")
         attacks = [index for index, card in enumerate(view.cards) if card.castable and card.spell_type in ATTACK_TARGETS]

@@ -9,8 +9,8 @@ so a run that starts in Cyclops Lane, or meets no enemy at its entrance, does no
 mana, the zones entered with X at a prompt, towers and dungeons the wizard does not leave to train
 (`training.in_dungeon`), and the level it last trained at, so the school is visited once a level, and the steps across a gap between two
 walkable pieces that did not land in the other piece, which the same two pieces will not do on another day, and the
-combat strategy the last defeat changed to, with the strategies already lost with against each group of enemies, so
-a run started again after a defeat does not fight with the one that lost. Without them, every new run walked into teleporters
+combat strategies already lost with against each group of enemies, so a run started again after a defeat does not
+fight them with one that lost. Without them, every new run walked into teleporters
 to find out again, and walked into Cyclops Lane's tents again. Not kept: obstacles, because the players and
 enemies that caused most of them move on, and "no effect" teleport verdicts, because a walk that fell short of a
 volume once looked like one.
@@ -36,7 +36,6 @@ class Knowledge:
     entered_with_x: list[str] = field(default_factory=list)
     trained_at_level: int = 0
     failed_gaps: dict[str, list[tuple[int, int]]] = field(default_factory=dict)
-    combat_strategy: str = "default"
     combat_strategies_tried: dict[str, list[str]] = field(default_factory=dict)
 
     @classmethod
@@ -57,7 +56,6 @@ class Knowledge:
                    trained_at_level=int(data.get("trained_at_level", 0)),
                    failed_gaps={zone: [(int(a), int(b)) for a, b in pairs]
                                 for zone, pairs in data.get("failed_gaps", {}).items()},
-                   combat_strategy=str(data.get("combat_strategy", "default")),
                    combat_strategies_tried={enemies: list(names)
                                             for enemies, names in data.get("combat_strategies_tried", {}).items()})
 
@@ -76,7 +74,6 @@ class Knowledge:
         record.entered_with_x = list(self.entered_with_x)
         record.trained_at_level = self.trained_at_level
         record.failed_gaps = {zone: list(pairs) for zone, pairs in self.failed_gaps.items()}
-        record.combat_strategy = self.combat_strategy
         record.combat_strategies_tried = {enemies: list(names) for enemies, names in self.combat_strategies_tried.items()}
 
     def learn_from(self, record) -> None:
@@ -91,7 +88,6 @@ class Knowledge:
             if zone not in self.entered_with_x:
                 self.entered_with_x.append(zone)
         self.trained_at_level = max(self.trained_at_level, record.trained_at_level)
-        self.combat_strategy = record.combat_strategy
         for enemies, names in record.combat_strategies_tried.items():
             kept = self.combat_strategies_tried.setdefault(enemies, [])
             kept.extend(name for name in names if name not in kept)

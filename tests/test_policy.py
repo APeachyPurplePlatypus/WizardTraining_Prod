@@ -35,6 +35,24 @@ class StrategyPolicyTest(unittest.TestCase):
         self.assertEqual(SpellTypePolicy(COMBAT_STRATEGIES[2]).choose(view([BOLT], enemies=boss_and_guard)),
                          Cast(0, "enemy", 0))
 
+    def test_the_strategy_is_chosen_from_the_enemies_at_each_fights_first_round(self):
+        from wizardtraining.strategies import COMBAT_STRATEGIES
+        asked = []
+
+        def strategy_for(situation):
+            asked.append(situation)
+            return COMBAT_STRATEGIES[1] if situation == "Flame Servant" else COMBAT_STRATEGIES[2]
+
+        policy = SpellTypePolicy(strategy_for=strategy_for)
+        servants = (Combatant("Flame Servant", 310), Combatant("Flame Servant", 310))
+        policy.new_fight()
+        policy.choose(view([BOLT], enemies=servants))
+        policy.choose(view([BOLT], enemies=servants[:1]))
+        self.assertEqual((policy.strategy, asked), (COMBAT_STRATEGIES[1], ["Flame Servant"]))
+        policy.new_fight()
+        policy.choose(view([BOLT], enemies=(Combatant("Nirini Sentry", 285),)))
+        self.assertEqual((policy.strategy, asked), (COMBAT_STRATEGIES[2], ["Flame Servant", "Nirini Sentry"]))
+
     def test_heal_earlier_attacks_rather_than_passing_for_a_heal_out_of_danger(self):
         from wizardtraining.strategies import COMBAT_STRATEGIES
         pixie = Card("Pixie", "Heal", False, "Life", pips=2)
