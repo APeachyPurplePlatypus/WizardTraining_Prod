@@ -36,7 +36,7 @@ from .equipment import count_items, equip, read_items, read_wizard
 from .events import (EventLog, describe_battle, describe_changes, describe_round, dialog_text, enemies_at_once,
                      enemy_names, health_text, threat_text)
 from .gear import describe_stats, upgrades
-from .gametravel import go_to_the_commons, has_mark, mark_here, recall
+from .gametravel import go_to_the_commons, has_mark, mark_here, recall, recall_tip
 from .geometry import Point, distance_to_path, flat_distance, path_within, xy
 from .keys import tap
 from .knowledge import Knowledge
@@ -45,7 +45,7 @@ from .movement import LOADING, KeysIgnored, Reroute, face, travel
 from .navigation import load_planner
 from .policy import LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, SpellTypePolicy
 from .progress import (DUEL_BLOCKS_THE_WAY, DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY, ENEMY_NEAR_PATH, LimitReached, Limits, PATH_THREATS,
-                       PlannedRoute, RunRecord, StopRun, check_limits, leaves_world, health_to_travel, mana_for_a_fight, mana_to_travel, still_to_recharge,
+                       PlannedRoute, RunRecord, StopRun, check_limits, leaves_world, health_to_travel, mana_for_a_fight, mana_to_travel, still_to_recharge, worth_marking, worth_recalling,
                        nav_did_better, progressed, ready_to_recall, remember_obstacles, safe_to_stand, short_for_a_fight,
                        should_drink_potion, stalled, topped_up, travel_outcome, wanted_wisp,
                        WISP_ANY_DIRECTION_BELOW_FRACTION, world_of)
@@ -139,6 +139,8 @@ class QuestLoop:
         self.wear_gear = wear_gear
         self.use_travel_buttons = use_travel_buttons
         self._marked_in: str | None = None
+        self._unmarkable: set[str] = set()
+        self._no_recall_until = 0.0
         self._dungeons_give_nothing_back = False
         self._refill_fully = False
         self._fight_situation: str | None = None
@@ -843,6 +845,10 @@ class QuestLoop:
             turn = await self.refill_turn(refill, state)
             if turn is not None:
                 return turn
+        if refill is None and self.use_travel_buttons and not inside_a_dungeon:
+            if (recalled := await self.recall_toward_the_goal_turn(state, goal)) is not None:
+                return recalled
+            await self.mark_the_goal_zone(state, goal)
         if leads_to_another_zone(goal, await self.client.zone_name()):
             return await self.waypoint_turn(arrow, goal)
         handler = self.goal_handlers().get(goal["type"])
@@ -1143,6 +1149,8 @@ class QuestLoop:
             self.events.emit("travel", f"marked the spot in {zone} before leaving for mana" if problem is None else
                                        f"could not mark the spot in {zone}: {problem}")
             self._marked_in = zone if problem is None else None
+            if problem is None:
+                self.record.marked_in, self.record.mark_tip = zone, await recall_tip(self.client)
         problem = await go_to_the_commons(self.client)
         if problem is not None:
             self.events.emit("travel", f"could not go to the Commons for mana: {problem}")
@@ -1151,6 +1159,47 @@ class QuestLoop:
                                    f"health, to refill {stat} there")
         self.record.last_place = None
         return progressed("went to the Commons for a refill", stat=stat)
+
+    async def mark_the_goal_zone(self, state: dict, goal: dict) -> None:
+        """Arrived in the zone the goal is in, where enemies have been met (`progress.worth_marking`): Mark Location,
+        so a defeat here, which wakes the wizard in the world's hub, is followed by Recall Location back
+        (`recall_toward_the_goal_turn`) instead of a walk through the same enemies. A zone that refuses a mark is
+        not asked again in this run."""
+        zone = state["zone"]
+        if not worth_marking(zone, goal.get("destination_zone"), self.record.marked_in, state["mana"],
+                             enemies_here=zone in self.record.zones_with_enemies, refused=zone in self._unmarkable):
+            return
+        problem = await mark_here(self.client)
+        if problem is not None:
+            self._unmarkable.add(zone)
+            self.events.emit("travel", f"could not mark the spot in {zone}: {problem}")
+            return
+        self.record.marked_in, self.record.mark_tip = zone, await recall_tip(self.client)
+        self.events.emit("travel", f"marked the spot in {zone}, the goal's zone, to recall to after a defeat "
+                                   f"({state['mana']} mana before)")
+
+    async def recall_toward_the_goal_turn(self, state: dict, goal: dict) -> dict | None:
+        """The Recall button holds a mark in the zone the goal is in and the wizard is elsewhere
+        (`progress.worth_recalling`), say in the hub it woke in after a defeat and recharged in: Recall Location
+        instead of the walk back. A mark the button no longer names (marked over, or gone) is forgotten; after a
+        failed Recall (cooling down), the wizard walks for a minute before trying again."""
+        marked_in = self.record.marked_in
+        if (time.monotonic() < self._no_recall_until
+                or not worth_recalling(state["zone"], goal.get("destination_zone"), marked_in, state["mana"])):
+            return None
+        if await recall_tip(self.client) != self.record.mark_tip:
+            self.events.emit("travel", f"the Recall button no longer names the mark in {marked_in}; forgetting it")
+            self.record.marked_in = self.record.mark_tip = None
+            return None
+        problem = await recall(self.client)
+        if problem is not None:
+            self._no_recall_until = time.monotonic() + 60.0
+            self.events.emit("travel", f"could not recall to the mark in {marked_in}: {problem}; walking instead")
+            return None
+        self.events.emit("travel", f"recalled from {state['zone']} to the mark in {marked_in}, the goal's zone, with "
+                                   f"{state['mana']} mana")
+        self.record.last_place = None
+        return progressed("recalled toward the goal", zone=marked_in)
 
     async def back_from_the_commons_turn(self, state: dict) -> dict | None:
         """After a trip to the Commons: refill there (mana wisps, then standing still, as in any zone without

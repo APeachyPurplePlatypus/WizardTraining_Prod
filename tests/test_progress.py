@@ -3,7 +3,7 @@ import unittest
 from wizardtraining.progress import (APPROACH_MARGIN, DUEL_BLOCKS_THE_WAY, ENEMY_NEAR_PATH, ENEMY_PATH_CLEARANCE, ENGAGE_HEALTH_FRACTION,
                                      ENGAGE_MANA_FRACTION, MEANINGFUL_TRAVEL_DISTANCE, LimitReached, Limits,
                                      PlannedRoute, RunRecord, StopRun, check_limits, health_for_a_fight, leaves_world,
-                                     health_to_travel, mana_for_a_fight, mana_to_travel, still_to_recharge, nav_did_better, progressed, remember_obstacles,
+                                     health_to_travel, mana_for_a_fight, mana_to_travel, still_to_recharge, worth_marking, worth_recalling, nav_did_better, progressed, remember_obstacles,
                                      safe_to_stand, short_for_a_fight, should_drink_potion, stalled, topped_up,
                                      travel_outcome,
                                      ready_to_recall,
@@ -231,6 +231,25 @@ class WispTest(unittest.TestCase):
         self.assertEqual(still_to_recharge(1000 / 1102, 31 / 60), "mana")
         self.assertIsNone(still_to_recharge(1000 / 1102, 50 / 60))
         self.assertIsNone(still_to_recharge(None, None))
+
+    def test_the_goals_zone_is_marked_once_where_enemies_were_met(self):
+        chamber = "Krokotopia/KT_Pyramid/KT_Chamber"
+        self.assertTrue(worth_marking(chamber, chamber, None, 80, enemies_here=True, refused=False))
+        self.assertFalse(worth_marking(chamber, chamber, chamber, 80, enemies_here=True, refused=False))
+        self.assertFalse(worth_marking(chamber, "Krokotopia/KT_Pyramid/KT_AltarOfKings", None, 80, enemies_here=True,
+                                       refused=False))
+        self.assertFalse(worth_marking("Krokotopia/KT_Hub", "Krokotopia/KT_Hub", None, 80, enemies_here=False,
+                                       refused=False))
+        self.assertFalse(worth_marking(chamber, chamber, None, 4, enemies_here=True, refused=False))
+        self.assertFalse(worth_marking(chamber, chamber, None, 80, enemies_here=True, refused=True))
+
+    def test_recall_into_the_goals_zone_from_elsewhere(self):
+        chamber, hub = "Krokotopia/KT_Pyramid/KT_Chamber", "Krokotopia/KT_Hub"
+        self.assertTrue(worth_recalling(hub, chamber, chamber, 80))
+        self.assertFalse(worth_recalling(chamber, chamber, chamber, 80))
+        self.assertFalse(worth_recalling(hub, "Krokotopia/KT_Pyramid/KT_PalaceOfFire", chamber, 80))
+        self.assertFalse(worth_recalling(hub, chamber, None, 80))
+        self.assertFalse(worth_recalling(hub, chamber, chamber, 5))
 
     def test_waiting_for_mana_goes_on_until_nearly_full(self):
         self.assertFalse(topped_up(12 / 30))

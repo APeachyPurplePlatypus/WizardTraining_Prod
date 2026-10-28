@@ -29,6 +29,7 @@ MANA_BELOW_FRACTION = 0.2
 HEALTH_TO_TRAVEL_FRACTION = 0.4
 RECHARGE_HEALTH_FRACTION = 0.9
 RECHARGE_MANA_FRACTION = 0.8
+RECALL_MANA_NEEDED = 8
 ENGAGE_MANA_FRACTION = 0.4
 ENGAGE_HEALTH_FRACTION = 0.6
 TOP_UP_MANA_FRACTION = 0.9
@@ -109,6 +110,8 @@ class RunRecord:
     quests_activated: dict[str, int] = field(default_factory=dict)
     combat_strategies_tried: dict[str, list[str]] = field(default_factory=dict)
     recharging: bool = False
+    marked_in: str | None = None
+    mark_tip: str | None = None
     walk_strategies_tried: dict[str, list[str]] = field(default_factory=dict)
     tried_wisps: dict[str, float] = field(default_factory=dict)
     visited_objects: list[str] = field(default_factory=list)
@@ -233,6 +236,24 @@ def still_to_recharge(health: float | None, mana: float | None) -> str | None:
     if mana is not None and mana < RECHARGE_MANA_FRACTION:
         return "mana"
     return None
+
+
+def worth_marking(here: str, goal_zone: str | None, marked_in: str | None, mana, *, enemies_here: bool,
+                  refused: bool) -> bool:
+    """Arrived in the zone the goal is in, where enemies have been met, with no mark there yet and mana for Mark
+    Location (about 5): a defeat here wakes the wizard in the world's hub, and a mark brings it back by Recall
+    Location. At 22:55 and 23:11 the wizard woke in the Krokotopia hub with no mark in the Pyramid's Chamber and
+    walked back through the same enemies."""
+    return (goal_zone == here and marked_in != here and enemies_here and not refused
+            and isinstance(mana, int) and mana >= RECALL_MANA_NEEDED)
+
+
+def worth_recalling(here: str, goal_zone: str | None, marked_in: str | None, mana) -> bool:
+    """The Recall button holds a mark in the zone the goal is in, the wizard is elsewhere, and it has the mana for
+    Recall Location (about 5). The operator: "you might have forgot to use the teleport to the chamber of fire you
+    created to get back there"."""
+    return (marked_in is not None and goal_zone == marked_in and here != marked_in
+            and isinstance(mana, int) and mana >= RECALL_MANA_NEEDED)
 
 
 def ready_to_recall(mana: float | None, health: float | None) -> bool:

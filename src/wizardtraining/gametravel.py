@@ -42,6 +42,11 @@ async def cooling_down(client, timer_path: list[str]) -> bool:
     return await showing(client, timer_path)
 
 
+async def recall_tip(client) -> str:
+    """What the Recall button names: "No Mark Set", or the marked place."""
+    return await tip_of(client, RECALL_BUTTON)
+
+
 async def has_mark(client) -> bool:
     tip = await tip_of(client, RECALL_BUTTON)
     return bool(tip) and tip != NO_MARK_TIP
