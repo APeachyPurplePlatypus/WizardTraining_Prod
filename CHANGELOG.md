@@ -217,6 +217,7 @@ Every change, enhancement or addition is listed with its rationale, so later con
 - **The refill after a heavy fight survives a restart** (`RunRecord.refill_after_heavy_fight`, in `knowledge.json`).
   - **What:** the flag that has the wizard refill health to 90% after a heavy fight before going on is kept in `knowledge.json`, as the recharge after a defeat already was.
   - **Why:** a restart in the Commons at 583 of 1164 health (15:25) forgot the refill; the new run would have Recalled into Colossus Boulevard at 50%, and `recharging` was set by hand instead. The coordinator asked for it.
+  - **And it ends when the Recall back is ready** (`QuestLoop.back_from_the_commons_turn`): the flag used to be cleared only by the refill turn at 90% health, which the Recall back came before, so after the next fight, one that cost 244 of 1164 and left 889, the wizard went to the Commons again (16:07).
   - **Verified:** offline (imports, tests).
 
 - **The danger estimate uses the hits seen from each kind of enemy, and no heal is saved for above 80% health** (`policy.biggest_hits`, `policy.enemy_reach`, `RunRecord.enemy_hits`).

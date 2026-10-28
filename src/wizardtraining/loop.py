@@ -1953,12 +1953,15 @@ class QuestLoop:
 
     async def back_from_the_commons_turn(self, state: dict) -> dict | None:
         """After a trip to the Commons: refill there (mana wisps, then the walking wisp search, as in any zone without
-        enemies; health comes back while walking), and Recall Location once `progress.ready_to_recall`.
+        enemies; health comes back while walking), and Recall Location once `progress.ready_to_recall`. Ready to go
+        back ends the refill after a heavy fight: left set, it sent the wizard to the Commons again after the next
+        fight, which cost 244 of 1164 and left 889 (16:07).
         None when no spot is marked or the wizard is where it was marked."""
         if self._marked_in is None or state["zone"] == self._marked_in:
             self._marked_in = None
             return None
         if self.ready_to_go_back(state):
+            self.record.refill_after_heavy_fight = False
             return await self.recall_turn(state)
         if not ready_to_recall(mana_fraction(state), None):
             if (fetched := await self.wisp_turn("mana", state, reach=refill_reach(True))) is not None:
