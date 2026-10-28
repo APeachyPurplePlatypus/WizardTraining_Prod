@@ -16,6 +16,7 @@ The framework acts in a live online game, on a real account, among real players.
 - **Keyboard only:** W, A, S and D for walking and turning, X to interact, Space for dialogs (`keys.ALLOWED_KEYS`). Any other key raises `RefusedKey`.
 - **No teleport and no speed changes.** No writes to position, facing or speed. The game's own teleporters (doors, zone gates, in-zone teleport volumes such as Triton Avenue's "Tele Up") are walked into like a player would; that is not a teleport the framework performs. WizWalker's `goto` writes the facing, so it is not used. The movement-teleport hook is never installed.
 - **Clicks** use WizWalker's mouseless cursor, only for card, dialog and NPC-menu buttons, the HUD's potion button when potions are allowed, and the spellbook's inventory buttons listed above when gear is allowed. The real mouse does not move.
+- **Quest book clicks (operator's decision, 2026-10-28):** with `--side-quests` the framework may click the HUD's spellbook button, the book's Quest tab, the quest page's Previous and Next buttons, a quest's Activate button and Close; never Hide or abandon; no keys. The code is `questbook.py`, and a test keeps the clicks to this list.
 - **No detection evasion.** The framework does not try to look human. It is honest automation within the limits above.
 
 ## Other players
