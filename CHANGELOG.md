@@ -6,6 +6,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Added
 
+- **Z opens the Viewfinder for a quest goal that asks for a photo, and only for that** (`keys.PHOTO_KEYS`, `keys.tap(..., for_photo=True)`; docs/safety.md).
+  - **What:** Z is a key of its own, refused unless sent for a photo; the clicks allowed with it are the Viewfinder's shutter button and closing the Viewfinder.
+  - **Why:** the operator, 2026-10-28, 14:55 UTC: "Approve photo", for Annie's "Say Cheese!" in Golem Court ("Just press 'Z' and take a Photo right here"), which had been passed over.
+  - **Verified:** offline (`tests/test_small_modules.py`).
+
 - **The knowledge file keeps trainers by school** (`Knowledge.trainers`).
   - **What:** each school's trainer, with its name, world, landmark and, once seen in the game, its zone and position.
   - **Why:** the operator, 2026-10-28: training points go only to Elemental Blade and Elemental Trap, at the Balance trainer, and of the Balance Tree: "It's in kroktoopia, by the sphinx. Might not have access yet". No Wizard City zone file has a Balance tree, and none of the NPCs loaded in Ravenwood is one (10:32).

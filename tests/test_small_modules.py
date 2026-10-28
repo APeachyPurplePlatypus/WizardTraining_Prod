@@ -21,6 +21,7 @@ class Key(enum.Enum):
     HOME = 0x24
     ESC = 0x1B
     SPACEBAR = 0x20
+    Z = 0x5A
 
 
 class KeysTest(unittest.TestCase):
@@ -32,6 +33,13 @@ class KeysTest(unittest.TestCase):
     def test_allows_walking_and_dialog_keys(self):
         check_allowed(Key.W)
         check_allowed(Key.SPACEBAR)
+
+    def test_z_only_for_a_photo(self):
+        with self.assertRaises(RefusedKey):
+            check_allowed(Key.Z)
+        check_allowed(Key.Z, for_photo=True)
+        with self.assertRaises(RefusedKey):
+            check_allowed(Key.Q, for_photo=True)
 
 
 class StateTest(unittest.TestCase):
