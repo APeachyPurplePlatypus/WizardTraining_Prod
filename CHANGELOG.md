@@ -95,6 +95,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **"Wizards in the Mist" is passed over until reagents can be gathered** (`sidequests.UNSUPPORTED`).
+  - **What:** the quest, whose one goal is a scavenge goal ("Get" Mist Wood, `Reagents_00000000`, in Wizard City), is listed as one the framework cannot do yet, so `--clear-world` goes on to the Quest Finder's next giver.
+  - **Why:** taken from the Quest Finder's Olde Town giver, the quest stopped the run at 00:18: the goal has no tags, no target and no quest arrow, and the framework cannot find or gather reagents.
+  - **Verified:** in the game (the goal read at 00:20); offline (`tests/test_sidequests.py`).
+
 - **At the giver the Quest Finder points to, the menu's first quest is taken** (`policy.first_quest_option`).
   - **What:** with the journal's Quest Finder the active quest, an NPC's services menu is answered with its first option that names a quest rather than a service (a shop, trading, training and the like), and left when it has none.
   - **Why:** the Quest Finder's second giver in Wizard City, in Olde Town (00:15), offered ['Wizards in the Mist', 'Recipe Shop', 'Rematch Trading']; the menu was left each time, since no option was named for the active quest, until the run stopped for a menu that kept reopening.
