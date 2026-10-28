@@ -1784,7 +1784,9 @@ class QuestLoop:
     async def scavenge_turn(self, goal: dict, state: dict) -> dict:
         """A scavenge goal: get a reagent ("Mist Wood", the goal's item) wherever it grows; its goal shows no arrow.
         Walk to the nearest one loaded (`targets.is_reagent`) and use it with X, as a quest object; with none in
-        sight, search this zone, then the next open zone of the world not yet searched for it."""
+        sight, go first to a zone it is known or said to grow in, then search this zone, then the next open zone of
+        the world not yet searched for it. Cyclops Lane, not on Mist Wood's list, was searched point by point for ten
+        minutes among its Cyclops, each fight sending the wizard back to the same point (08:43 to 08:56)."""
         reagent = await self.reagent_name(goal)
         zone = state["zone"]
         recent = {gathered for gathered, at in self._gathered if time.monotonic() - at < GATHERED_FORGET_SECONDS}
@@ -1800,6 +1802,10 @@ class QuestLoop:
             return await self.travel_turn(f"walk to {reagent}", target["position"], arrive_radius=OBJECT_USE_DISTANCE / 2,
                                           avoid=await nearby_enemies(self.client))
         planner = await self.planner()
+        known = self.record.reagent_zones.get(reagent, [])
+        searched = self._searched_for.setdefault(reagent, set())
+        if known and zone not in known and any(other not in searched for other in known):
+            return await self.next_zone_for_reagent_turn(reagent, zone, planner)
         explored = self.record.explored.setdefault(f"{zone}|{reagent}", [])
         if (area := self.area_to_search(planner, zone, me, explored)) is not None:
             (x, y), _ = area
