@@ -137,6 +137,7 @@ class RunRecord:
     dead_search_points: dict[str, list] = field(default_factory=dict)
     held_quests: dict[str, str] = field(default_factory=dict)
     trapping_marks: dict[str, list] = field(default_factory=dict)
+    zone_doors: dict[str, dict] = field(default_factory=dict)
     school_quests_checked: dict[str, int] = field(default_factory=dict)
     walk_strategies_tried: dict[str, list[str]] = field(default_factory=dict)
     tried_wisps: dict[str, float] = field(default_factory=dict)

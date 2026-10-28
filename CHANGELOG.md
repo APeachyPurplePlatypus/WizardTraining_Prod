@@ -208,6 +208,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **Zones the hand-kept tree lacks are reached by the links and doors learned walking** (`travelplan.next_zone_on_the_way`, `RunRecord.zone_doors`, `QuestLoop.learn_the_door`, `QuestLoop.learned_door_toward`, `docs/lessons-learned.md`).
+  - **What:** after each walked zone change, the spot where the wizard came in is kept as the door back toward the zone it left. Where the zone tree knows no way to a goal's zone, the zone walk takes the first zone of the fewest-doors way through the learned links and walks to that door.
+  - **Why:** the coordinator asked to derive the zone tree from the game data after Colossus Boulevard and Triton Avenue's underwater zone were both missing. The zone files do not name where street doors lead (a scan of four Wizard City zones found only interiors and sub-zones named in `gamedata.bin`), so the links walked are the data; the learned links already held Shopping District to Colossus Boulevard.
+  - **Verified:** offline (`tests/test_travelplan.py`; imports, tests).
+
 - **Triton Avenue's underwater zone is in the zone tree, its door a trigger volume** (`training.ZONE_PARENT`, `training.DOWN_VOLUMES`, `navigation.load_planner`).
   - **What:** WC_Triton_Underwater hangs off Triton Avenue, and its door is the trigger volume "VolumeTritonUnderwater" on the lower street. A zone's trigger volumes named by a door hint of the zone tree now join its walk-in volumes, so the zone walk can use them.
   - **Why:** "Trouble Underfoot" sends the wizard to an NPC under the water; with no way known into that zone, the run stood at the arrow, "could not get close enough to the quest NPC to talk", until the stall rotation took it to the Commons (18:28 to 18:30).

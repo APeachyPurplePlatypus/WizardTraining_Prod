@@ -76,6 +76,7 @@ class Knowledge:
     dead_search_points: dict[str, list] = field(default_factory=dict)
     held_quests: dict[str, str] = field(default_factory=dict)
     trapping_marks: dict[str, list] = field(default_factory=dict)
+    zone_doors: dict[str, dict] = field(default_factory=dict)
     school_quests_checked: dict[str, int] = field(default_factory=dict)
 
     @classmethod
@@ -125,6 +126,8 @@ class Knowledge:
                    held_quests=dict(data.get("held_quests", {})),
                    trapping_marks={zone: [tuple(spot) for spot in spots]
                                    for zone, spots in data.get("trapping_marks", {}).items()},
+                   zone_doors={zone: {other: list(point) for other, point in doors.items()}
+                               for zone, doors in data.get("zone_doors", {}).items()},
                    school_quests_checked={world: int(level)
                                           for world, level in data.get("school_quests_checked", {}).items()})
 
@@ -166,6 +169,7 @@ class Knowledge:
         record.dead_search_points = {zone: list(points) for zone, points in self.dead_search_points.items()}
         record.held_quests = dict(self.held_quests)
         record.trapping_marks = {zone: list(spots) for zone, spots in self.trapping_marks.items()}
+        record.zone_doors = {zone: dict(doors) for zone, doors in self.zone_doors.items()}
         record.school_quests_checked = dict(self.school_quests_checked)
 
     def learn_from(self, record) -> None:
@@ -204,6 +208,7 @@ class Knowledge:
         self.dead_search_points = {zone: list(points) for zone, points in record.dead_search_points.items()}
         self.held_quests = dict(record.held_quests)
         self.trapping_marks = {zone: list(spots) for zone, spots in record.trapping_marks.items()}
+        self.zone_doors = {zone: dict(doors) for zone, doors in record.zone_doors.items()}
         self.school_quests_checked = dict(record.school_quests_checked)
         for zone, points in record.hidden_doors.items():
             for point in points:

@@ -67,7 +67,7 @@ from .sidequests import (FINDER_SAME_GIVER_LIMIT, QUEST_FINDER, WORLD_DOOR, WORL
 from .strategies import (COMBAT_STRATEGIES, CROWD_STRATEGIES, NO_CLOSER_SECONDS, CombatStrategy, GoalApproach,
                          fight_situation, next_combat_strategy, next_walk_strategy)
 from .travelplan import (GO_HOME, HUBS, RECALL, TRAVEL_MANA_RESERVE, WALK, TravelCosts, choose_travel, link_zones,
-                         zone_hops,
+                         zone_hops, next_zone_on_the_way,
                          spare_mana,
                          worth_a_way_back_mark, worth_going_home_for_wisps)
 from .screen import or_default, prompt_action, prompt_is_not_a_doors, prompt_offers_talk
@@ -519,6 +519,7 @@ class QuestLoop:
                                                    "position": (state["position"]["x"], state["position"]["y"])}
         if arrived and isinstance(state["zone"], str):
             self.learn_the_way(self._last_state["zone"], state["zone"])
+            self.learn_the_door(self._last_state["zone"], state)
         self._last_state, self._last_quest = state, dict(self.record.quest or {})
 
     async def box_closes_by_itself(self) -> bool:
@@ -655,6 +656,8 @@ class QuestLoop:
                 continue
             way = way_toward_zone(here, zone, names)
             door = None if way is None else self.door_on_the_way(way, planner)
+            if door is None and (learned := self.learned_door_toward(here, zone)) is not None:
+                door = (learned[1], 0.0)
             if door is not None:
                 reachable.append((zone_hops(self.record.zone_links, here, zone) or 99, zone, door))
         if not reachable:
@@ -1951,6 +1954,22 @@ class QuestLoop:
                 self.learn_cost("zone_seconds", spent)
         self._teleport_pressed = None
         self._zone_entered_at, self._entered_walking, self._entered_from = now, walked, left
+
+    def learn_the_door(self, left: str | None, state: dict) -> None:
+        """After a walked zone change, where the wizard came in is the door back toward the zone it left: kept in
+        knowledge.json (`RunRecord.zone_doors`) for the zone walk to use where the hand-kept tree knows no way."""
+        position = state.get("position")
+        if not self._entered_walking or not isinstance(left, str) or not isinstance(position, dict):
+            return
+        self.record.zone_doors.setdefault(state["zone"], {})[left] = [round(position["x"]), round(position["y"]),
+                                                                      round(position.get("z", 0.0))]
+
+    def learned_door_toward(self, here: str, target: str):
+        """The door out of `here` on the way to `target` by the learned zone links (`travelplan.next_zone_on_the_way`)
+        and the doors learned walking in (`learn_the_door`), as (point, radius), or None."""
+        following = next_zone_on_the_way(self.record.zone_links, here, target)
+        door = self.record.zone_doors.get(here, {}).get(following) if following else None
+        return None if door is None else (following, XYZ(float(door[0]), float(door[1]), float(door[2])))
 
     def learn_walk_speed(self, turn: dict, seconds: float) -> None:
         moved = (turn.get("trip") or {}).get("moved") if isinstance(turn.get("trip"), dict) else None

@@ -1,5 +1,7 @@
 import unittest
 
+from wizardtraining.travelplan import next_zone_on_the_way
+
 from wizardtraining.travelplan import (GO_HOME, RECALL, TRAVEL_MANA_RESERVE, WALK, TravelCosts, choose_travel,
                                        link_zones, spare_mana, worth_a_way_back_mark, worth_going_home_for_wisps,
                                        zone_hops)
@@ -78,6 +80,25 @@ class TravelPlanTest(unittest.TestCase):
         self.assertFalse(worth_a_way_back_mark(PALACE, PALACE, CHAMBER, HUB, links, PALACE, 80))
         self.assertFalse(worth_a_way_back_mark(PALACE, PALACE, CHAMBER, HUB, links, None, 20))
         self.assertFalse(spare_mana(TRAVEL_MANA_RESERVE))
+
+
+
+class NextZoneOnTheWayTest(unittest.TestCase):
+    """Zone links walked in Wizard City on 2026-10-28, where the hand-kept tree lacked Colossus Boulevard."""
+    LINKS = {"WizardCity/WC_Streets/WC_Triton": ["WizardCity/WC_Streets/WC_OldeTown"],
+             "WizardCity/WC_Streets/WC_OldeTown": ["WizardCity/WC_Streets/WC_Triton", "WizardCity/WC_Shop_Area"],
+             "WizardCity/WC_Shop_Area": ["WizardCity/WC_Hub", "WizardCity/WC_Streets/WC_OldeTown",
+                                         "WizardCity/WC_Streets/WC_Colossus"],
+             "WizardCity/WC_Streets/WC_Colossus": ["WizardCity/WC_Shop_Area"]}
+
+    def test_the_first_zone_of_the_fewest_doors_way(self):
+        self.assertEqual(next_zone_on_the_way(self.LINKS, "WizardCity/WC_Streets/WC_Triton",
+                                              "WizardCity/WC_Streets/WC_Colossus"), "WizardCity/WC_Streets/WC_OldeTown")
+        self.assertEqual(next_zone_on_the_way(self.LINKS, "WizardCity/WC_Shop_Area",
+                                              "WizardCity/WC_Streets/WC_Colossus"), "WizardCity/WC_Streets/WC_Colossus")
+
+    def test_none_without_a_known_way(self):
+        self.assertIsNone(next_zone_on_the_way(self.LINKS, "WizardCity/WC_Streets/WC_Triton", "Krokotopia/KT_Hub"))
 
 
 if __name__ == "__main__":

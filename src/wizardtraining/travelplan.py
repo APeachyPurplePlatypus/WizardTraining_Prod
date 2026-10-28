@@ -149,3 +149,29 @@ def worth_a_way_back_mark(here: str, finished_zone: str | None, next_goal_zone: 
     if hub == here or (hub is not None and (zone_hops(links, hub, here) or 0) == 1):
         return False
     return spare_mana(mana)
+
+
+def next_zone_on_the_way(links: dict[str, list[str]], here: str, target: str) -> str | None:
+    """The first zone after `here` on the fewest-doors way to `target` through the zone links learned by walking
+    (`link_zones`), or None when none is known. The hand-kept zone tree lacked Colossus Boulevard and Triton Avenue's
+    underwater zone, while the links walked today held the first and will hold the second (18:33)."""
+    if here == target:
+        return None
+    came_from = {here: None}
+    frontier = [here]
+    while frontier:
+        following = []
+        for zone in frontier:
+            for neighbour in links.get(zone, []):
+                if neighbour in came_from:
+                    continue
+                came_from[neighbour] = zone
+                if neighbour == target:
+                    step = neighbour
+                    while came_from[step] != here:
+                        step = came_from[step]
+                    return step
+                following.append(neighbour)
+        frontier = following
+    return None
+
