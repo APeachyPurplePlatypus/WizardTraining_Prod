@@ -8,6 +8,8 @@ duel circle is in someone else's fight and is never a target.
 
 from __future__ import annotations
 
+import re
+
 import math
 
 from .geometry import Point, angle_between, flat_distance, xy
@@ -140,6 +142,15 @@ def is_reagent(entity_name: str, reagent: str) -> bool:
     key, name = letters_and_digits(reagent), letters_and_digits(entity_name)
     stem = name.rstrip("0123456789")
     return bool(key) and stem != name and stem.endswith(key)
+
+
+REAGENT_NAME = re.compile(r"^[A-Z][a-z]+(?:[A-Z][a-z]+)+_\d+$")
+
+
+def looks_like_a_reagent(entity_name: str) -> bool:
+    """An entity named as reagents are: words run together, then a number ("FrostedFlax_01", whose prompt reads "to
+    Collect"); not the zone-prefixed names of NPCs and props ("WC-ST01-NPC01", "WC_WispHealth")."""
+    return REAGENT_NAME.match(entity_name) is not None
 
 
 def zones_to_search_for(reagent_zones: dict[str, list[str]], reagent: str, candidates: list[tuple[int, str]]) -> list[str]:

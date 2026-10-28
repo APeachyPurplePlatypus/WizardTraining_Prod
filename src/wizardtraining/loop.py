@@ -70,7 +70,7 @@ from .spells import KNOWN_AT_FIRST_CHECK, LEARNED, SpellLog, learned_text, newly
 from .session import NoClient, attached, hooks_ready
 from .state import attempt, battle_showing, free_to_move, health_fraction, mana_fraction, snapshot
 from .placed import gate_toward, objects_for_goal
-from .targets import (area_in_zone, found_in, is_reagent, zones_to_search_for, bystanders, enemies_to_route_around, in_grace_after_battle, keeps_blocking,
+from .targets import (area_in_zone, found_in, is_reagent, looks_like_a_reagent, zones_to_search_for, bystanders, enemies_to_route_around, in_grace_after_battle, keeps_blocking,
                       leads_to_another_zone, named_enemies_not_in_a_duel, next_area_to_explore, others, quest_targets,
                       refill_reach, safe_wisps,
                       summary, too_close, WISP_REACH)
@@ -1789,6 +1789,9 @@ class QuestLoop:
         minutes among its Cyclops, each fight sending the wizard back to the same point (08:43 to 08:56)."""
         reagent = await self.reagent_name(goal)
         zone = state["zone"]
+        seen = sorted({found["name"].rsplit("_", 1)[0] for found in await objects_named(self.client, looks_like_a_reagent)})
+        if seen:
+            self.say_once("reagents", f"reagents seen in {zone}: {', '.join(seen)}")
         recent = {gathered for gathered, at in self._gathered if time.monotonic() - at < GATHERED_FORGET_SECONDS}
         found = [found for found in await objects_named(self.client, lambda name: is_reagent(name, reagent))
                  if found["id"] not in recent]
@@ -1816,7 +1819,8 @@ class QuestLoop:
             self.say_once("gather", f"no {reagent} in sight in {zone}; looking at ({x:.0f}, {y:.0f})")
             turn = await self.travel_turn(f"look for {reagent}", XYZ(x, y, 0.0), arrive_radius=WAYPOINT_ARRIVE_RADIUS * 3,
                                           also=reagent_in_sight, avoid=await nearby_enemies(self.client))
-            if turn.get("trip", {}).get("reason") in (None, f"{reagent} in sight", "every route method failed"):
+            if turn.get("trip", {}).get("reason") in (None, f"{reagent} in sight", "every route method failed",
+                                                      DUEL_BLOCKS_THE_WAY, ENEMIES_IN_THE_WAY):
                 explored.append((round(x), round(y)))
             return turn
         return await self.next_zone_for_reagent_turn(reagent, zone, planner)
