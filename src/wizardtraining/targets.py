@@ -153,6 +153,15 @@ def looks_like_a_reagent(entity_name: str) -> bool:
     return REAGENT_NAME.match(entity_name) is not None
 
 
+ESSENCE_WORD = "essence"
+
+
+def is_essence(item: str) -> bool:
+    """A scavenge item collected by casting an Extract spell on an enemy in battle, not found on the ground: "Know
+    Thine Enemy" asked for "Lost Soul Essence" and taught Extract Undead, whose effect is collect_essence."""
+    return item.split()[-1].lower() == ESSENCE_WORD if item.split() else False
+
+
 REAGENT_DETOUR = 3000.0
 REAGENT_SAFE_CLEARANCE = 800.0
 

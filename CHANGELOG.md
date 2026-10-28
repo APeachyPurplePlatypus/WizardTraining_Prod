@@ -6,6 +6,12 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Added
 
+- **An essence is not searched for on the ground; its quest is parked while clearing a world** (`targets.is_essence`, `QuestLoop.park_the_active_quest`).
+  - **What:** a scavenge goal whose item is named "... Essence" is collected by casting an Extract spell on an enemy in battle. The bot does not do that yet, so while clearing a world the quest is parked until the next level and the world's other quests go on. Outside a clearing the run stops for the operator, as before.
+  - **Why:** the Quest Finder led to "Know Thine Enemy" in Ravenwood (09:31). It asks for "Lost Soul Essence" and taught Extract Undead (Myth, 0 pips, effect collect_essence), not in the equipped 14-card deck. The ground search found nothing at 11 points of Ravenwood (09:31 to 09:32), and could not.
+  - **Verified:** offline (`tests/test_targets.py`); in the game, next run.
+  - **Later:** casting the Extract spell needs it in the deck (`decks.py`, not wired in yet) and a fight with an enemy of its kind.
+
 - **A reagent not found in three zones parks its quest; a wanted reagent seen on other quests is a detour** (`QuestLoop.park_for_the_reagent`, `QuestLoop.reagent_detour_turn`, `targets.worth_a_detour`, `Knowledge.wanted_reagents`).
   - **What:** while clearing a world, a scavenge quest whose reagent was not found in three zones is parked until the next level, and its reagent kept in the knowledge file as wanted, so the Quest Finder's other givers go on. On any other quest, outside towers and dungeons and when not recharging, a wanted reagent loaded within 3,000 units with no enemy within 800 of it is walked to and gathered, and its quest is no longer parked. When the world's clearing ends, the quests still waiting for reagents are made active once more for one more search before the paused quest.
   - **Why:** suggested to the operator, 2026-10-28, 13:24 UTC, as a change of strategy: Mist Wood was not found in Cyclops Lane, Unicorn Way or the Commons in about 40 minutes of searching, while the world's other quests waited. Reagents respawn and other players gather them, so a sweep of every zone can miss one that a later pass would find.

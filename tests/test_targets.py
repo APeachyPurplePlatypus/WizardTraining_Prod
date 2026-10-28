@@ -6,7 +6,7 @@ from wizardtraining.targets import (AFTER_BATTLE_GRACE_SECONDS, ENEMY_CLEARANCE,
                                     back_away, bystanders, detour, enemies_to_route_around, in_grace_after_battle,
                                     is_duel_circle, is_dungeon_entrance, keeps_blocking, leads_to_another_zone,
                                     measured, named_enemies_not_in_a_duel,
-                                    next_area_to_explore, others, quest_targets, area_in_zone, close_enough, is_reagent, zones_to_search_for, found_in, looks_like_a_reagent, worth_a_detour,
+                                    next_area_to_explore, others, quest_targets, area_in_zone, close_enough, is_reagent, zones_to_search_for, found_in, looks_like_a_reagent, worth_a_detour, is_essence,
                                     refill_reach, safe_wisps, threat_centre, too_close)
 
 
@@ -113,6 +113,11 @@ class TargetsTest(unittest.TestCase):
         self.assertTrue(worth_a_detour(1500, [2000, 5000]))
         self.assertFalse(worth_a_detour(1500, [600]))
         self.assertFalse(worth_a_detour(4000, []))
+
+    def test_an_essence_is_extracted_in_battle_not_gathered(self):
+        self.assertTrue(is_essence("Lost Soul Essence"))
+        self.assertFalse(is_essence("Mist Wood"))
+        self.assertFalse(is_essence(""))
 
     def test_reagent_like_names(self):
         self.assertTrue(looks_like_a_reagent("FrostedFlax_01"))

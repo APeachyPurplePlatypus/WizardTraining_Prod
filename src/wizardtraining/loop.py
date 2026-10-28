@@ -70,7 +70,7 @@ from .spells import KNOWN_AT_FIRST_CHECK, LEARNED, SpellLog, learned_text, newly
 from .session import NoClient, attached, hooks_ready
 from .state import attempt, battle_showing, free_to_move, health_fraction, mana_fraction, snapshot
 from .placed import gate_toward, objects_for_goal
-from .targets import (area_in_zone, found_in, is_reagent, looks_like_a_reagent, worth_a_detour, zones_to_search_for, bystanders, enemies_to_route_around, in_grace_after_battle, keeps_blocking,
+from .targets import (area_in_zone, found_in, is_essence, is_reagent, looks_like_a_reagent, worth_a_detour, zones_to_search_for, bystanders, enemies_to_route_around, in_grace_after_battle, keeps_blocking,
                       leads_to_another_zone, named_enemies_not_in_a_duel, next_area_to_explore, others, quest_targets,
                       refill_reach, safe_wisps,
                       summary, too_close, WISP_REACH)
@@ -1799,6 +1799,9 @@ class QuestLoop:
         the world not yet searched for it. Cyclops Lane, not on Mist Wood's list, was searched point by point for ten
         minutes among its Cyclops, each fight sending the wizard back to the same point (08:43 to 08:56)."""
         reagent = await self.reagent_name(goal)
+        if is_essence(reagent):
+            return await self.park_the_active_quest(f"{reagent} is collected with an Extract spell cast on an enemy in "
+                                                    "battle, which the bot does not do yet")
         zone = state["zone"]
         seen = sorted({found["name"].rsplit("_", 1)[0] for found in await objects_named(self.client, looks_like_a_reagent)})
         if seen:
@@ -1844,16 +1847,22 @@ class QuestLoop:
         parked until the next level, and its reagent kept as wanted: the Quest Finder's other givers go on, a wanted
         reagent seen on the way is a detour (`reagent_detour_turn`), and the quest is tried once more at the end of the
         world's clearing. Mist Wood was not found in Cyclops Lane, Unicorn Way or the Commons in 40 minutes."""
+        self.record.reagent_searched.pop(reagent, None)
+        turn = await self.park_the_active_quest(f"no {reagent} found in {', '.join(searched)}; gathering {reagent} when "
+                                                "one is seen on the way, and trying again at the end of the world's quests")
+        self.record.wanted_reagents[reagent] = turn["quest"]
+        return turn
+
+    async def park_the_active_quest(self, why: str) -> dict:
+        """While clearing a world, the active quest is parked until the next level (`progress.parked`) and the world's
+        other quests go on; otherwise the run stops for the operator."""
         title = " ".join(((self.record.quest or {}).get("title") or "").split())
         level = (await snapshot(self.client))["level"]
-        if not title or not isinstance(level, int):
-            raise StopRun(f"no {reagent} found in {', '.join(searched)}; left for the operator")
+        if not self.record.clearing_world or not title or not isinstance(level, int):
+            raise StopRun(f"{why}; left for the operator")
         self.record.parked_quests[title] = level
-        self.record.wanted_reagents[reagent] = title
-        self.record.reagent_searched.pop(reagent, None)
-        self.events.emit("gather", f"no {reagent} found in {', '.join(searched)}; parking {title}, gathering {reagent} "
-                                   "when one is seen on the way, and trying again at the end of the world's quests")
-        return progressed("parked a quest whose reagent was not found", quest=title)
+        self.events.emit("quest", f"parking {title} until the wizard is past level {level}: {why}")
+        return progressed("parked a quest", quest=title)
 
     async def reagent_detour_turn(self, state: dict) -> dict | None:
         """A reagent a parked quest wants is in sight, near, with no enemy near it (`targets.worth_a_detour`): gather it,
