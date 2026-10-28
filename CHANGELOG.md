@@ -95,6 +95,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **To go back to a world where the Recall button's mark is, the wizard recalls there first** (`QuestLoop.recall_into_the_world_turn`).
+  - **What:** on the way to another world (`to_the_world_turn`), when the mark the Recall button still names is in that world and mana allows (8 or more), Recall Location comes before any Spiral Door.
+  - **Why:** handing in "Bear Market" to Baldur Goldpaws in Olde Town (00:31:35) took the wizard to Grizzleheim's hub (`GrizzleheimLite/GH_GrizzleheimHubLite`), where no way to the Spiral Door was known, and the run stopped; the Recall button still named the Olde Town mark set for the way back.
+  - **Verified:** offline (imports and the suite); in the game: next run.
+
 - **A quest NPC behind a desk is talked to from as close as the wizard gets, up to 260 units** (`targets.close_enough`, moved from `dialog.py` so it is tested offline).
   - **What:** when the wizard can get no closer (its last two nudges within 5 units) and the interact prompt shows, it talks from up to 260 units away, up from 200.
   - **Why:** in the Wizard City Library, the NPC for "Bear Market" (the arrow's, `WC-HUB-NPC03`) stands behind a desk: every nudge stopped 205 units from it, with "Press X to Talk" showing and that NPC the nearest, and the wizard tried 15 times to get close enough (00:24 to 00:26) while the walk strategies went round.

@@ -1091,12 +1091,34 @@ class QuestLoop:
                                                                            for title, zone in zones.items()))
         return self._journal_zones[1]
 
+    async def recall_into_the_world_turn(self, world: str, here: str) -> dict | None:
+        """The Recall button's mark is in the world the wizard is going to: Recall Location there, about 5 mana, before
+        any Spiral Door. Handing in "Bear Market" in Olde Town took the wizard to Grizzleheim's hub, a world with no
+        known way to its Spiral Door, while the Recall button still named the Olde Town mark (00:31)."""
+        marked_in = self.record.marked_in
+        if marked_in is None or world_of(marked_in) != world:
+            return None
+        mana = await attempt(self.client.stats.current_mana())
+        if not isinstance(mana, int) or mana < MARK_MANA_NEEDED or await recall_tip(self.client) != self.record.mark_tip:
+            return None
+        started = time.monotonic()
+        problem = await recall(self.client)
+        if problem is not None:
+            self.events.emit("travel", f"could not recall to the mark in {marked_in} from {here}: {problem}")
+            return None
+        self._teleport_pressed = (RECALL, started)
+        self.record.last_place = None
+        self.events.emit("travel", f"recalled from {here} to the mark in {marked_in}, to go back to {world}")
+        return progressed("recalled into the world", world=world)
+
     async def to_the_world_turn(self, world: str, here: str) -> dict:
         """Toward another world: at the Spiral Map, choose it (`world_gate_turn`); in this world's teleporter room,
         walk to the Spiral Door ("Universe Teleport") and press X at its prompt; elsewhere, walk into a volume toward
         the teleporter room, or one door of the way there (`training.way_toward_zone`), else Go Home first."""
         if await spiral_map_open(self.client):
             return await self.world_gate_turn({"destination_zone": f"{world}/"}, here)
+        if (recalled := await self.recall_into_the_world_turn(world, here)) is not None:
+            return recalled
         planner = await self.planner()
         room = WORLD_DOOR_ROOMS.get(world_of(here))
         if here == room:
