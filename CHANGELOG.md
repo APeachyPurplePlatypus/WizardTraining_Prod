@@ -208,6 +208,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **A quest page that does not open no longer stops the run** (`questbook.open_quest_page`, `QuestLoop.clearing_turn`).
+  - **What:** when the spellbook opens without its Quest tab, the book is closed and opened once more; a page that still cannot be read raises `QuestBookUnreadable`, which the clearing takes as a turn without progress, tried again next turn.
+  - **Why:** right after The Gravulum Order's hand-in and the gear check after it, the book opened without its Quest tab and the run stopped on `LookupError: no window at WorldView/DeckConfiguration/Quest` (16:22).
+  - **Verified:** offline (imports, tests).
+
 - **Parked quests are held until the wizard404 API is connected** (`RunRecord.held_quests`, `progress.parked`).
   - **What:** quests in `knowledge.json`'s `held_quests` (title to reason) stay parked whatever the level: the clearing skips them, and no reagent detour is made for them. The quests parked today are held with the reason "waiting for wizard404 API".
   - **Why:** the operator, 2026-10-28 20:21 UTC: "We will continue parked quests after the API from wizard404 is connected, our request for API token is being approved". Parked quests used to come back at the next level.

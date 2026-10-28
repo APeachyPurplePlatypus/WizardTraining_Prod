@@ -56,7 +56,7 @@ from .progress import (DUEL_BLOCKS_THE_WAY, DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY, 
                        nav_did_better, progressed, ready_to_recall, remember_obstacles, safe_to_stand, short_for_a_fight,
                        should_drink_potion, stalled, topped_up, travel_outcome, wanted_wisp,
                        WISP_ANY_DIRECTION_BELOW_FRACTION, world_of)
-from .questbook import journal_zones, same_title, activate_quest
+from .questbook import QuestBookUnreadable, journal_zones, same_title, activate_quest
 from .quests import arrow_shows_no_target, game_language, open_goals, read_quest_arrow, read_quests
 from .reports import plain, save_report
 from .patrols import VIEWS_TO_JUDGE, note_sightings, unwalked_paths
@@ -1068,12 +1068,12 @@ class QuestLoop:
         if quest is None:
             if await wait_for_dialog(self.client, FOLLOW_UP_WAIT_SECONDS, poll=0.5):
                 return await self.dialog_turn()
-            if (cleared := await self.clear_world_turn(None, state)) is not None:
+            if (cleared := await self.clearing_turn(None, state)) is not None:
                 return cleared
             if (switched := await self.switch_quest_turn()) is not None:
                 return switched
             raise StopRun("no active main quest and no dialog offering one")
-        if (cleared := await self.clear_world_turn(quest, state)) is not None:
+        if (cleared := await self.clearing_turn(quest, state)) is not None:
             return cleared
         if (reason := unsupported_reason(quest.get("title"))) is not None:
             self.say_once("quest", f"skipping {quest['title']}: {reason}")
@@ -1262,6 +1262,15 @@ class QuestLoop:
         await leave_the_map(self.client)
         self.events.emit("door", "closed the Spiral Map: the goal is not in another world the run may go to")
         return stalled("closed the Spiral Map")
+
+    async def clearing_turn(self, quest: dict | None, state: dict) -> dict | None:
+        """`clear_world_turn`, with a quest page that could not be read taken as a turn without progress, tried again
+        next turn, rather than the end of the run."""
+        try:
+            return await self.clear_world_turn(quest, state)
+        except QuestBookUnreadable as error:
+            self.events.emit("quest", f"the quest page could not be read ({error}); trying again next turn")
+            return stalled("could not read the quest page", problem=str(error))
 
     async def clear_world_turn(self, quest: dict | None, state: dict) -> dict | None:
         """While clearing a world of its quests (`--clear-world`; the operator, 2026-10-28: "I feel like we did not

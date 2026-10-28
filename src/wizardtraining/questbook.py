@@ -84,18 +84,17 @@ async def go_to_first_page(client) -> None:
             return
 
 
+class QuestBookUnreadable(LookupError):
+    """The quest page could not be opened or read."""
+
+
 async def journal_zones(client) -> dict[str, str]:
     """Each quest the quest page lists, by title, with the world it shows for it ("Wizard City", "Krokotopia"; ""
-    for the Quest Finder), over every page; the book is opened and closed again with the allowed clicks only."""
+    for the Quest Finder), over every page; the book is opened and closed again with the allowed clicks only.
+    QuestBookUnreadable when a window of the page is missing."""
     zones: dict[str, str] = {}
     try:
-        if not await showing(client, BOOK):
-            await click(client, SPELLBOOK_BUTTON)
-            await asyncio.sleep(BOOK_OPEN_SECONDS)
-        await wait_for_window(client, QUEST_TAB)
-        await click(client, QUEST_TAB)
-        await asyncio.sleep(PAGE_SETTLE_SECONDS)
-        await wait_for_window(client, QUEST_LIST)
+        await open_quest_page(client)
         await go_to_first_page(client)
         for _ in range(MAX_PAGES):
             entries = await quest_entries(client)
@@ -109,11 +108,32 @@ async def journal_zones(client) -> dict[str, str]:
                     zones[title] = ""
             await click(client, NEXT_PAGE)
             await asyncio.sleep(PAGE_SETTLE_SECONDS)
+    except LookupError as error:
+        raise QuestBookUnreadable(str(error)) from error
     finally:
         if await showing(client, BOOK):
             await click(client, CLOSE_BOOK)
             await asyncio.sleep(PAGE_SETTLE_SECONDS)
     return zones
+
+
+async def open_quest_page(client) -> None:
+    """Open the spellbook at its Quest tab; when the tab does not show, close the book and open it once more. Right
+    after a quest's hand-in and the gear check that follows it, the book opened without its Quest tab and the run
+    stopped on the click (16:22)."""
+    for _ in range(2):
+        if not await showing(client, BOOK):
+            await click(client, SPELLBOOK_BUTTON)
+            await asyncio.sleep(BOOK_OPEN_SECONDS)
+        await wait_for_window(client, QUEST_TAB)
+        if await window_at(client.root_window, QUEST_TAB) is not None:
+            break
+        if await showing(client, BOOK):
+            await click(client, CLOSE_BOOK)
+            await asyncio.sleep(PAGE_SETTLE_SECONDS)
+    await click(client, QUEST_TAB)
+    await asyncio.sleep(PAGE_SETTLE_SECONDS)
+    await wait_for_window(client, QUEST_LIST)
 
 
 async def activate_quest(client, title: str, *, click_activate: bool = True) -> Activation:
