@@ -52,7 +52,7 @@ from .navigation import load_planner
 from .policy import LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, SpellTypePolicy
 from .progress import (DUEL_BLOCKS_THE_WAY, DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY, ENEMY_NEAR_PATH, LimitReached, Limits, PATH_THREATS,
                        PlannedRoute, RunRecord, StopRun, check_limits, leaves_world, health_to_travel, mana_for_a_fight, mana_to_travel, still_to_recharge, worth_marking, worth_recalling,
-                       PARK_AFTER_STRATEGIES, parked,
+                       PARK_AFTER_STRATEGIES, HEAVY_ZONE_FIGHTS, RECHARGE_HEALTH_FRACTION, heavy_fight, parked,
                        nav_did_better, progressed, ready_to_recall, remember_obstacles, safe_to_stand, short_for_a_fight,
                        should_drink_potion, stalled, topped_up, travel_outcome, wanted_wisp,
                        WISP_ANY_DIRECTION_BELOW_FRACTION, world_of)
@@ -172,6 +172,8 @@ class QuestLoop:
         self._deck_checked: tuple | None = None
         self._deck_retry_at = 0.0
         self._photos_taken = 0
+        self._refill_after_heavy_fight = False
+        self._heavy_fights: dict[str, int] = {}
         self._level_table: dict[int, int] | None = None
         self._experience: tuple[int, int] | None = None
         self._run_start_experience: tuple[int, int] | None = None
@@ -299,6 +301,20 @@ class QuestLoop:
                      turn["did"], turn["progress"], state["level"], health_text(state), state["zone"], quest.get("goal"),
                      quest.get("goal_zone") or "")
             self.note_changes(state)
+
+    async def refill_after_heavy_fight_turn(self, state: dict) -> dict | None:
+        """After a heavy fight (`progress.heavy_fight`), refill health from wisps to RECHARGE_HEALTH_FRACTION before
+        walking on, not only below the travel line: fights there start when pairs walk in. Health only; mana keeps
+        its own refills. Not in a dungeon refilled in place, where the wizard does not leave to refill."""
+        if not self._refill_after_heavy_fight:
+            return None
+        fraction = health_fraction(state)
+        if fraction is None or fraction >= RECHARGE_HEALTH_FRACTION:
+            self._refill_after_heavy_fight = False
+            return None
+        if in_dungeon(state["zone"], self.record.entered_with_x) and not self.travel_allowed_in(state["zone"]):
+            return None
+        return await self.refill_turn("health", state)
 
     async def check_experience(self, turn: dict) -> None:
         """After each turn, read the experience (`equipment.read_experience`, no clicks); when it changed, log what the
@@ -769,6 +785,13 @@ class QuestLoop:
         if "stopped" in battle:
             raise StopRun(battle["stopped"])
         battle["after"] = {key: after[key] for key in ("zone", "level", "health", "max_health", "mana", "gold")}
+        if not defeated and not fled and heavy_fight(before["health"], after["health"], after["max_health"]):
+            self._heavy_fights[before["zone"]] = self._heavy_fights.get(before["zone"], 0) + 1
+            self._refill_after_heavy_fight = True
+            self.events.emit("health", f"the fight cost {before['health'] - after['health']} of {after['max_health']} "
+                                       f"health; refilling to {RECHARGE_HEALTH_FRACTION:.0%} from wisps before going on")
+        if defeated and self.record.clearing_world and self._heavy_fights.get(before["zone"], 0) >= HEAVY_ZONE_FIGHTS:
+            self.park_the_quest_in_a_heavy_zone(before["zone"], battle)
         if defeated:
             self.record.defeats += 1
             self.record.recharging = True
@@ -779,6 +802,18 @@ class QuestLoop:
         casts = sum(1 for battle_round in battle["rounds"] if battle_round["action"].startswith("cast"))
         return progressed("battle", rounds=len(battle["rounds"]), casts=casts, final_phase=battle["final_phase"],
                           after=battle["after"])
+
+    def park_the_quest_in_a_heavy_zone(self, zone: str, battle: dict) -> None:
+        """A fight lost in a zone where HEAVY_ZONE_FIGHTS fights this run cost a third of the wizard's health or more:
+        while clearing a world, the quest is parked until the next level, and the world's other quests go first. The
+        coordinator, 2026-10-28, of Colossus Boulevard: park its quests until level 14 if a fight is lost there."""
+        title = " ".join(((self.record.quest or {}).get("title") or "").split())
+        level = (battle.get("after") or {}).get("level")
+        if not title or not isinstance(level, int):
+            return
+        self.record.parked_quests[title] = level
+        self.events.emit("strategy", f"lost in {zone}, where {self._heavy_fights[zone]} fights cost a third of the "
+                                     f"wizard's health or more; parking {title} until past level {level}")
 
     def strategy_against(self, situation: str) -> CombatStrategy:
         """The first combat strategy not yet lost with against these enemies, in this run or an earlier one
@@ -953,6 +988,8 @@ class QuestLoop:
             await self.check_the_dungeon_held(state)
         if (detour := await self.reagent_detour_turn(state)) is not None:
             return detour
+        if (refill := await self.refill_after_heavy_fight_turn(state)) is not None:
+            return refill
         wanted = wanted_wisp(fraction, mana_fraction(state))
         if wanted is not None:
             turn = await self.wisp_turn(wanted, state, heading=await self.wisp_heading(wanted, state))

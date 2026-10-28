@@ -278,6 +278,15 @@ def worth_recalling(here: str, goal_zone: str | None, marked_in: str | None, man
 
 
 PARK_AFTER_STRATEGIES = 3
+HEAVY_FIGHT_FRACTION = 0.35
+HEAVY_ZONE_FIGHTS = 2
+
+
+def heavy_fight(health_before, health_after, max_health) -> bool:
+    """A won fight that cost HEAVY_FIGHT_FRACTION of the wizard's health or more: in Colossus Boulevard pairs of Evil
+    Snowmen and Gobbler Scouters cost 400 to 900 of 1,133, and two of three fights went under 25% (12:39 to 12:53)."""
+    return (all(isinstance(value, int) for value in (health_before, health_after, max_health)) and max_health > 0
+            and health_before - health_after >= HEAVY_FIGHT_FRACTION * max_health)
 
 
 def parked(parked_quests: dict[str, int], title: str | None, level) -> bool:

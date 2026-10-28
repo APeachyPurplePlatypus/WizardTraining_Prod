@@ -310,5 +310,13 @@ class RecallInTheGoalZoneTest(unittest.TestCase):
         self.assertFalse(worth_recalling(cyclops, cyclops, cave, 80, door_for=cyclops))
         self.assertTrue(worth_recalling("WizardCity/WC_Hub", cyclops, cave, 80, door_for=cyclops))
 
+
+class HeavyFightTest(unittest.TestCase):
+    def test_a_fight_costing_a_third_of_the_health_is_heavy(self):
+        from wizardtraining.progress import heavy_fight
+        self.assertTrue(heavy_fight(929, 543, 1133))
+        self.assertFalse(heavy_fight(1133, 1033, 1133))
+        self.assertFalse(heavy_fight(None, 543, 1133))
+
 if __name__ == "__main__":
     unittest.main()

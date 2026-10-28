@@ -6,6 +6,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Added
 
+- **After a heavy fight the wizard refills health to 90% before going on; a loss where fights are heavy parks the quest** (`progress.heavy_fight`, `QuestLoop.refill_after_heavy_fight_turn`, `QuestLoop.park_the_quest_in_a_heavy_zone`).
+  - **What:** a won fight that cost 35% of the wizard's health or more is heavy: the wizard then fetches health wisps until 90% before walking on (health only). While clearing a world, a fight lost in a zone where two or more fights this run were heavy parks the quest until the next level, and the world's other quests go first.
+  - **Why:** in Colossus Boulevard, opened at 12:31, pairs of Evil Snowmen and Gobbler Scouters (level 12) cost 400 to 900 of the wizard's 1,133 health, and two of three fights went under 25% (271, then 171). Fights there start when pairs walk in, so refilling only below 40% left too little. The coordinator (16:54 UTC) asked for both.
+  - **Verified:** offline (`tests/test_progress.py`); in the game: the Colossus fights of 12:32 to 12:53.
+
 - **"Take Photo of" goals: the photo is taken while the Viewfinder names the subject** (`QuestLoop.photo_of_turn`, `photomancy.take_photo(subject=...)`).
   - **What:** a scavenge goal named "Take Photo of" (its item the subject) sends the wizard to the goal's zone; there it finds the subject among the loaded entities by the name the game shows, walks within 600 units, faces it, opens the Viewfinder and takes the photo (keeping it) only while the Viewfinder's frame names that subject; otherwise it closes the Viewfinder and steps closer. Not in sight: the zone is searched for it. Four tries, then the quest is parked.
   - **Why:** Annie's follow-up, "Ready, Aim, Shoot!", asks for photos of Mr. Lincoln (Ravenwood), Hilda Brewer (the Commons) and Sergeant Muldoon (Olde Town); the ground was searched for "Mr. Lincoln" as if he were a reagent (12:12). The Viewfinder shows the subject in its frame (`SpecialItemText`: "Victor Darkwood" in the robe shop, 11:06). Within the photo approval (14:55 UTC) and the Keep Picture one (16:08 UTC).
