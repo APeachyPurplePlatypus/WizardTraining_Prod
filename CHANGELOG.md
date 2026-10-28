@@ -143,6 +143,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **Golem Court is in Wizard City's zone tree** (`training.ZONE_PARENT`).
+  - **What:** Golem Court (`WC_Golem_Tower`) leads to the Commons through its "WC_Golem_Tower Hub Exit" volume, so a walk to another zone, such as an essence hunt's, can start there.
+  - **Why:** "Know Thine Enemy", taken up in Golem Court (10:15), was parked at once: "no way is known to a zone where a Lost Soul was fought". The run had walked between the Commons and Golem Court several times that morning.
+  - **Verified:** the zone's volumes read from its file; offline (`tests/test_training.py`).
+
 - **"The Gravulum Order" waits for a prerequisite quest, not a membership** (`sidequests.UNSUPPORTED`).
   - **What:** the reason it is passed over now says the tunnel to Colossus Boulevard needs another quest done first.
   - **Why:** the operator, 2026-10-28, 13:52 UTC: "You are a premium member, it's likely you can't get into Colossus boulevard because you need need to compete another quest to gain access." Wizard404's quest relationship data, once there is access to it, would show which quest.

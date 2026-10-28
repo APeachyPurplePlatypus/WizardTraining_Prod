@@ -132,12 +132,12 @@ TRITON, CYCLOPS, FIRECAT = ("WizardCity/WC_Streets/WC_Triton", "WizardCity/WC_St
                             "WizardCity/WC_Streets/WC_Firecat")
 UNICORN_WAY, HAUNTED_CAVE, DARK_CAVE = ("WizardCity/WC_Streets/WC_Unicorn", "WizardCity/WC_Streets/WC_HauntedCave",
                                         "WizardCity/WC_Streets/WC_DarkCave")
-ZONE_PARENT = {"WizardCity/WC_Ravenwood_Teleporter": RAVENWOOD, RAVENWOOD: COMMONS, SHOPPING_DISTRICT: COMMONS, UNICORN_WAY: COMMONS, "WizardCity/WC_NightSide": COMMONS,
+ZONE_PARENT = {"WizardCity/WC_Ravenwood_Teleporter": RAVENWOOD, "WizardCity/WC_Golem_Tower": COMMONS, RAVENWOOD: COMMONS, SHOPPING_DISTRICT: COMMONS, UNICORN_WAY: COMMONS, "WizardCity/WC_NightSide": COMMONS,
                OLDE_TOWN: SHOPPING_DISTRICT, TRITON: OLDE_TOWN, CYCLOPS: OLDE_TOWN, FIRECAT: OLDE_TOWN,
                HAUNTED_CAVE: TRITON, DARK_CAVE: CYCLOPS}
 # Wizard City's zones as a tree around the Commons: each zone and the zone one door nearer to it. From the zone files
 # (teleport volumes named for the hub and the "Street" numbers, and the street gates): the Commons leads to Ravenwood,
-# the Shopping District and Unicorn Way; the Shopping District to Olde Town; Olde Town to Triton Avenue, Cyclops Lane
+# the Shopping District, Unicorn Way and Golem Court (its "WC_Golem_Tower Hub Exit"); the Shopping District to Olde Town; Olde Town to Triton Avenue, Cyclops Lane
 # and Firecat Alley; Triton Avenue to the Haunted Cave; Cyclops Lane to the Dark Cave.
 DOWN_VOLUMES = {(SHOPPING_DISTRICT, OLDE_TOWN): "Shop Area to Street2"}
 AREA_ZONES = {"Cyclops Lane": CYCLOPS, "Firecat Alley": FIRECAT, "Triton Avenue": TRITON, "Unicorn Way": UNICORN_WAY,

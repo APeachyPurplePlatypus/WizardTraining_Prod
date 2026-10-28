@@ -78,6 +78,11 @@ class WayTest(unittest.TestCase):
                          Way(VOLUME, "TeleportVol_Teleport location (to IceSchool)"))
         self.assertEqual(way_to_school(ICE.interior, ICE, []), Way(TRAINER, "Lydia Greyrose"))
 
+    def test_from_golem_court_the_way_to_unicorn_way_is_its_hub_exit(self):
+        golem = ["TeleportVol_Teleport location (WC_Golem_Tower Hub Exit)", "TeleportVol_Teleport location 7"]
+        way = way_toward_zone("WizardCity/WC_Golem_Tower", "WizardCity/WC_Streets/WC_Unicorn", golem)
+        self.assertEqual(way.name, "TeleportVol_Teleport location (WC_Golem_Tower Hub Exit)")
+
     def test_from_another_school_the_way_is_out_to_ravenwood(self):
         self.assertEqual(way_to_school("WizardCity/Interiors/WC_SchoolMyth", ICE,
                                        ["TeleportVol_Teleport location (MythSchool Ravenwood Exit)"]),
