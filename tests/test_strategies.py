@@ -1,7 +1,7 @@
 import unittest
 
 from wizardtraining.strategies import (COMBAT_STRATEGIES, CROWD_STRATEGIES, NO_CLOSER_FIGHTS, NO_CLOSER_SECONDS,
-                                       WALK_STRATEGIES, GoalApproach, fight_situation, next_combat_strategy,
+                                       WALK_STRATEGIES, GoalApproach, combat_strategy_named, fight_situation, next_combat_strategy,
                                        next_walk_strategy)
 
 
@@ -53,6 +53,10 @@ class StrategiesTest(unittest.TestCase):
         approach.note(key, 15000, 11.0, fought=True)
         self.assertFalse(approach.note(key, 10000, 12.0, fought=True))
         self.assertFalse(approach.note(("zone", "quest", 2), 10000, 999.0, fought=True))
+
+    def test_a_strategy_is_found_by_its_name_and_an_unknown_name_is_the_default(self):
+        self.assertEqual(combat_strategy_named("heal earlier"), COMBAT_STRATEGIES[1])
+        self.assertEqual(combat_strategy_named("gone"), COMBAT_STRATEGIES[0])
 
     def test_a_fight_is_known_by_its_enemies_in_any_order(self):
         self.assertEqual(fight_situation(["Lord Nightshade", "Field Guard"]), fight_situation(["Field Guard", "Lord Nightshade"]))

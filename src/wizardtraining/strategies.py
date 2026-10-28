@@ -54,6 +54,11 @@ CLOSER_BY = 300.0
 CROWD_STRATEGIES = ("wait for the way to clear", "go to the Commons and walk back")
 
 
+def combat_strategy_named(name: str) -> CombatStrategy:
+    """The combat strategy of that name, or the default one for a name no longer known."""
+    return next((strategy for strategy in COMBAT_STRATEGIES if strategy.name == name), COMBAT_STRATEGIES[0])
+
+
 def next_combat_strategy(tried: list[str]) -> CombatStrategy | None:
     """The first combat strategy not among `tried`, or None when every one has been tried."""
     return next((strategy for strategy in COMBAT_STRATEGIES if strategy.name not in tried), None)

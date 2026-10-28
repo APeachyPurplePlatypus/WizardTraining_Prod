@@ -45,7 +45,7 @@ from .movement import LOADING, KeysIgnored, Reroute, face, travel
 from .navigation import load_planner
 from .policy import LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, SpellTypePolicy
 from .progress import (DUEL_BLOCKS_THE_WAY, DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY, ENEMY_NEAR_PATH, LimitReached, Limits, PATH_THREATS,
-                       PlannedRoute, RunRecord, StopRun, check_limits, leaves_world, mana_for_a_fight, mana_to_travel,
+                       PlannedRoute, RunRecord, StopRun, check_limits, leaves_world, health_to_travel, mana_for_a_fight, mana_to_travel,
                        nav_did_better, progressed, ready_to_recall, remember_obstacles, safe_to_stand, short_for_a_fight,
                        should_drink_potion, stalled, topped_up, travel_outcome, wanted_wisp,
                        WISP_ANY_DIRECTION_BELOW_FRACTION, world_of)
@@ -55,7 +55,8 @@ from .reports import plain, save_report
 from .patrols import VIEWS_TO_JUDGE, note_sightings, unwalked_paths
 from .routes import GapStep, Hazards, RoutePlanner, duel_clearance
 from .sidequests import unsupported_reason
-from .strategies import CROWD_STRATEGIES, GoalApproach, fight_situation, next_combat_strategy, next_walk_strategy
+from .strategies import (CROWD_STRATEGIES, GoalApproach, combat_strategy_named, fight_situation, next_combat_strategy,
+                         next_walk_strategy)
 from .screen import or_default, prompt_action, prompt_offers_talk
 from .spellbook import SpellCatalog, deck_spells, learned_spell_ids
 from .spells import KNOWN_AT_FIRST_CHECK, LEARNED, SpellLog, learned_text, newly_learned, spell_entry
@@ -139,7 +140,7 @@ class QuestLoop:
         self.use_travel_buttons = use_travel_buttons
         self._marked_in: str | None = None
         self._dungeons_give_nothing_back = False
-        self._refill_fully = False
+        self._refill_fully = getattr(getattr(combat_policy, "strategy", None), "refill_fully_first", False)
         self.goal_approach = GoalApproach()
         self._gear_checked: tuple | None = None
         self._finishing_since: float | None = None
@@ -629,6 +630,7 @@ class QuestLoop:
         if following is None:
             raise StopRun(f"lost to {situation} with every combat strategy ({', '.join(tried)}); left for the operator")
         self.combat_policy.strategy = following
+        self.record.combat_strategy = following.name
         self._refill_fully = following.refill_fully_first
         self.events.emit("strategy", f"lost to {situation} playing '{current.name}'; the next fight plays "
                                      f"'{following.name}': {following.why}")
@@ -810,6 +812,8 @@ class QuestLoop:
             health = health_fraction(state)
             refill = ("health" if health is not None and health < FULL_HEALTH_FRACTION
                       else "mana" if not topped_up(mana_fraction(state)) else None)
+        if refill is None and not inside_a_dungeon and not health_to_travel(health_fraction(state)):
+            refill = "health"
         if refill is None and (self._topping_up_in == state["zone"] or not mana_to_travel(mana_fraction(state))):
             refill = "mana"
         if refill is not None:
@@ -1730,7 +1734,7 @@ async def play(settings: Settings, limits: Limits, *, combat_policy: CombatPolic
         async with attached() as attachment:
             record.hooks = attachment.hooks
             loop = loop_class(attachment.client, settings, record,
-                              combat_policy=combat_policy or SpellTypePolicy(),
+                              combat_policy=combat_policy or SpellTypePolicy(combat_strategy_named(record.combat_strategy)),
                               offer_policy=offer_policy or MainQuestsOnly(), events=events,
                               use_potions=use_potions, wear_gear=wear_gear, use_travel_buttons=use_travel_buttons)
             await loop.play()

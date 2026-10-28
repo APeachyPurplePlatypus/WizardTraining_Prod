@@ -26,6 +26,7 @@ HEALTH_WISP_BELOW_FRACTION = 0.65
 WISP_ANY_DIRECTION_BELOW_FRACTION = 0.35
 POTION_BELOW_FRACTION = 0.4
 MANA_BELOW_FRACTION = 0.2
+HEALTH_TO_TRAVEL_FRACTION = 0.4
 ENGAGE_MANA_FRACTION = 0.4
 ENGAGE_HEALTH_FRACTION = 0.6
 TOP_UP_MANA_FRACTION = 0.9
@@ -104,6 +105,7 @@ class RunRecord:
     teleport_outcomes: dict[str, dict[str, object]] = field(default_factory=dict)
     failed_gaps: dict[str, list[tuple[int, int]]] = field(default_factory=dict)
     quests_activated: dict[str, int] = field(default_factory=dict)
+    combat_strategy: str = "default"
     combat_strategies_tried: dict[str, list[str]] = field(default_factory=dict)
     walk_strategies_tried: dict[str, list[str]] = field(default_factory=dict)
     tried_wisps: dict[str, float] = field(default_factory=dict)
@@ -209,6 +211,14 @@ def mana_to_travel(mana: float | None) -> bool:
     only before a fight the quest asks for: walking to a Firecat Alley waypoint with 3 of 32, any fight on the way
     would be lost, and the zones that give mana back are next door."""
     return mana is None or mana >= MANA_BELOW_FRACTION
+
+
+def health_to_travel(health: float | None) -> bool:
+    """At least HEALTH_TO_TRAVEL_FRACTION of max health, or unknown. Below it the wizard refills health before any
+    goal, not only before a fight the quest asks for: defeated by two Flame Servants in the Pyramid's Chamber, it
+    woke in the Krokotopia hub with 1 health and walked straight back toward them at 55 of 1102 to talk to the
+    assistant behind them."""
+    return health is None or health >= HEALTH_TO_TRAVEL_FRACTION
 
 
 def ready_to_recall(mana: float | None, health: float | None) -> bool:
