@@ -6,6 +6,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Added
 
+- **A quest's photo is taken with Photomancy's Viewfinder** (`photomancy.take_photo`, `QuestLoop.photo_turn`).
+  - **What:** a scavenge goal for "Photomancy" is a photo taken in the goal's zone: the wizard walks there door by door, and where it is safe presses Z, clicks the Viewfinder's "Take Picture" button and closes the Viewfinder with its own close button; then checks the goal. Two photos a run at most, then the quest is parked. A message box after the shutter stops the run for the operator. "Say Cheese!" is no longer passed over.
+  - **Why:** the operator, 2026-10-28, 14:55 UTC: "Approve photo". The goal read in the game is "Practice Photomancy" in Golem Court. The Viewfinder, opened with Z in the robe shop (11:06), is `SelfieCameraWindow`, with `TakePictureButton` ("Take Picture") and `CloseSelfieCameraWindow`.
+  - **Verified:** the Viewfinder's windows read and closed in the game (11:06); offline (imports, tests). The photo itself: next run. In that read, a probe looking for any button named "close" clicked the chat box's close button before the Viewfinder's; the photo step clicks only the Viewfinder's own buttons, by path.
+
 - **Z opens the Viewfinder for a quest goal that asks for a photo, and only for that** (`keys.PHOTO_KEYS`, `keys.tap(..., for_photo=True)`; docs/safety.md).
   - **What:** Z is a key of its own, refused unless sent for a photo; the clicks allowed with it are the Viewfinder's shutter button and closing the Viewfinder.
   - **Why:** the operator, 2026-10-28, 14:55 UTC: "Approve photo", for Annie's "Say Cheese!" in Golem Court ("Just press 'Z' and take a Photo right here"), which had been passed over.
@@ -179,7 +184,7 @@ Every change, enhancement or addition is listed with its rationale, so later con
   - **Why:** in the second Lost Soul fight (10:22, Unicorn Way) Extract Undead was in hand ("CollectEssenceUndead"); it was played onto "Dark Sprite - Starter Wand", the cheapest attack, and did not take, so each round passed ("a second enchantment in one round") while the Lost Soul took the wizard from 1071 to 546 health in seven rounds.
   - **Verified:** offline (`tests/test_policy.py`); in the game: the fight's rounds (10:22:33 to 10:24:08).
 
-- **"Say Cheese!" is passed over: its goal is a Photo** (`sidequests.UNSUPPORTED`).
+- **"Say Cheese!" is passed over: its goal is a Photo** (`sidequests.UNSUPPORTED`; later taken off the list, once the operator approved photos).
   - **What:** the quest is listed as one the framework cannot do, so the clearing goes on to the next giver instead of searching zones for its scavenge item.
   - **Why:** the Quest Finder led to Annie in Golem Court (10:16), whose quest asks for a Photo taken with Photomancy's Viewfinder, opened with Z or the spellbook's Photomancy page. Z is not an allowed key, and that page is not among the allowed clicks. The scavenge goal names "Photomancy", and the ground of Golem Court was searched for it as if it were a reagent (10:17).
   - **Verified:** offline (`tests/test_sidequests.py`).

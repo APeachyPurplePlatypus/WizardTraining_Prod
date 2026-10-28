@@ -34,6 +34,7 @@ from .decks import (ADD, EXTRACT, KEEP, NO_CAPACITY_KNOWN, REMOVE, DeckChange, D
 from .deckpage import (REFUSED, DeckEditStopped, add_copy, close_book, open_deck_page, read_deck_page,
                        take_out_copy)
 from .doors import CHANGE_START_SECONDS, change_begins, push_through
+from .photomancy import BOX_SHOWN, PHOTO_ITEM, TOOK, take_photo
 from .entities import (objects_named, HEALTH_WISP, MANA_WISP, dungeon_entrance_near, nearby_enemies, nearest_npc, step_away,
                        surroundings, wisps)
 from .equipment import count_items, equip, read_items, read_wizard
@@ -129,6 +130,7 @@ MAX_TELEPORTS_PER_GOAL = 2
 GATHER_SETTLE_SECONDS = 3.0
 REAGENT_ZONES_PER_TRY = 3
 DECK_RETRY_SECONDS = 60.0
+PHOTO_TRIES = 2
 DECK_EDIT_CLEARANCE = 3000.0
 GATHERED_FORGET_SECONDS = 120.0
 BOX_CLOSE_WAIT_SECONDS = 10.0
@@ -166,6 +168,7 @@ class QuestLoop:
         self.deck_log = DeckLog(settings.runtime_folder)
         self._deck_checked: tuple | None = None
         self._deck_retry_at = 0.0
+        self._photos_taken = 0
         self._enemy_names: dict[str, str] = {}
         self.use_potions = use_potions
         self.wear_gear = wear_gear
@@ -939,7 +942,7 @@ class QuestLoop:
         if (arrow_shows_no_target(arrow) and goal_world and goal_world != here_world
                 and not self.record.limits.stay_in_world):
             return await self.to_the_world_turn(goal_world, state["zone"])
-        if goal["type"] == "scavenge" and arrow_shows_no_target(arrow):
+        if goal["type"] == "scavenge":
             self.record.quest = {"name": quest["name_key"], "title": quest.get("title"), "goal": goal["type"],
                                  "goal_id": goal.get("id"), "main": quest["mainline"] is True, "goal_zone": "",
                                  "arrow": None}
@@ -1867,6 +1870,8 @@ class QuestLoop:
         the world not yet searched for it. Cyclops Lane, not on Mist Wood's list, was searched point by point for ten
         minutes among its Cyclops, each fight sending the wizard back to the same point (08:43 to 08:56)."""
         reagent = await self.reagent_name(goal)
+        if reagent == PHOTO_ITEM:
+            return await self.photo_turn(goal, state)
         if is_essence(reagent) and self.edit_deck:
             return await self.essence_turn(reagent, state)
         if is_essence(reagent):
@@ -1911,6 +1916,32 @@ class QuestLoop:
                 explored.append((round(x), round(y)))
             return turn
         return await self.next_zone_for_reagent_turn(reagent, zone, planner)
+
+    async def photo_turn(self, goal: dict, state: dict) -> dict:
+        """A scavenge goal for "Photomancy": a photo taken in the goal's zone ("Say Cheese!": "Practice Photomancy" in
+        Golem Court; Annie: "Just press 'Z' and take a Photo right here"). Walk there, door by door; there, where it is
+        safe, take a photo (`photomancy.take_photo`), and see whether the goal closed. PHOTO_TRIES photos a run."""
+        zone, target = state["zone"], goal.get("destination_zone") or state["zone"]
+        if zone != target:
+            planner = await self.planner()
+            way = way_toward_zone(zone, target, [volume.name for volume, _ in planner.teleports])
+            door = None if way is None else self.door_on_the_way(way, planner)
+            if door is None:
+                return await self.park_the_active_quest(f"no way is known to {target}, where its photo is to be taken")
+            self.say_once("photo", f"the goal asks for a photo in {target}: going there")
+            return await self.walk_to_door_turn(f"walk toward {target} for a photo", *door)
+        if self._photos_taken >= PHOTO_TRIES:
+            return await self.park_the_active_quest(f"{PHOTO_TRIES} photos in {zone} left the goal open")
+        if not await self.safe_here():
+            return stalled("waiting for a safe moment for a photo")
+        self._photos_taken += 1
+        result = await take_photo(self.client)
+        self.events.emit("photo", f"{result} in {zone}")
+        if result == BOX_SHOWN:
+            raise StopRun("a message box showed after the photo; left for the operator")
+        if result == TOOK and not await self.goal_still_open(goal):
+            return progressed("took a photo for the quest")
+        return stalled("photo", result=result)
 
     def essence_enemies(self) -> set[str]:
         """The enemies whose essence an open quest goal needs, for the combat policy (`policy.extract_essence`)."""
