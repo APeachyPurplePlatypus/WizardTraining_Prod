@@ -1407,11 +1407,17 @@ class QuestLoop:
 
     async def duel_blocking_the_way(self, planner: RoutePlanner, hazards: Hazards, destination, trip: dict,
                                     moved: float) -> Point | None:
-        """The duel circle nearest the wizard when every route method failed, the wizard barely moved, and a route
-        exists without the circles: another player's fight is on the only way, not enemies."""
-        if trip["reason"] != "every route method failed" or moved >= BARELY_MOVED_DISTANCE:
+        """The duel circle nearest the wizard when the wizard barely moved and either every route method failed while a
+        route exists without the circles, or the walk ended at once on "a duel is near the path ahead": another
+        player's fight is on the way, not enemies. In the Pyramid's Hall the bounty targets stood by someone's
+        fight, and each walk toward them ended where it began, every 2 to 3 seconds."""
+        if moved >= BARELY_MOVED_DISTANCE or not hazards.duel_circles:
             return None
         here = await self.client.body.position()
+        if trip["reason"] == DUEL_NEAR_PATH:
+            return min(hazards.duel_circles, key=lambda circle: flat_distance(here, circle))
+        if trip["reason"] != "every route method failed":
+            return None
         if not planner.blocked_only_by_duels(here, destination, hazards):
             return None
         return min(hazards.duel_circles, key=lambda circle: flat_distance(here, circle))
