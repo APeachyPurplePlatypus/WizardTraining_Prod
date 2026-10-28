@@ -56,6 +56,36 @@ TELEPORT_CLEARANCE = 60.0
 ENEMY_KEEP_OUT = 520.0
 
 
+HIDDEN_DOOR_RADIUS = 250.0
+HIDDEN_DOOR_SAME = 300.0
+
+
+def add_hidden_door(doors: dict[str, list], zone: str, point) -> bool:
+    """Keep `point` as a door of `zone` the zone data does not list, unless one is known within HIDDEN_DOOR_SAME.
+    True when it is new."""
+    known = doors.setdefault(zone, [])
+    if any(math.dist(point, door) <= HIDDEN_DOOR_SAME for door in known):
+        return False
+    known.append((round(point[0]), round(point[1])))
+    return True
+
+
+def hidden_doors_to_keep_out_of(doors, start, destination, arrive_radius: float) -> list[tuple[Point, float]]:
+    """Circles of HIDDEN_DOOR_RADIUS around the doors a zone's data does not list, which walking through changes the
+    zone: Cyclops Lane's mouth of the Dark Cave is one, and every route out of the cave toward the lane's quest NPC
+    walked back into it within 110 units (2026-10-28, 00:53 to 00:54). Left out: a door at the destination; a door
+    the wizard stands beside is kept out only as close as it is now."""
+    here, goal = xy(start), xy(destination)
+    circles = []
+    for door in doors:
+        if math.dist(door, goal) <= HIDDEN_DOOR_RADIUS + arrive_radius:
+            continue
+        radius = min(HIDDEN_DOOR_RADIUS, math.dist(door, here) - 1.0)
+        if radius > 0:
+            circles.append(((door[0], door[1]), radius))
+    return circles
+
+
 @dataclass(frozen=True)
 class Hazards:
     """Enemies to keep away from, and duel circles and obstacles never to enter, as (x, y) points. `keep_out` are

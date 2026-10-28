@@ -95,6 +95,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **A door the zone data does not list is learned where a walk went through it by accident, and routed around** (`routes.add_hidden_door`, `routes.hidden_doors_to_keep_out_of`, `QuestLoop.note_hidden_door`).
+  - **What:** when a walk for a place in its own zone ends in a zone change, and neither its destination nor a known teleport volume is near where the wizard last stood, that spot is kept (in the knowledge file) as a door the zone's data does not list; routes keep 250 units out of it from then on, except when it is the destination, and only as close as the wizard stands when it stands beside it.
+  - **Why:** Cyclops Lane's data lists no volume at the mouth of the Dark Cave. Back from collecting for "Mostly Armorless", every walk from the cave toward the lane's quest giver went back into the cave within 110 units; the wizard went back and forth seven times from 00:53 to 00:54, and a Recall to the lane's mark (set right at the cave mouth) landed it there again.
+  - **Verified:** offline (`tests/test_routes.py`, `tests/test_knowledge.py`). In the game: next run.
+
 - **To go back to a world where the Recall button's mark is, the wizard recalls there first** (`QuestLoop.recall_into_the_world_turn`).
   - **What:** on the way to another world (`to_the_world_turn`), when the mark the Recall button still names is in that world and mana allows (8 or more), Recall Location comes before any Spiral Door.
   - **Why:** handing in "Bear Market" to Baldur Goldpaws in Olde Town (00:31:35) took the wizard to Grizzleheim's hub (`GrizzleheimLite/GH_GrizzleheimHubLite`), where no way to the Spiral Door was known, and the run stopped; the Recall button still named the Olde Town mark set for the way back.

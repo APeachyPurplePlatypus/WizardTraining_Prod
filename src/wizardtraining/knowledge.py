@@ -16,7 +16,8 @@ Recall button's mark is in, with the place the button names and why it was set, 
 still recall to it, and for planning with the travel buttons (`travelplan`): which zones a door leads between, each
 world's hub, and the measured walk speed, zone crossing time and load times of Go Home and Recall, and the
 dungeons found reset after a refill trip out by the travel buttons, refilled in place from then on, and the
-world being cleared of its quests (`--clear-world`) with the quest paused for it. Without them, every new run walked into teleporters
+world being cleared of its quests (`--clear-world`) with the quest paused for it, and the doors a zone's data does
+not list, where a walk changed the zone by accident (`routes.hidden_doors_to_keep_out_of`). Without them, every new run walked into teleporters
 to find out again, and walked into Cyclops Lane's tents again. Not kept: obstacles, because the players and
 enemies that caused most of them move on, and "no effect" teleport verdicts, because a walk that fell short of a
 volume once looked like one.
@@ -29,6 +30,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from .teleports import NO_EFFECT
+from .routes import add_hidden_door
 from .travelplan import link_zones
 
 
@@ -55,6 +57,7 @@ class Knowledge:
     leaving_resets: list[str] = field(default_factory=list)
     clearing_world: str | None = None
     paused_quest: str | None = None
+    hidden_doors: dict[str, list[tuple[int, int]]] = field(default_factory=dict)
 
     @classmethod
     def load(cls, path: Path) -> "Knowledge":
@@ -82,7 +85,9 @@ class Knowledge:
                    travel_costs={name: float(value) for name, value in data.get("travel_costs", {}).items()},
                    hubs=dict(data.get("hubs", {})), mark_purpose=data.get("mark_purpose"),
                    mark_quest=data.get("mark_quest"), leaving_resets=list(data.get("leaving_resets", [])),
-                   clearing_world=data.get("clearing_world"), paused_quest=data.get("paused_quest"))
+                   clearing_world=data.get("clearing_world"), paused_quest=data.get("paused_quest"),
+                   hidden_doors={zone: [(int(x), int(y)) for x, y in points]
+                                 for zone, points in data.get("hidden_doors", {}).items()})
 
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -107,6 +112,7 @@ class Knowledge:
         record.travel_costs, record.hubs = dict(self.travel_costs), dict(self.hubs)
         record.leaving_resets = list(self.leaving_resets)
         record.clearing_world, record.paused_quest = self.clearing_world, self.paused_quest
+        record.hidden_doors = {zone: list(points) for zone, points in self.hidden_doors.items()}
 
     def learn_from(self, record) -> None:
         """Keep what a run found out, leaving out "no effect" verdicts."""
@@ -130,6 +136,9 @@ class Knowledge:
         self.hubs.update(record.hubs)
         self.leaving_resets.extend(zone for zone in record.leaving_resets if zone not in self.leaving_resets)
         self.clearing_world, self.paused_quest = record.clearing_world, record.paused_quest
+        for zone, points in record.hidden_doors.items():
+            for point in points:
+                add_hidden_door(self.hidden_doors, zone, point)
         for enemies, names in record.combat_strategies_tried.items():
             kept = self.combat_strategies_tried.setdefault(enemies, [])
             kept.extend(name for name in names if name not in kept)

@@ -481,5 +481,23 @@ class NavFileTest(unittest.TestCase):
         self.assertEqual(len(waypoints), 2)
         self.assertEqual(links, [(0, 1), (1, 0)])
 
+class HiddenDoorTest(unittest.TestCase):
+    def test_a_hidden_door_is_kept_once(self):
+        from wizardtraining.routes import add_hidden_door
+        doors = {}
+        self.assertTrue(add_hidden_door(doors, "WizardCity/WC_Streets/WC_Cyclops", (-50.4, 13620.6)))
+        self.assertFalse(add_hidden_door(doors, "WizardCity/WC_Streets/WC_Cyclops", (0, 13700)))
+        self.assertEqual(doors, {"WizardCity/WC_Streets/WC_Cyclops": [(-50, 13621)]})
+
+    def test_routes_keep_out_of_hidden_doors_but_not_one_at_the_destination(self):
+        from wizardtraining.routes import HIDDEN_DOOR_RADIUS, hidden_doors_to_keep_out_of
+        door = (-50, 13620)
+        circles = hidden_doors_to_keep_out_of([door], (5000, 13000), (-11101, 16436), 100)
+        self.assertEqual(circles, [(door, HIDDEN_DOOR_RADIUS)])
+        self.assertEqual(hidden_doors_to_keep_out_of([door], (5000, 13000), (-60, 13600), 100), [])
+        beside = hidden_doors_to_keep_out_of([door], (-6, 13506), (-11101, 16436), 100)
+        self.assertLess(beside[0][1], HIDDEN_DOOR_RADIUS)
+
+
 if __name__ == "__main__":
     unittest.main()

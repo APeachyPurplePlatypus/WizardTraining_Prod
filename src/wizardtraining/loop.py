@@ -53,7 +53,8 @@ from .questbook import journal_zones, same_title, activate_quest
 from .quests import arrow_shows_no_target, game_language, open_goals, read_quest_arrow, read_quests
 from .reports import plain, save_report
 from .patrols import VIEWS_TO_JUDGE, note_sightings, unwalked_paths
-from .routes import GapStep, Hazards, RoutePlanner, duel_clearance
+from .routes import (HIDDEN_DOOR_RADIUS, GapStep, Hazards, RoutePlanner, add_hidden_door, duel_clearance,
+                     hidden_doors_to_keep_out_of)
 from .sidequests import (FINDER_SAME_GIVER_LIMIT, QUEST_FINDER, WORLD_DOOR, WORLD_DOOR_ROOMS, finder_points_into,
                          in_world, leads_to_the_world_door, next_quest_in_world, unsupported_reason)
 from .strategies import (COMBAT_STRATEGIES, CROWD_STRATEGIES, NO_CLOSER_SECONDS, CombatStrategy, GoalApproach,
@@ -166,6 +167,7 @@ class QuestLoop:
         self._journal_zones: tuple[frozenset, dict] | None = None
         self._finder_givers: dict[tuple, int] = {}
         self._finder_just_activated = False
+        self._walking_at: tuple[str, dict] | None = None
         self._dungeons_give_nothing_back = False
         self._refill_fully = False
         self._fight_situation: str | None = None
@@ -1913,6 +1915,8 @@ class QuestLoop:
                                                reroute=self.rerouter(planner, hazards, destination)),
                             hazards=hazards)
         moved = flat_distance(start, await self.client.body.position())
+        if trip.get("reason") == LOADING:
+            self.note_hidden_door(zone, planner, destination)
         if nav_did_better(trip["attempts"]) and zone not in self.record.nav_first_zones:
             self.record.nav_first_zones.append(zone)
             planner.nav_first = True
@@ -2045,6 +2049,23 @@ class QuestLoop:
         here = await self.client.body.position()
         return planner.piece_of((here.x, here.y))
 
+    def note_hidden_door(self, zone: str, planner: RoutePlanner, destination) -> None:
+        """A walk for a place in this zone changed the zone: it went through a door the zone's data does not list.
+        Where the wizard last stood is kept as such a door (`routes.add_hidden_door`), routed around from then on,
+        unless the walk was for a door there or a known teleport volume is there."""
+        walking_at, self._walking_at = self._walking_at, None
+        if walking_at is None or walking_at[0] != zone or not isinstance(walking_at[1], dict):
+            return
+        point = XYZ(walking_at[1]["x"], walking_at[1]["y"], 0.0)
+        if flat_distance(point, destination) <= 2 * HIDDEN_DOOR_RADIUS:
+            return
+        if any(flat_distance(point, XYZ(volume.x, volume.y, 0.0)) <= volume.radius + HIDDEN_DOOR_RADIUS
+               for volume, _ in planner.teleports):
+            return
+        if add_hidden_door(self.record.hidden_doors, zone, (point.x, point.y)):
+            self.events.emit("walk", f"walked through a door {zone}'s data does not list, at ({point.x:.0f}, "
+                                     f"{point.y:.0f}); routes keep out of it from now on")
+
     def hazards_for(self, planner: RoutePlanner, zone: str, start, destination, arrive_radius: float, *,
                     avoid, duel_circles) -> tuple[Hazards, list[dict]]:
         """Everything a walk from `start` to `destination` keeps away from, and the enemies it routes around
@@ -2054,7 +2075,9 @@ class QuestLoop:
         around = [] if self.in_grace_after_battle() else enemies_to_route_around(avoid, me=start, destination=destination)
         hazards = Hazards.of(enemies=[enemy["position"] for enemy in avoid], duel_circles=duel_circles,
                              obstacles=self.record.obstacles.get(zone, []), patrols=planner.streets,
-                             keep_out=planner.teleports_to_keep_out_of(start, destination, arrive_radius),
+                             keep_out=planner.teleports_to_keep_out_of(start, destination, arrive_radius)
+                             + hidden_doors_to_keep_out_of(self.record.hidden_doors.get(zone, []), start, destination,
+                                                           arrive_radius),
                              tracks=[self.motion.track(enemy, now) for enemy in around], start=start)
         return hazards, around
 
@@ -2084,6 +2107,7 @@ class QuestLoop:
                 return "battle"
             if state["loading"] is True:
                 return "loading"
+            self._walking_at = (state["zone"], state["position"])
             if state["in_dialog"] is True or await dialog_open(self.client):
                 return "dialog"
             if not free_to_move(state):
