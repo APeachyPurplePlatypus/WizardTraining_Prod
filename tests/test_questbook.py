@@ -27,12 +27,9 @@ class StandIn:
 
 def entry(index, title):
     buttons = [StandIn("btnActivate"), StandIn("btnHideQuest")]
-    info = StandIn("wndQuestInfo", [StandIn("txtName", text=f"<center>{title}</center>"), *buttons])
+    info = StandIn("wndQuestInfo", [StandIn("txtName", text=f"<center>{title}</center>"),
+                                    StandIn("txtWorld", text="<center>Cyclops Lane</center>"), *buttons])
     return StandIn(f"wndQuestInfo{index}", [StandIn("questInfoWindow", [info])])
-
-
-def activate_button(window):
-    return window._children[0]._children[0]._children[1]
 
 
 class QuestBook:
@@ -93,22 +90,35 @@ def run(book, title):
 class ActivateQuestTest(unittest.TestCase):
     def test_a_quest_on_the_first_page_is_activated_and_the_book_closed(self):
         book = QuestBook([["A Whole New World", "Looking Sharp!", "You Can Dig It", "Walkabout"]])
-        self.assertIsNone(run(book, "Looking Sharp!"))
+        activation = run(book, "Looking Sharp!")
+        self.assertIsNone(activation.problem)
+        self.assertEqual(activation.area, "Cyclops Lane")
         self.assertEqual(book.clicked[0:2], ["btnSpellbook", "Quest"])
         self.assertIn("btnActivate", book.clicked)
         self.assertEqual(book.clicked[-1], "Close_Button")
         self.assertFalse(book.book_open)
 
+    def test_the_area_can_be_read_without_activating_anything(self):
+        book = QuestBook([["A Whole New World", "Looking Sharp!"]])
+        client = book.client()
+        with mock.patch.object(questbook, "click", book.click), mock.patch.object(questbook, "click_window", book.click_window), \
+                mock.patch.object(questbook, "showing", book.showing), mock.patch.object(questbook, "PAGE_SETTLE_SECONDS", 0), \
+                mock.patch.object(questbook, "BOOK_OPEN_SECONDS", 0), mock.patch.object(questbook, "ACTIVATE_SETTLE_SECONDS", 0):
+            activation = asyncio.run(questbook.activate_quest(client, "Looking Sharp!", click_activate=False))
+        self.assertEqual((activation.problem, activation.area), (None, "Cyclops Lane"))
+        self.assertNotIn("btnActivate", book.clicked)
+        self.assertFalse(book.book_open)
+
     def test_a_quest_on_a_later_page_is_found_by_turning_pages(self):
         book = QuestBook([["A Whole New World", "Looking Sharp!", "You Can Dig It", "Walkabout"],
                           ["Diego the Duelmaster"]])
-        self.assertIsNone(run(book, "Diego the Duelmaster"))
+        self.assertIsNone(run(book, "Diego the Duelmaster").problem)
         self.assertEqual(book.page, 1)
         self.assertEqual(book.clicked.count("btnActivate"), 1)
 
     def test_a_quest_not_in_the_book_is_reported_and_nothing_is_activated(self):
         book = QuestBook([["A Whole New World", "Walkabout"], ["Diego the Duelmaster"]])
-        self.assertEqual(run(book, "Colossal Trouble"), "Colossal Trouble is not on the quest page")
+        self.assertEqual(run(book, "Colossal Trouble").problem, "Colossal Trouble is not on the quest page")
         self.assertNotIn("btnActivate", book.clicked)
         self.assertFalse(book.book_open)
 

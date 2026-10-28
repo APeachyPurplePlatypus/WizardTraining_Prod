@@ -1,7 +1,9 @@
 import unittest
 
-from wizardtraining.training import (COMMONS, GATE, RAVENWOOD, SCHOOLS, TRAINER, VOLUME, Way, in_dungeon,
-                                     same_spell, spells_to_learn, way_out_toward_the_commons, way_to_school)
+from wizardtraining.training import (COMMONS, CYCLOPS, FIRECAT, GATE, HAUNTED_CAVE, OLDE_TOWN, RAVENWOOD, SCHOOLS,
+                                     SHOPPING_DISTRICT, TRAINER, TRITON, UNICORN_WAY, VOLUME, Way, in_dungeon,
+                                     next_zone_toward, same_spell, spells_to_learn, way_out_toward_the_commons,
+                                     way_to_school, way_toward_zone, zone_for_area)
 
 ICE = SCHOOLS["Ice"]
 KNOWN_AT_LEVEL_10 = ["Frost Beetle", "Pixie", "Freeze", "Snow Serpent", "Volcanic Shield"]
@@ -78,6 +80,37 @@ class WayTest(unittest.TestCase):
         self.assertEqual(way_to_school("WizardCity/Interiors/WC_SchoolMyth", ICE,
                                        ["TeleportVol_Teleport location (MythSchool Ravenwood Exit)"]),
                          Way(VOLUME, "TeleportVol_Teleport location (MythSchool Ravenwood Exit)"))
+
+
+class ZoneTreeTest(unittest.TestCase):
+    def test_the_next_zone_goes_back_toward_the_commons_then_out_to_the_target(self):
+        self.assertEqual(next_zone_toward(UNICORN_WAY, CYCLOPS), COMMONS)
+        self.assertEqual(next_zone_toward(COMMONS, CYCLOPS), SHOPPING_DISTRICT)
+        self.assertEqual(next_zone_toward(SHOPPING_DISTRICT, CYCLOPS), OLDE_TOWN)
+        self.assertEqual(next_zone_toward(OLDE_TOWN, CYCLOPS), CYCLOPS)
+        self.assertEqual(next_zone_toward(TRITON, CYCLOPS), OLDE_TOWN)
+        self.assertEqual(next_zone_toward(HAUNTED_CAVE, CYCLOPS), TRITON)
+        self.assertIsNone(next_zone_toward(CYCLOPS, CYCLOPS))
+        self.assertIsNone(next_zone_toward("WizardCity/Interiors/WC_Library", CYCLOPS))
+
+    def test_the_door_of_each_step_comes_from_the_zones_own_volumes_and_gates(self):
+        cyclops = ["TeleportVol_Teleport (Street3 Street2 Exit)", "TeleportVol_Teleport location"]
+        self.assertEqual(way_toward_zone(CYCLOPS, TRITON, cyclops).name, "TeleportVol_Teleport (Street3 Street2 Exit)")
+        self.assertEqual(way_toward_zone(COMMONS, CYCLOPS, []), Way(GATE, SHOPPING_DISTRICT))
+        shop = ["TeleportVol_Teleport location (Shop Area to Street2)", "TeleportVol_Teleport location (WC_Shop Hub)"]
+        self.assertEqual(way_toward_zone(SHOPPING_DISTRICT, CYCLOPS, shop).name,
+                         "TeleportVol_Teleport location (Shop Area to Street2)")
+        self.assertEqual(way_toward_zone(OLDE_TOWN, CYCLOPS, ["TeleportVol_ToBazaar"]), Way(GATE, CYCLOPS))
+        unicorn = ["TeleportVol_Teleport location (Street1 Arena Entrance)", "TeleportVol_Teleport location (Street1 Hub Exit)",
+                   "TeleportVol_Teleport location-ThiefHouse"]
+        self.assertEqual(way_toward_zone(UNICORN_WAY, CYCLOPS, unicorn).name,
+                         "TeleportVol_Teleport location (Street1 Hub Exit)")
+
+    def test_area_names_from_the_quest_page_name_zones(self):
+        self.assertEqual(zone_for_area("Cyclops Lane"), CYCLOPS)
+        self.assertEqual(zone_for_area(" Firecat Alley "), FIRECAT)
+        self.assertIsNone(zone_for_area("Wizard City Library"))
+        self.assertIsNone(zone_for_area(None))
 
 
 if __name__ == "__main__":

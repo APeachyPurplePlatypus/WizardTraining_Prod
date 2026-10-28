@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+from dataclasses import dataclass
 
 from .screen import or_default, plain_text
 from .ui import click, click_window, showing, text_under, window_at
@@ -27,11 +28,20 @@ CLOSE_BOOK = [*BOOK, "Close_Button"]
 ENTRY_NAME = re.compile(r"wndQuestInfo\d+")
 ENTRY_TITLE = ["questInfoWindow", "wndQuestInfo", "txtName"]
 ENTRY_ACTIVATE = ["questInfoWindow", "wndQuestInfo", "btnActivate"]
+ENTRY_AREA = ["questInfoWindow", "wndQuestInfo", "txtWorld"]
 FORBIDDEN_BUTTONS = ("btnHideQuest",)
 MAX_PAGES = 8
 BOOK_OPEN_SECONDS = 2.0
 PAGE_SETTLE_SECONDS = 1.5
 ACTIVATE_SETTLE_SECONDS = 2.0
+
+
+@dataclass(frozen=True)
+class Activation:
+    """What `activate_quest` did: `problem` is None when the Activate button was clicked, and `area` is the area name
+    the quest page shows for the quest ("Cyclops Lane"), when it was seen."""
+    problem: str | None
+    area: str | None = None
 
 
 async def quest_entries(client) -> list[tuple[object, str]]:
@@ -54,9 +64,10 @@ async def go_to_first_page(client) -> None:
             return
 
 
-async def activate_quest(client, title: str) -> str | None:
-    """Make the quest called `title` the active one, through the spellbook, then close the book. None when the
-    Activate button was clicked (the caller checks the quest that is active now), else what went wrong."""
+async def activate_quest(client, title: str, *, click_activate: bool = True) -> Activation:
+    """Make the quest called `title` the active one, through the spellbook, then close the book. `problem` is None
+    when the Activate button was clicked (the caller checks the quest that is active now). With `click_activate` off,
+    the quest's area is read and nothing is activated: the same pages are opened, no quest is clicked."""
     try:
         if not await showing(client, BOOK):
             await click(client, SPELLBOOK_BUTTON)
@@ -71,16 +82,18 @@ async def activate_quest(client, title: str) -> str | None:
                     button = await window_at(entry, ENTRY_ACTIVATE)
                     if button is None:
                         raise LookupError(f"no Activate button on {title}")
-                    await click_window(client, button)
-                    await asyncio.sleep(ACTIVATE_SETTLE_SECONDS)
-                    return None
+                    area = plain_text(await text_under(entry, ENTRY_AREA)) or None
+                    if click_activate:
+                        await click_window(client, button)
+                        await asyncio.sleep(ACTIVATE_SETTLE_SECONDS)
+                    return Activation(None, area)
             await click(client, NEXT_PAGE)
             await asyncio.sleep(PAGE_SETTLE_SECONDS)
             if [entry_title for _, entry_title in await quest_entries(client)] == [entry_title for _, entry_title in entries]:
                 break
-        return f"{title} is not on the quest page"
+        return Activation(f"{title} is not on the quest page")
     except LookupError as missing:
-        return f"the quest page changed: {missing}"
+        return Activation(f"the quest page changed: {missing}")
     finally:
         if await showing(client, BOOK):
             await click(client, CLOSE_BOOK)

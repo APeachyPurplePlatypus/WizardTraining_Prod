@@ -65,7 +65,8 @@ from .targets import (bystanders, enemies_to_route_around, in_grace_after_battle
                       summary, too_close, WISP_REACH)
 from .teleports import LEFT_ZONE, NO_EFFECT, TeleportVolume, describe_outcome, volume_at
 from .trainer import OPENED_DIALOG, OPENED_MENU, close_training, learn_free_spells, open_training, open_with_professor
-from .training import GATE, SCHOOLS, TRAINER, School, in_dungeon, spells_to_learn, way_to_school
+from .training import (GATE, SCHOOLS, TRAINER, School, in_dungeon, spells_to_learn, way_to_school, way_toward_zone,
+                       zone_for_area)
 from .ui import POTION_BUTTON, answer_known_popup, click, interact_prompt_text, message_box, visible_children
 
 TARGET_REACH = 1200.0
@@ -138,6 +139,8 @@ class QuestLoop:
         self._training_checked: tuple | None = None
         self._said_last: dict[str, str] = {}
         self._professor_dialogs = 0
+        self._quest_areas: dict[str, str] = {}
+        self._areas_asked: set[str] = set()
         self._entering_with_x_from: str | None = None
         self.spell_log = SpellLog(settings.runtime_folder)
         self._topping_up_in: str | None = None
@@ -341,11 +344,41 @@ class QuestLoop:
                                   f"{school.professor} to train, then back to the quest")
         if way.kind == TRAINER:
             return await self.professor_turn(school, level)
-        point, radius = door
+        return await self.walk_to_door_turn("walk toward the school to train", *door)
+
+    async def walk_to_door_turn(self, did: str, point, radius: float) -> dict:
+        """Walk toward a door of the way to somewhere, and through it once the wizard stands at it."""
         if flat_distance(await self.client.body.position(), point) <= max(WAYPOINT_ARRIVE_RADIUS, radius):
             return await self.zone_door_turn(point)
-        return await self.travel_turn("walk toward the school to train", point, arrive_radius=WAYPOINT_ARRIVE_RADIUS,
+        return await self.travel_turn(did, point, arrive_radius=WAYPOINT_ARRIVE_RADIUS,
                                       avoid=await nearby_enemies(self.client))
+
+    async def go_to_quest_area_turn(self, quest: dict, goals: list[dict]) -> dict | None:
+        """A quest whose goals show no arrow can be in another zone than the wizard's: the quest page names its
+        area ("Cyclops Lane", `questbook.Activation.area`). When that zone is known (`training.zone_for_area`) and is
+        not this one, and no open goal's target is in sight here, walk one door of the way there
+        (`training.way_toward_zone`). None when the area is unknown, is this zone, no way is known, or a goal's
+        target can be found here."""
+        zone = await self.client.zone_name()
+        title = quest.get("title")
+        if title and title not in self._quest_areas and title not in self._areas_asked:
+            self._areas_asked.add(title)
+            if area := (await activate_quest(self.client, title, click_activate=False)).area:
+                self._quest_areas[title] = area
+        target = zone_for_area(self._quest_areas.get(title))
+        if target is None or target == zone:
+            return None
+        for goal in goals:
+            if await self.target_without_arrow(goal) is not None:
+                return None
+        planner = await self.planner()
+        way = way_toward_zone(zone, target, [volume.name for volume, _ in planner.teleports])
+        door = None if way is None else self.door_on_the_way(way, planner)
+        if door is None:
+            self.say_once("quest", f"{quest.get('title')} is in {target}, and no way there is known from {zone}")
+            return None
+        self.say_once("quest", f"{quest.get('title')} is in {target}: walking there by way of {way.name}")
+        return await self.walk_to_door_turn(f"walk toward {target} for a quest", *door)
 
     def door_on_the_way(self, way, planner: RoutePlanner) -> tuple[XYZ, float] | None:
         """Where the next door of `way` is in this zone, and its radius: a gate toward the zone it names, or the
@@ -644,6 +677,8 @@ class QuestLoop:
         goal = goals[0] if goals else {"type": "persona", "destination_zone": ""}
         arrow = await read_quest_arrow(self.client)
         if arrow_shows_no_target(arrow):
+            if (travelled := await self.go_to_quest_area_turn(quest, goals)) is not None:
+                return travelled
             arrow, goal = await self.goal_with_a_target(goals, goal)
             if arrow is None and goal["type"] in ("bounty", "bountycollect") and goal.get("target_code"):
                 return await self.explore_turn(goal, goals)
@@ -782,7 +817,10 @@ class QuestLoop:
         choice = next((entry for entry in candidates if entry["ready_to_turn_in"]), candidates[0])
         title = choice["title"]
         self.record.quests_activated[title] = self.record.quests_activated.get(title, 0) + 1
-        problem = await activate_quest(self.client, title)
+        activation = await activate_quest(self.client, title)
+        problem = activation.problem
+        if activation.area:
+            self._quest_areas[title] = activation.area
         active = (await read_quests(self.client))["active"]
         switched = problem is None and active is not None and active.get("title") == title
         self.events.emit("quest", f"made {title} the active quest through the quest book" if switched else

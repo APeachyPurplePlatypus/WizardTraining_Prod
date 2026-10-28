@@ -107,3 +107,64 @@ def way_to_school(zone: str | None, school: School, volume_names: list[str]) -> 
         return Way(GATE, RAVENWOOD)
     out = way_out_toward_the_commons(volume_names)
     return Way(VOLUME, out) if out else None
+
+
+OLDE_TOWN, SHOPPING_DISTRICT = "WizardCity/WC_Streets/WC_OldeTown", "WizardCity/WC_Shop_Area"
+TRITON, CYCLOPS, FIRECAT = ("WizardCity/WC_Streets/WC_Triton", "WizardCity/WC_Streets/WC_Cyclops",
+                            "WizardCity/WC_Streets/WC_Firecat")
+UNICORN_WAY, HAUNTED_CAVE, DARK_CAVE = ("WizardCity/WC_Streets/WC_Unicorn", "WizardCity/WC_Streets/WC_HauntedCave",
+                                        "WizardCity/WC_Streets/WC_DarkCave")
+ZONE_PARENT = {RAVENWOOD: COMMONS, SHOPPING_DISTRICT: COMMONS, UNICORN_WAY: COMMONS, "WizardCity/WC_NightSide": COMMONS,
+               OLDE_TOWN: SHOPPING_DISTRICT, TRITON: OLDE_TOWN, CYCLOPS: OLDE_TOWN, FIRECAT: OLDE_TOWN,
+               HAUNTED_CAVE: TRITON, DARK_CAVE: CYCLOPS}
+# Wizard City's zones as a tree around the Commons: each zone and the zone one door nearer to it. From the zone files
+# (teleport volumes named for the hub and the "Street" numbers, and the street gates): the Commons leads to Ravenwood,
+# the Shopping District and Unicorn Way; the Shopping District to Olde Town; Olde Town to Triton Avenue, Cyclops Lane
+# and Firecat Alley; Triton Avenue to the Haunted Cave; Cyclops Lane to the Dark Cave.
+DOWN_VOLUMES = {(SHOPPING_DISTRICT, OLDE_TOWN): "Shop Area to Street2"}
+AREA_ZONES = {"Cyclops Lane": CYCLOPS, "Firecat Alley": FIRECAT, "Triton Avenue": TRITON, "Unicorn Way": UNICORN_WAY,
+              "Olde Town": OLDE_TOWN, "Shopping District": SHOPPING_DISTRICT}
+# The area names the spellbook's quest page shows (`txtWorld`), for the zones they are.
+
+
+def zone_for_area(area: str | None) -> str | None:
+    return AREA_ZONES.get(area.strip()) if area else None
+
+
+def zones_toward_the_commons(zone: str) -> list[str]:
+    """`zone`, then each zone one door nearer to the Commons, ending in the Commons; just `zone` if it is not in the
+    tree."""
+    chain = [zone]
+    while chain[-1] in ZONE_PARENT:
+        chain.append(ZONE_PARENT[chain[-1]])
+    return chain
+
+
+def next_zone_toward(zone: str | None, target: str) -> str | None:
+    """The zone one door from `zone` on the way to `target`, or None when they are the same or one is not in the
+    tree."""
+    if not zone or zone == target:
+        return None
+    if zone not in ZONE_PARENT and zone != COMMONS:
+        return None
+    down = zones_toward_the_commons(target)
+    if down[-1] != COMMONS:
+        return None
+    if zone in down:
+        return down[down.index(zone) - 1]
+    return ZONE_PARENT.get(zone)
+
+
+def way_toward_zone(zone: str | None, target: str, volume_names: list[str]) -> Way | None:
+    """The next door of the way from `zone` to `target`: back toward the Commons through the zone's way out, or on
+    through the gate to the next zone, or the volume `DOWN_VOLUMES` names. None when none is known."""
+    following = next_zone_toward(zone, target)
+    if following is None:
+        return None
+    if ZONE_PARENT.get(zone) == following:
+        out = way_out_toward_the_commons(volume_names)
+        return Way(VOLUME, out) if out else None
+    if hint := DOWN_VOLUMES.get((zone, following)):
+        name = next((name for name in volume_names if hint.lower() in name.lower()), None)
+        return Way(VOLUME, name) if name else None
+    return Way(GATE, following)
