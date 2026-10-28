@@ -1061,7 +1061,8 @@ class QuestLoop:
         """Walk to the nearest safe health or mana wisp on the way to `heading` and touch it. None when there is
         no such wisp, so the quest goes on. A wisp trip that gives nothing, whether it arrived or was cut short,
         is not tried again: used-up wisps still show as entities, and retrying them walked the wizard back and
-        forth between them."""
+        forth between them. Where the walk ended is logged with what it gave: in the Commons about half the trips
+        gave nothing (2026-10-28), from other players taking them first or from stopping short of touching them."""
         kind = HEALTH_WISP if wanted == "health" else MANA_WISP
         enemies, circles = await surroundings(self.client)
         candidates = safe_wisps(await wisps(self.client, kind), me=await self.client.body.position(), enemies=enemies,
@@ -1082,9 +1083,10 @@ class QuestLoop:
         gained = isinstance(after[stat], int) and isinstance(state[stat], int) and after[stat] > state[stat]
         if not gained:
             self.record.tried_wisps[str(wisp["id"])] = time.time()
+        ended = flat_distance(await self.client.body.position(), wisp["position"])
         self.events.emit("wisp", f"{kind} {flat_distance(start, wisp['position']):.0f} away: {trip['result']}"
-                                 f"{' (' + trip['reason'] + ')' if trip['reason'] else ''}; {stat} {state[stat]} -> "
-                                 f"{after[stat]}")
+                                 f"{' (' + trip['reason'] + ')' if trip['reason'] else ''}, ended {ended:.0f} from it; "
+                                 f"{stat} {state[stat]} -> {after[stat]}", ended=round(ended), gained=gained)
         if gained:
             return progressed(f"picked up a {kind}", before=state[stat], after=after[stat])
         moved = flat_distance(start, await self.client.body.position())
