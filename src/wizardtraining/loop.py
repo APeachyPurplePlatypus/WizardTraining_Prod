@@ -75,7 +75,7 @@ from .spellbook import SpellCatalog, deck_spells, learned_spell_ids, load_level_
 from .spells import KNOWN_AT_FIRST_CHECK, LEARNED, SpellLog, learned_text, newly_learned, spell_entry
 from .session import NoClient, attached, hooks_ready
 from .state import attempt, battle_showing, free_to_move, health_fraction, mana_fraction, snapshot
-from .placed import explore_spot, gate_toward, objects_for_goal
+from .placed import EXPLORE_GOAL, explore_spot, gate_toward, objects_for_goal
 from .targets import (area_in_zone, essence_enemy, fought_in, found_in, is_essence, is_reagent, looks_like_a_reagent, worth_a_detour, zones_to_search_for, bystanders, enemies_to_route_around, in_grace_after_battle, keeps_blocking,
                       leads_to_another_zone, named_enemies_not_in_a_duel, next_area_to_explore, others, quest_targets,
                       refill_reach, safe_wisps,
@@ -90,6 +90,7 @@ from .ui import POTION_BUTTON, answer_known_popup, click, interact_prompt_text, 
 TARGET_REACH = 1200.0
 ARROW_ARRIVE_RADIUS = 250.0
 WAYPOINT_ARRIVE_RADIUS = 150.0
+EXPLORE_ARRIVE_RADIUS = 40.0
 PROMPT_DOOR_REACH = 2500.0
 NPC_PROMPT_RANGE = 400.0
 NOT_A_DOOR_RADIUS = 600.0
@@ -2634,11 +2635,14 @@ class QuestLoop:
         prompt showed at the fence all the while the run stood there, until it stopped for turns without
         progress (the operator: "the prompt to press X has been open since you got stuck"). The way in was the
         tower's entrance semicircle ("Teleport Semi Circle 4 Player Generic"), outside the fence: when one is loaded
-        within PROMPT_DOOR_REACH of the arrow, the wizard walks to it, then steps in and presses X."""
+        within PROMPT_DOOR_REACH of the arrow, the wizard walks to it, then steps in and presses X. An "Explore" goal's
+        walk aims for EXPLORE_ARRIVE_RADIUS: the Shopping District Smith stayed open with the wizard within 150 of its
+        spot, and was found only by the push into it that follows (16:53)."""
         here = await self.client.body.position()
         exploring = not leads_to_another_zone(goal, await self.client.zone_name())
         if exploring and flat_distance(here, arrow) > WAYPOINT_ARRIVE_RADIUS:
-            return await self.travel_turn("explore toward the waypoint", arrow, arrive_radius=WAYPOINT_ARRIVE_RADIUS,
+            radius = EXPLORE_ARRIVE_RADIUS if goal.get("name_key") == EXPLORE_GOAL else WAYPOINT_ARRIVE_RADIUS
+            return await self.travel_turn("explore toward the waypoint", arrow, arrive_radius=radius,
                                           avoid=await nearby_enemies(self.client))
         if await self.door_prompt_near(arrow):
             return await self.enter_with_x_turn()
