@@ -305,6 +305,14 @@ class QuestLoop:
         """After a heavy fight (`progress.heavy_fight`), refill health from wisps to RECHARGE_HEALTH_FRACTION before
         walking on, not only below the travel line: fights there start when pairs walk in. Health only; mana keeps
         its own refills. Not in a dungeon refilled in place, where the wizard does not leave to refill."""
+        zone = state["zone"]
+        heavy_zone = self.record.heavy_fights.get(zone, 0) >= HEAVY_ZONE_FIGHTS
+        low_mana = isinstance(state["mana"], int) and state["mana"] < TRAVEL_MANA_RESERVE
+        if heavy_zone and low_mana and self.use_travel_buttons and self._marked_in is None \
+                and self.travel_allowed_in(zone) and (trip := await self.commons_trip_turn("mana", state)) is not None:
+            self.events.emit("mana", f"{state['mana']} mana, under the {TRAVEL_MANA_RESERVE} kept for fights, in "
+                                     f"{zone}, where fights are heavy: refilling in the Commons first")
+            return trip
         if not self._refill_after_heavy_fight:
             return None
         fraction = health_fraction(state)
@@ -339,6 +347,10 @@ class QuestLoop:
         before, self._experience = self._experience, now
         if before is None or before == now:
             return
+        if now[0] > before[0] and self.record.heavy_fights:
+            self.events.emit("health", f"level {now[0]}: the heavy fights counted by zone are forgotten "
+                                       f"({', '.join(sorted(self.record.heavy_fights))})")
+            self.record.heavy_fights.clear()
         gained = xp_gained(before, now, self._level_table)
         hours = (time.monotonic() - self._run_started_at) / 3600
         so_far = xp_gained(self._run_start_experience, now, self._level_table) if self._run_start_experience else None
