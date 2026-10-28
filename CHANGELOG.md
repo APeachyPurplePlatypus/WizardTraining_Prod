@@ -178,6 +178,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **"The Gravulum Order" is played again: Colossus Boulevard is open** (`sidequests.UNSUPPORTED`).
+  - **What:** the quest is no longer passed over.
+  - **Why:** the Quest Finder led to the Headmistress, whose menu gave "Colossal Trouble" (12:29); its talks led to "Pixiecrown Project" and into Colossus Boulevard (12:31:08), the tunnel that had stopped the wizard at its blocker that morning. The operator had said it likely needed another quest first.
+  - **Verified:** in the game: the zone change into `WizardCity/WC_Streets/WC_Colossus` (12:31:08).
+
 - **"A River Runs Through It" is passed over: its goal is a fish** (`sidequests.UNSUPPORTED`).
   - **What:** the fishing quest from the Commons fisherman is listed as one the framework cannot do.
   - **Why:** its scavenge goal is a "Frost Dekoi", caught with the fishing minigame, which the framework does not play; the ground of the Commons was searched for it as if it were a reagent (12:22).
@@ -224,7 +229,7 @@ Every change, enhancement or addition is listed with its rationale, so later con
   - **Why:** "Know Thine Enemy", taken up in Golem Court (10:15), was parked at once: "no way is known to a zone where a Lost Soul was fought". The run had walked between the Commons and Golem Court several times that morning.
   - **Verified:** the zone's volumes read from its file; offline (`tests/test_training.py`).
 
-- **"The Gravulum Order" waits for a prerequisite quest, not a membership** (`sidequests.UNSUPPORTED`).
+- **"The Gravulum Order" waits for a prerequisite quest, not a membership** (`sidequests.UNSUPPORTED`; later taken off the list: "Colossal Trouble", from the Headmistress, opened Colossus Boulevard, and the wizard walked into it at 12:31).
   - **What:** the reason it is passed over now says the tunnel to Colossus Boulevard needs another quest done first.
   - **Why:** the operator, 2026-10-28, 13:52 UTC: "You are a premium member, it's likely you can't get into Colossus boulevard because you need need to compete another quest to gain access." Wizard404's quest relationship data, once there is access to it, would show which quest.
   - **Verified:** offline (`tests/test_sidequests.py`).
