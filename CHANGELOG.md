@@ -208,6 +208,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **Triton Avenue's underwater zone is in the zone tree, its door a trigger volume** (`training.ZONE_PARENT`, `training.DOWN_VOLUMES`, `navigation.load_planner`).
+  - **What:** WC_Triton_Underwater hangs off Triton Avenue, and its door is the trigger volume "VolumeTritonUnderwater" on the lower street. A zone's trigger volumes named by a door hint of the zone tree now join its walk-in volumes, so the zone walk can use them.
+  - **Why:** "Trouble Underfoot" sends the wizard to an NPC under the water; with no way known into that zone, the run stood at the arrow, "could not get close enough to the quest NPC to talk", until the stall rotation took it to the Commons (18:28 to 18:30).
+  - **Verified:** offline (imports, tests; the way from Triton Avenue checked against its files).
+
 - **A level's "From <place>" volume is its way off, judged by height** (`teleports.exit_by_height`).
   - **What:** when a walk's destination is 500 or more away in height, the wizard walks into the nearest teleport volume named for leaving a place ("... From Kraken Isle") at its own height (within 300), within 4,000, unless that volume was already seen to leave the zone or do nothing. Its landing is learned as for any teleport.
   - **Why:** the walk data is flat, so Kraken Isle, 1,300 below Triton Avenue's street, read as part of the street; every route to the hand-in NPC failed while the isle's own exit stood nearby (18:12 to 18:16). The coordinator suggested it.

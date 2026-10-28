@@ -134,14 +134,19 @@ UNICORN_WAY, HAUNTED_CAVE, DARK_CAVE = ("WizardCity/WC_Streets/WC_Unicorn", "Wiz
                                         "WizardCity/WC_Streets/WC_DarkCave")
 ZONE_PARENT = {"WizardCity/WC_Ravenwood_Teleporter": RAVENWOOD, "WizardCity/WC_Golem_Tower": COMMONS, RAVENWOOD: COMMONS, SHOPPING_DISTRICT: COMMONS, UNICORN_WAY: COMMONS, "WizardCity/WC_NightSide": COMMONS,
                OLDE_TOWN: SHOPPING_DISTRICT, TRITON: OLDE_TOWN, CYCLOPS: OLDE_TOWN, FIRECAT: OLDE_TOWN,
-               HAUNTED_CAVE: TRITON, DARK_CAVE: CYCLOPS, "WizardCity/WC_Streets/WC_Colossus": SHOPPING_DISTRICT}
+               HAUNTED_CAVE: TRITON, DARK_CAVE: CYCLOPS, "WizardCity/WC_Streets/WC_Colossus": SHOPPING_DISTRICT,
+               "WizardCity/WC_Streets/WC_Triton_Underwater/WC_Triton_Underwater": TRITON}
 # Wizard City's zones as a tree around the Commons: each zone and the zone one door nearer to it. From the zone files
 # (teleport volumes named for the hub and the "Street" numbers, and the street gates): the Commons leads to Ravenwood,
 # the Shopping District, Unicorn Way and Golem Court (its "WC_Golem_Tower Hub Exit"); the Shopping District to Olde Town; Olde Town to Triton Avenue, Cyclops Lane
 # and Firecat Alley; Triton Avenue to the Haunted Cave; Cyclops Lane to the Dark Cave. The Shopping District also
 # leads to Colossus Boulevard (its gate "BigGenericBlocker_CollossusGate"; the boulevard's way out is "Street6 WC_Shops
 # Exit"), which was missing, so a goal there could not be walked to from Triton Avenue (17:38).
-DOWN_VOLUMES = {(SHOPPING_DISTRICT, OLDE_TOWN): "Shop Area to Street2"}
+DOWN_VOLUMES = {(SHOPPING_DISTRICT, OLDE_TOWN): "Shop Area to Street2",
+                (TRITON, "WizardCity/WC_Streets/WC_Triton_Underwater/WC_Triton_Underwater"): "VolumeTritonUnderwater"}
+# Triton Avenue's way under the water is the trigger volume "VolumeTritonUnderwater" on the lower street, not a
+# TeleportVol: "Trouble Underfoot" sends the wizard to an NPC there, and the run stood at its arrow, unable to get
+# close (18:28).
 UP_VOLUMES = {DARK_CAVE: "Cavern to Street3"}
 # The Dark Cave's two ways out are named for the streets they lead to; Street3 is Cyclops Lane (its own way out is
 # "Street3 Street2 Exit"), the one toward the Commons. Its zone file names no hub or exit volume.

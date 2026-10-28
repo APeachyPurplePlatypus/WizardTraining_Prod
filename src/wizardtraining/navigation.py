@@ -27,6 +27,7 @@ from .config import DEIMOS_VARIABLE
 from .routes import NavGraph, RoutePlanner, parse_nav_file
 from .patrols import PatrolMap, parse_nodes, parse_paths
 from .placed import parse_placed_objects
+from .training import DOWN_VOLUMES
 from .untracked import WALK_IN_RADIUS, parse_trigger_volumes, walk_in_teleports
 from .teleports import TeleportVolume, parse_teleport_volumes
 
@@ -56,8 +57,11 @@ async def load_planner(zone: str, deimos_root: Path | None) -> RoutePlanner:
                                    "placed objects": placed_status, "patrols": patrol_status})
     planner.placed_objects = placed
     planner.trigger_volumes = await _trigger_volumes(wad)
+    door_hints = [hint.lower() for (here, _), hint in DOWN_VOLUMES.items() if here == zone]
+    doors = [volume for volume in planner.trigger_volumes if not volume.name.startswith("TeleportVol_")
+             and any(hint in volume.name.lower() for hint in door_hints)]
     volumes = volumes + [TeleportVolume(volume.name, volume.x, volume.y, volume.z, WALK_IN_RADIUS)
-                         for volume in walk_in_teleports(planner.trigger_volumes)]
+                         for volume in walk_in_teleports(planner.trigger_volumes) + doors]
     planner.zone_data = zone_data
     planner.patrols = patrols
     if free is not None:
