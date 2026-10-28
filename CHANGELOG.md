@@ -100,6 +100,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **A Recall counts only once the load ends in another zone** (`gametravel.recall`, `gametravel.zone_after_loading`).
+  - **What:** after Recall Location, the wizard waits for the load to end and checks the zone; the same zone as before is "the zone did not change after Recall", and the mark is forgotten.
+  - **Why:** at 01:32 the game began a load after Recall, then refused with a box titled "INFO": "You cannot teleport to that location. The dungeon timer has ended and the dungeon has been reset." The wizard stayed in the Commons, and the run took the Recall for done. A mark pressed inside a dungeon belongs to that dungeon (the Recall button names only the street outside, "Cyclops Lane"); once the wizard leaves, the dungeon's timer runs, and when it ends the dungeon resets. The refill trip out of it had taken about four minutes.
+  - **Verified:** in the game (the box's text read at 01:35); offline (`tests/test_gametravel.py`: a load that begins and ends in the same zone is not a Recall).
+
 - **A teleport must land fewer zones from the goal than the wizard is, and door bounces no longer teach the time to cross a zone** (`travelplan.choose_travel`, `QuestLoop.learn_the_way`).
   - **What:** Go Home or Recall is weighed only when it lands fewer zones from the goal than the wizard is. The time to cross a zone is learned only when the wizard went through it to another zone than the one it came from, in 15 to 180 s.
   - **Why:** the bounces at the Dark Cave's mouth taught 8.4 s a zone, and at 01:15:48 the plan took Go Home to the Commons, four zones from the Cyclops Lane dungeon, over the one-zone walk from Cyclops Lane itself ("walk ~126 s, go home ~44 s"). The saved crossing time was set back to 60 s.
