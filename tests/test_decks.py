@@ -34,9 +34,9 @@ class WantedDeckTest(unittest.TestCase):
     def test_an_essence_goal_fills_the_extract_to_its_limit_before_heals_and_hits(self):
         wanted = wanted_deck(LIST, 14, essence_needed=True)
         self.assertEqual(copies(wanted), {"Extract Undead": 3, "Pixie": 3, "Evil Snowman": 3, "Snow Serpent": 3,
-                                          "Frost Beetle": 2, "Freeze": 0, "Volcanic Shield": 0})
+                                          "Freeze": 2, "Frost Beetle": 0, "Volcanic Shield": 0})
         beetle = next(want for want in wanted if want.name == "Frost Beetle")
-        self.assertIn("2 of 3 copies fit in the 14-card deck", beetle.reason)
+        self.assertIn("no room left for it in the 14-card deck", beetle.reason)
 
     def test_without_an_essence_goal_the_extract_stays_out_and_says_why(self):
         wanted = wanted_deck(LIST, 14, essence_needed=False)
@@ -48,7 +48,9 @@ class WantedDeckTest(unittest.TestCase):
     def test_a_trap_comes_after_the_hits_and_before_the_stuns(self):
         wanted = wanted_deck(LIST + [ICE_TRAP], 14, essence_needed=False)
         self.assertEqual(copies(wanted)["Ice Trap"], 2)
-        self.assertEqual(copies(wanted)["Freeze"], 0)
+        self.assertEqual(copies(wanted)["Freeze"], 2)
+        self.assertEqual(copies(wanted)["Frost Beetle"], 1)
+        self.assertIn("one-pip hits come last", next(want for want in wanted if want.name == "Frost Beetle").reason)
         self.assertIn("before a hit of 2 pips or more", next(want for want in wanted if want.name == "Ice Trap").reason)
 
     def test_a_shield_is_never_wanted(self):
@@ -61,7 +63,7 @@ class PlanTest(unittest.TestCase):
     def test_cards_come_out_before_others_go_in_one_copy_at_a_time(self):
         changes = plan_changes(LIST, wanted_deck(LIST, 14, essence_needed=True))
         self.assertEqual([(change.action, change.name) for change in changes if change.action != KEEP],
-                         [(REMOVE, "Frost Beetle")] + [(REMOVE, "Freeze")] * 3 + [(ADD, "Extract Undead")] * 3
+                         [(REMOVE, "Freeze")] + [(REMOVE, "Frost Beetle")] * 3 + [(ADD, "Extract Undead")] * 3
                          + [(ADD, "Evil Snowman")])
         self.assertEqual([change.name for change in changes if change.action == KEEP], ["Volcanic Shield"])
 

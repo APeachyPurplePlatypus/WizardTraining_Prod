@@ -9,11 +9,13 @@ game's files give it), and the deck is filled in this order, each spell up to it
     seven-card opening hand of the first Lost Soul fight, and one Frost Beetle ended it (10:21); three copies are in
     nine opening hands of ten.
  2. Heals, the strongest first: the policy heals below 40% health and before a big hit.
- 3. Attacks, the most pips first (damage grows with pips), then the biggest hit.
+ 3. Attacks of 2 pips or more, the most pips first (damage grows with pips), then the biggest hit.
  4. Traps, TRAP_COPIES of each: the policy sets one on the target before a hit of 2 pips or more ("Ice Trap":
     +40% to the next Ice hit on it, against Colossus Boulevard's Evil Snowmen, who resist Ice by 20%).
- 5. Stuns: the policy stuns while saving a pip for a bigger attack, and the enemy holding the most pips.
- 6. Nothing else: shields, which the policy never casts (Volcanic Shield blocks only Fire and Storm), Extract
+ 5. Stuns, STUN_COPIES of each: the policy stuns while saving a pip for a bigger attack, and the enemy holding the
+    most pips; Freeze, then Pixie, carried the wizard through three fights that fell under 25% health (2026-10-28).
+ 6. One-pip attacks: the wand's item cards give one-pip hits every round already.
+ 7. Nothing else: shields, which the policy never casts (Volcanic Shield blocks only Fire and Storm), Extract
     spells no goal needs, and spells of other kinds.
 
 Every card put in or taken out gets one line in runtime/deck-changes.jsonl, and every spell left out one line too:
@@ -32,6 +34,7 @@ DECK_LOG_NAME = "deck-changes.jsonl"
 ADD, REMOVE, KEEP = "add", "remove", "keep"
 EXTRACT, HEAL, ATTACK, TRAP, STUN, SHIELD, OTHER = "extract", "heal", "attack", "trap", "stun", "shield", "other"
 TRAP_COPIES = 2
+STUN_COPIES = 2
 EFFECT_ROLES = {"collect_essence": EXTRACT, "heal": HEAL, "damage": ATTACK, "stun": STUN,
                 "modify_incoming_damage": SHIELD}
 NO_CAPACITY_KNOWN = 10_000
@@ -101,8 +104,10 @@ def deck_spell(name: str, copies: int, limit: int, effects, pips: int | None) ->
 
 
 def priority(spell: DeckSpell) -> tuple:
+    if spell.role == ATTACK and (spell.pips or 0) < 2:
+        return 5, 0, -spell.strength
     order = {EXTRACT: 0, HEAL: 1, ATTACK: 2, TRAP: 3, STUN: 4}
-    return order.get(spell.role, len(order)), -(spell.pips or 0) if spell.role == ATTACK else 0, -spell.strength
+    return order.get(spell.role, 6), -(spell.pips or 0) if spell.role == ATTACK else 0, -spell.strength
 
 
 def why_wanted(spell: DeckSpell) -> str:
@@ -110,7 +115,10 @@ def why_wanted(spell: DeckSpell) -> str:
         EXTRACT: f"{spell.name} enchants a damage spell to take an essence, which a quest goal needs",
         HEAL: f"{spell.name} heals {spell.strength}: heals come first, since the policy heals below 40% health and "
               "before a big hit",
-        ATTACK: f"{spell.name} hits for up to {spell.strength} with {spell.pips} pips: the strongest hits come first",
+        ATTACK: (f"{spell.name} hits for up to {spell.strength} with {spell.pips} pips: the strongest hits come first"
+                 if (spell.pips or 0) >= 2 else
+                 f"{spell.name} hits for up to {spell.strength} with {spell.pips} pip: one-pip hits come last, since "
+                 "the wand's item cards give them every round"),
         TRAP: f"{spell.name} raises the next hit on its target by {spell.strength}%: the policy sets it before a hit "
               "of 2 pips or more",
         STUN: f"{spell.name} stuns: the policy casts it while saving a pip for a bigger attack, and on the enemy "
@@ -133,7 +141,7 @@ def wanted_deck(spells: list[DeckSpell], capacity: int, *, essence_needed: bool)
         if spell.role not in (EXTRACT, HEAL, ATTACK, TRAP, STUN) or (spell.role == EXTRACT and not essence_needed):
             wanted.append(Wanted(spell.name, 0, why_left_out(spell)))
             continue
-        target = min(spell.limit, TRAP_COPIES) if spell.role == TRAP else spell.limit
+        target = min(spell.limit, {TRAP: TRAP_COPIES, STUN: STUN_COPIES}.get(spell.role, spell.limit))
         copies = max(0, min(target, room))
         room -= copies
         reason = why_wanted(spell)
