@@ -52,7 +52,7 @@ from .navigation import load_planner
 from .policy import LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, SpellTypePolicy
 from .progress import (DUEL_BLOCKS_THE_WAY, DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY, ENEMY_NEAR_PATH, LimitReached, Limits, PATH_THREATS,
                        PlannedRoute, RunRecord, StopRun, check_limits, leaves_world, health_to_travel, mana_for_a_fight, mana_to_travel, still_to_recharge, worth_marking, worth_recalling,
-                       PARK_AFTER_STRATEGIES, HEAVY_ZONE_FIGHTS, RECHARGE_HEALTH_FRACTION, heavy_fight, parked,
+                       PARK_AFTER_STRATEGIES, HEAVY_ZONE_FIGHTS, RECALL_MANA_NEEDED, RECHARGE_HEALTH_FRACTION, heavy_fight, parked,
                        nav_did_better, progressed, ready_to_recall, remember_obstacles, safe_to_stand, short_for_a_fight,
                        should_drink_potion, stalled, topped_up, travel_outcome, wanted_wisp,
                        WISP_ANY_DIRECTION_BELOW_FRACTION, world_of)
@@ -132,6 +132,7 @@ GATHER_SETTLE_SECONDS = 3.0
 REAGENT_ZONES_PER_TRY = 3
 DECK_RETRY_SECONDS = 60.0
 PHOTO_TRIES = 2
+RECALL_WAIT_CAP_SECONDS = 180.0
 PHOTO_DISTANCE = 600.0
 PHOTO_SUBJECT_TRIES = 4
 DECK_EDIT_CLEARANCE = 3000.0
@@ -172,6 +173,8 @@ class QuestLoop:
         self._deck_checked: tuple | None = None
         self._deck_retry_at = 0.0
         self._photos_taken = 0
+        self._trip_stat: str | None = None
+        self._trip_started = 0.0
         self._refill_after_heavy_fight = False
         self._level_table: dict[int, int] | None = None
         self._experience: tuple[int, int] | None = None
@@ -1706,6 +1709,7 @@ class QuestLoop:
             self.events.emit("travel", f"could not go to the Commons for mana: {problem}")
             return None
         self._teleport_pressed = (GO_HOME, started)
+        self._trip_stat, self._trip_started = stat, time.monotonic()
         self.events.emit("travel", f"went to the Commons from {zone} with {state['mana']} mana and {state['health']} "
                                    f"health, to refill {stat} there")
         self.record.last_place = None
@@ -1863,13 +1867,26 @@ class QuestLoop:
         if self._marked_in is None or state["zone"] == self._marked_in:
             self._marked_in = None
             return None
-        if ready_to_recall(mana_fraction(state), health_fraction(state)):
+        if self.ready_to_go_back(state):
             return await self.recall_turn(state)
         if not ready_to_recall(mana_fraction(state), None):
             if (fetched := await self.wisp_turn("mana", state, reach=refill_reach(True))) is not None:
                 return fetched
             return await self.safe_zone_refill_turn("mana", state, await self.planner())
         return await self.keep_looking_turn("health", state, await self.planner())
+
+    def ready_to_go_back(self, state: dict) -> bool:
+        """`progress.ready_to_recall`, or, for a trip made for health, health ready and the mana the way back uses
+        (Recall and the TRAVEL_MANA_RESERVE kept for fights); or, after RECALL_WAIT_CAP_SECONDS in the Commons, health
+        ready and that mana. After a heavy fight's trip the wizard chased seven used-up mana wisps in the Commons at
+        70 of 96 mana and full health, short of the 80% a mana trip waits for (14:16 to 14:18)."""
+        if ready_to_recall(mana_fraction(state), health_fraction(state)):
+            return True
+        if not ready_to_recall(None, health_fraction(state)):
+            return False
+        enough = isinstance(state["mana"], int) and state["mana"] >= RECALL_MANA_NEEDED + TRAVEL_MANA_RESERVE
+        waited = time.monotonic() - self._trip_started >= RECALL_WAIT_CAP_SECONDS
+        return enough and (self._trip_stat == "health" or waited)
 
     async def recall_turn(self, state: dict) -> dict | None:
         """Recall Location to the spot marked before leaving. Recall costs about 5 mana. None when nothing is
