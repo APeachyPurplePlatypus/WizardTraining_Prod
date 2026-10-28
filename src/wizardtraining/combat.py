@@ -307,6 +307,8 @@ async def play_round(combat, policy: CombatPolicy, can_flee: bool = True) -> dic
         card = view.cards[choice.card]
         target = f"{choice.target} {view.enemies[choice.enemy].name}" if choice.target == "enemy" else choice.target
         entry["action"] = f"cast {card.name}{f' ({card.school})' if card.school else ''} on {target}"
+        if choice.reason:
+            entry["action"] += f" ({choice.reason})"
         if not await cast_taken(combat.client):
             _, me, cards, enemies = await read_round(combat)
             await cards[choice.card].cast(cast_target(choice, me, enemies), sleep_time=PAUSE_BETWEEN_CAST_CLICKS_SECONDS)

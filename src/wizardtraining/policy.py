@@ -121,10 +121,11 @@ class Flee:
 @dataclass(frozen=True)
 class Cast:
     """Play `cards[card]` on the wizard ("self"), on `enemies[enemy]` ("enemy"), or on every enemy at once
-    ("all enemies", for spells with no single target)."""
+    ("all enemies", for spells with no single target), for `reason` when the round log should say why."""
     card: int
     target: Literal["self", "enemy", "all enemies"]
     enemy: int = 0
+    reason: str = field(default="", compare=False)
 
 
 @dataclass(frozen=True)
@@ -253,8 +254,9 @@ class SpellTypePolicy:
                 return stun
             in_danger = big_hit or (fraction is not None and fraction < LOW_HEALTH_FRACTION)
             if in_danger and (worth_saving_for := heal_worth_saving_for(view)) is not None:
-                return stun_on_the_most_dangerous(view) or Pass(f"saving pips for {worth_saving_for.name} "
-                                                                f"({worth_saving_for.pips} pips)")
+                saving = f"saving pips for {worth_saving_for.name} ({worth_saving_for.pips} pips)"
+                return (stun_on_the_most_dangerous(view) or trap_instead_of_passing(view, self.strategy.target, saving)
+                        or Pass(saving))
         if not view.enemies:
             return None
         if finisher is not None:
@@ -265,9 +267,11 @@ class SpellTypePolicy:
         if stun is not None:
             return stun
         if self.strategy.save_pips_for_bigger_cards and (bigger := bigger_card_soon(view, attacks)) is not None:
-            return stun_on_the_most_dangerous(view) or Pass(f"saving pips for {bigger.name} ({bigger.pips} pips)")
+            saving = f"saving pips for {bigger.name} ({bigger.pips} pips)"
+            return (stun_on_the_most_dangerous(view) or trap_instead_of_passing(view, self.strategy.target, saving)
+                    or Pass(saving))
         if not attacks:
-            return None
+            return trap_instead_of_passing(view, self.strategy.target, "no attack castable")
         enemy = most_dangerous(view.enemies) if self.strategy.target == MOST_DANGEROUS else weakest(view.enemies)
         attack = max(unresisted(view, attacks, enemy) or attacks,
                      key=lambda index: expected_damage(view.cards[index], view.enemies[enemy]))
@@ -402,27 +406,57 @@ def is_trap(card: Card) -> bool:
 
 
 def trap_before_a_big_hit(view: RoundView, attacks: list[int], target_rule: str) -> Cast | None:
-    """A castable trap on the enemy the next attack goes to, when an attack of 2 pips or more is in hand (castable now
-    or within two pips) and that enemy has no trap of its school on it yet: Ice Trap adds 40% to the next Ice hit, and
-    Colossus Boulevard's Evil Snowmen resist Ice by 20% (12:32 to 13:11, one fight lost). Only when the trap lifts
-    that school's hit to full damage or more: the Ice tower's Ice Colossus resists Ice by 50%, a trapped Ice hit still
-    did 70%, and two rounds went to traps while wands of other schools hit in full (14:21). None otherwise."""
+    """A castable trap on the enemy the next attack goes to, when an attack of its school of 2 pips or more is in
+    hand (castable now or within two pips) and that enemy has no trap of its school on it yet: Ice Trap adds 40% to
+    the next Ice hit, and Colossus Boulevard's Evil Snowmen resist Ice by 20% (12:32 to 13:11, one fight lost). A trap
+    costs no pips, so while the big hit waits for pips the trap goes on whatever the target resists: the operator,
+    2026-10-28 18:29 UTC, "Sometimes a wasted trap is better than nothing, they cost zero pips". When the big hit can
+    be cast this round, the trap goes first only if it lifts that school's hit to full damage or more: the Ice
+    Colossus resists Ice by 50%, and a trapped Ice hit still did 70% (14:21). None otherwise."""
     trap = first_castable(view.cards, is_trap)
     if trap is None or not view.enemies:
         return None
+    school = view.cards[trap].school
     have = (view.pips or 0) + (view.power_pips or 0)
     big = [card for card in view.cards if card.spell_type in ATTACK_TARGETS and (card.pips or 0) >= 2
-           and (card.pips or 0) <= have + 2 and not is_trap(card) and card.school == view.cards[trap].school]
+           and (card.pips or 0) <= have + 2 and not is_trap(card) and card.school == school]
     if not big:
         return None
+    enemy = trap_target(view, target_rule)
+    if enemy is None:
+        return None
+    target = view.enemies[enemy]
+    if any(card.castable for card in big):
+        if target.damage_factor(school) * (1 + TRAP_LIFT) < 1.0:
+            return None
+        return Cast(trap, "enemy", enemy, f"trap first: it lifts the {school} hit to full damage or more")
+    waiting = min(big, key=lambda card: card.pips or 0)
+    return Cast(trap, "enemy", enemy, f"trap while {waiting.name} waits for pips ({waiting.pips} pips)")
+
+
+def trap_instead_of_passing(view: RoundView, target_rule: str, instead_of: str) -> Cast | None:
+    """A castable trap on the target when the round would otherwise play no card (`instead_of` says why): the pip
+    still comes, the trap waits on the enemy for a later hit of its school whatever the next hand holds, and the
+    card played makes room for a new one. The operator, 2026-10-28 18:29 UTC: "Sometimes a wasted trap is better than
+    nothing, they cost zero pips so it's not bad idea to use them especially since you won't know what's in your
+    hand next due to deck rng." None without a castable trap or an enemy not yet trapped for its school."""
+    trap = first_castable(view.cards, is_trap)
+    if trap is None or not view.enemies:
+        return None
+    enemy = trap_target(view, target_rule)
+    if enemy is None:
+        return None
+    return Cast(trap, "enemy", enemy, f"trap instead of a pass ({instead_of}): it costs no pips")
+
+
+def trap_target(view: RoundView, target_rule: str) -> int | None:
+    """The enemy the next attack goes to, unless a trap of the hand's trap school is on it already."""
+    trap = first_castable(view.cards, is_trap)
     enemy = most_dangerous(view.enemies) if target_rule == MOST_DANGEROUS else weakest(view.enemies)
     school = view.cards[trap].school
-    target = view.enemies[enemy]
-    if any(modifier.percent > 0 and modifier.school in (school, UNIVERSAL) for modifier in target.incoming):
+    if any(modifier.percent > 0 and modifier.school in (school, UNIVERSAL) for modifier in view.enemies[enemy].incoming):
         return None
-    if target.damage_factor(school) * (1 + TRAP_LIFT) < 1.0:
-        return None
-    return Cast(trap, "enemy", enemy)
+    return enemy
 
 
 def stun_while_saving_a_pip(view: RoundView, attacks: list[int]) -> Cast | None:

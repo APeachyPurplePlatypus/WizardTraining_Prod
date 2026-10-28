@@ -380,10 +380,30 @@ class TrapTest(unittest.TestCase):
         self.assertEqual(SpellTypePolicy().choose(view([self.BEETLE, self.TRAP, self.SNOWMAN], pips=2, enemies=snowmen)),
                          Cast(1, "enemy", 0))
 
-    def test_no_trap_on_an_enemy_the_trap_would_leave_resisting(self):
-        colossus = (Combatant("Ice Colossus", 395, resistances={"Ice": 0.5, "Fire": -0.2}),)
-        choice = SpellTypePolicy().choose(view([self.BEETLE, self.TRAP, self.SNOWMAN], pips=2, enemies=colossus))
-        self.assertNotEqual(choice.card, 1)
+    COLOSSUS = (Combatant("Ice Colossus", 395, resistances={"Ice": 0.5, "Fire": -0.2}),)
+
+    def test_a_trap_goes_on_a_resisting_enemy_while_the_big_hit_waits_for_pips(self):
+        choice = SpellTypePolicy().choose(view([self.BEETLE, self.TRAP, self.SNOWMAN], pips=2, enemies=self.COLOSSUS))
+        self.assertEqual(choice, Cast(1, "enemy", 0))
+        self.assertIn("waits for pips", choice.reason)
+
+    def test_a_castable_big_hit_goes_before_a_trap_that_leaves_it_resisted(self):
+        castable = Card("Evil Snowman", "Damage", True, "Ice", 3)
+        choice = SpellTypePolicy().choose(view([self.TRAP, castable], pips=3, enemies=self.COLOSSUS))
+        self.assertNotEqual(choice.card, 0)
+
+    def test_a_castable_big_hit_waits_a_round_for_a_trap_that_lifts_it_to_full(self):
+        snowman = (Combatant("Evil Snowman", 310, resistances={"Ice": 0.2, "Fire": -0.2}),)
+        castable = Card("Evil Snowman", "Damage", True, "Ice", 3)
+        choice = SpellTypePolicy().choose(view([self.TRAP, castable], pips=3, enemies=snowman))
+        self.assertEqual(choice, Cast(0, "enemy", 0))
+        self.assertIn("full damage", choice.reason)
+
+    def test_a_trap_instead_of_a_pass(self):
+        far_off = Card("Blizzard", "Damage", False, "Ice", 6)
+        choice = SpellTypePolicy().choose(view([self.TRAP, far_off], pips=0, enemies=self.COLOSSUS))
+        self.assertEqual(choice, Cast(0, "enemy", 0))
+        self.assertIn("instead of a pass", choice.reason)
 
     def test_no_second_trap_on_a_trapped_enemy_and_none_without_a_big_hit(self):
         trapped = (Combatant("Evil Snowman", 310, incoming=(DamageModifier("Ice", 40),)),)
