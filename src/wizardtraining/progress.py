@@ -329,6 +329,14 @@ HEAVY_FIGHT_FRACTION = 0.35
 HEAVY_ZONE_FIGHTS = 2
 
 
+def short_for_a_heavy_zone(health: float | None, heavy_fights_there: int) -> bool:
+    """Under RECHARGE_HEALTH_FRACTION of health for a zone with HEAVY_ZONE_FIGHTS heavy fights or more: there pairs
+    walk in on every walk, and each fight cost 39 to 59% of the wizard's health in Triton's underwater zone; the
+    wizard walked on at 46% and lost (19:02), and came out of an instance into it at 59% (19:45). The coordinator,
+    2026-10-28 23:46 UTC: refill to 90% before walking on there, or before stepping out of an instance into it."""
+    return health is not None and heavy_fights_there >= HEAVY_ZONE_FIGHTS and health < RECHARGE_HEALTH_FRACTION
+
+
 def heavy_fight(health_before, health_after, max_health) -> bool:
     """A won fight that cost HEAVY_FIGHT_FRACTION of the wizard's health or more: in Colossus Boulevard pairs of Evil
     Snowmen and Gobbler Scouters cost 400 to 900 of 1,133, and two of three fights went under 25% (12:39 to 12:53)."""

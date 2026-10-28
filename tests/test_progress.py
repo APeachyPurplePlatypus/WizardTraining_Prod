@@ -378,6 +378,15 @@ class HeavyFightTest(unittest.TestCase):
         self.assertTrue(made_headway(None, 6800))
 
 
+class HeavyZoneTest(unittest.TestCase):
+    def test_a_zone_with_heavy_fights_wants_the_recharge_before_walking_on(self):
+        from wizardtraining.progress import short_for_a_heavy_zone
+        self.assertTrue(short_for_a_heavy_zone(708 / 1195, 3))
+        self.assertFalse(short_for_a_heavy_zone(1100 / 1195, 3))
+        self.assertFalse(short_for_a_heavy_zone(708 / 1195, 1))
+        self.assertFalse(short_for_a_heavy_zone(None, 3))
+
+
 class OnARefillTripTest(unittest.TestCase):
     def test_a_trip_is_over_once_the_wizard_is_in_a_dungeon_or_among_enemies(self):
         from wizardtraining.progress import on_a_refill_trip

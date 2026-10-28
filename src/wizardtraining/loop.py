@@ -52,7 +52,7 @@ from .movement import LOADING, KeysIgnored, Reroute, face, travel
 from .navigation import load_planner
 from .policy import LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, SpellTypePolicy, biggest_hits
 from .progress import (DUEL_BLOCKS_THE_WAY, DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY, ENEMY_NEAR_PATH, LimitReached, Limits, PATH_THREATS,
-                       PlannedRoute, RunRecord, StopRun, check_limits, leaves_world, health_to_travel, mana_for_a_fight, mana_to_travel, still_to_recharge, trapped_by, worth_marking, worth_recalling, dungeon_held, resume_in_time, RESUME_TRIP_SECONDS, on_a_refill_trip,
+                       PlannedRoute, RunRecord, StopRun, check_limits, leaves_world, health_to_travel, mana_for_a_fight, mana_to_travel, short_for_a_heavy_zone, still_to_recharge, trapped_by, worth_marking, worth_recalling, dungeon_held, resume_in_time, RESUME_TRIP_SECONDS, on_a_refill_trip,
                        PARK_AFTER_STRATEGIES, HEAVY_ZONE_FIGHTS, RECALL_MANA_NEEDED, RECHARGE_HEALTH_FRACTION, heavy_fight, parked, worth_pushing_on, short_before_entering, made_headway, GOAL_HEADWAY, STALLED_TRIPS_TO_PARK, forget_obstacles_near, OBSTACLE_FORGET_RADIUS,
                        nav_did_better, progressed, ready_to_recall, remember_obstacles, safe_to_stand, short_for_a_fight,
                        should_drink_potion, stalled, topped_up, travel_outcome, wanted_wisp,
@@ -331,6 +331,27 @@ class QuestLoop:
                      quest.get("goal_zone") or "")
             self.note_changes(state)
 
+    async def out_into_a_heavy_zone_turn(self, state: dict, fraction: float | None) -> dict | None:
+        """In a dungeon or instance (not a tower floor) whose goal is out in a zone where fights are heavy
+        (`progress.short_for_a_heavy_zone`), short of the recharge: Go Home and refill in the Commons
+        (`RunRecord.recharging`), from where the travel plan goes on to the goal, rather than stepping out short among
+        its pairs; health does not come back inside. Out of Curfew!'s instance at 59%, the wizard met a Royal Guard
+        and a Riverclaw Guard at the door (19:45). None when that is not the case."""
+        zone = state["zone"]
+        goal_zone = (self.record.quest or {}).get("goal_zone")
+        if (goal_zone in (None, "", zone) or goal_zone not in self.record.zones_with_enemies or not self.use_travel_buttons
+                or not in_dungeon(zone, self.record.entered_with_x, self.record.dungeon_zones)
+                or in_tower(zone, self.record.entered_with_x, self.record.dungeon_zones)
+                or not short_for_a_heavy_zone(fraction, self.record.heavy_fights.get(goal_zone, 0))):
+            return None
+        trip = await self.go_home_for("health", state)
+        if trip is not None:
+            self.record.recharging = True
+            self.events.emit("health", f"{state['health']} of {state['max_health']} health in {zone}, and the goal is out "
+                                       f"in {goal_zone}, where fights are heavy: refilling in the Commons before "
+                                       "stepping out")
+        return trip
+
     async def refill_after_heavy_fight_turn(self, state: dict) -> dict | None:
         """After a heavy fight (`progress.heavy_fight`), refill health from wisps to RECHARGE_HEALTH_FRACTION before
         walking on, not only below the travel line: fights there start when pairs walk in. Health only; mana keeps
@@ -346,8 +367,12 @@ class QuestLoop:
                                      f"{zone}, where fights are heavy: refilling in the Commons first")
             return trip
         fraction = health_fraction(state)
+        if (out := await self.out_into_a_heavy_zone_turn(state, fraction)) is not None:
+            return out
         low_among_enemies = fraction is not None and not health_to_travel(fraction) and zone in self.record.zones_with_enemies
-        if not self.record.refill_after_heavy_fight and not low_among_enemies:
+        short_here = (zone in self.record.zones_with_enemies
+                      and short_for_a_heavy_zone(fraction, self.record.heavy_fights.get(zone, 0)))
+        if not self.record.refill_after_heavy_fight and not low_among_enemies and not short_here:
             return None
         if fraction is None or fraction >= RECHARGE_HEALTH_FRACTION:
             self.record.refill_after_heavy_fight = False
@@ -359,10 +384,11 @@ class QuestLoop:
         title = " ".join(((self.record.quest or {}).get("title") or "").split())
         stalled = not made_headway(distance, self._trip_distances.get(title))
         if distance is not None and worth_pushing_on(fraction, distance, stalled=stalled):
-            self.record.refill_after_heavy_fight = False
             why = "the last refill trip left from no nearer it" if stalled else "it is in this zone"
-            self.events.emit("health", f"{state['health']} of {state['max_health']} health after a heavy fight, and the "
-                                       f"goal is {distance:.0f} away and {why}: going on to it before refilling")
+            after = "after a heavy fight" if self.record.refill_after_heavy_fight else f"in {zone}, where fights are heavy"
+            self.record.refill_after_heavy_fight = False
+            self.say_once("health", f"{state['health']} of {state['max_health']} health {after}, and the goal is "
+                                    f"{distance:.0f} away and {why}: going on to it before refilling")
             return None
         if await self.safe_here():
             return await self.keep_looking_turn("health", state, await self.planner())
