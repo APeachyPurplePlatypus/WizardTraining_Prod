@@ -96,6 +96,7 @@ EXPLORE_ARRIVE_RADIUS = 40.0
 EXPLORE_FAILED_WALKS_TO_SKIP = 3
 RAMP_PIECE_REACH = 150.0
 MARK_TRAP_RADIUS = 600.0
+DOOR_KNOWN_RADIUS = 600.0
 PROMPT_DOOR_REACH = 2500.0
 NPC_PROMPT_RANGE = 400.0
 NOT_A_DOOR_RADIUS = 600.0
@@ -2869,12 +2870,22 @@ class QuestLoop:
             await asyncio.sleep(DOOR_POLL_SECONDS)
         return stalled("pressed X at the interact prompt, but the zone did not change")
 
+    async def door_destination_here(self, zone: str) -> str | None:
+        """The zone the door the wizard stands at opens on, when a walk has come out of it here before
+        (`RunRecord.zone_doors`, within DOOR_KNOWN_RADIUS); else None."""
+        here = await self.client.body.position()
+        known = [(flat_distance(here, XYZ(float(point[0]), float(point[1]), 0.0)), other)
+                 for other, point in self.record.zone_doors.get(zone, {}).items()]
+        near = [item for item in known if item[0] <= DOOR_KNOWN_RADIUS]
+        return min(near)[1] if near else None
+
     async def refill_before_entering(self, action: str | None, zone: str) -> dict | None:
         """At a "to Enter" door with health or mana short of a recharge (`progress.short_before_entering`), and the
         travel buttons allowed here: mark the door and refill in the Commons first, so the Recall comes back to the
         door and the wizard goes in refilled. None to go in now."""
         state = await snapshot(self.client)
-        stat = short_before_entering(action, health_fraction(state), mana_fraction(state))
+        destination = await self.door_destination_here(zone)
+        stat = short_before_entering(action, health_fraction(state), mana_fraction(state), destination)
         if stat is None or not self.use_travel_buttons or not self.travel_allowed_in(zone):
             return None
         trip = await self.commons_trip_turn(stat, state)

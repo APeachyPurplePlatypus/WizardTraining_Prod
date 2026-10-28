@@ -8,6 +8,8 @@ as progress once kept a run looping for 200 turns.
 
 from __future__ import annotations
 
+import re
+
 import datetime
 from dataclasses import asdict, dataclass, field
 
@@ -311,19 +313,33 @@ def made_headway(distance_to_goal: float | None, at_last_trip: float | None) -> 
 
 
 ENTER_ACTION = "enter"
+INSTANCE_NAME = re.compile(r"_T\d+$|tower|dungeon", re.IGNORECASE)
 
 
-def short_before_entering(action: str | None, health: float | None, mana: float | None) -> str | None:
-    """Before pressing X at a "to Enter" door, "health" or "mana" when either is under what a recharge refills to
-    (RECHARGE_HEALTH_FRACTION, RECHARGE_MANA_FRACTION), health first; None otherwise or for other prompts. Such a
-    door can open on a tower or an instance the wizard does not walk out of partway: Triton Avenue's underwater
-    "Odd Tidings" waypoint was the door of WC_Triton_Underwater_T1, entered at 45% health after a costly fight
-    (18:40). The prompt does not name the zone it opens on, so every "to Enter" door is treated alike."""
+def is_an_instance(zone: str | None) -> bool:
+    """A zone named as a tower or instance the wizard does not walk out of partway: "..._T1", "...Tower...",
+    "...Dungeon..." (its last part)."""
+    return bool(zone) and bool(INSTANCE_NAME.search(zone.rsplit("/", 1)[-1]))
+
+
+def short_before_entering(action: str | None, health: float | None, mana: float | None,
+                          destination: str | None = None) -> str | None:
+    """Before pressing X at a "to Enter" door, "health" or "mana" when the wizard should refill first, health first;
+    None otherwise or for other prompts. A door known to open on an instance (`destination`, from the doors learned
+    walking, `is_an_instance`) asks for a full recharge (RECHARGE_HEALTH_FRACTION, RECHARGE_MANA_FRACTION): Triton
+    Avenue's underwater "Odd Tidings" waypoint was the door of WC_Triton_Underwater_T1, entered at 45% health after a
+    costly fight, and health does not come back inside (18:40 to 18:42). A door known to open elsewhere (a shop, a
+    house) asks for nothing; a door not known yet, only that the wizard not be low (HEALTH_TO_TRAVEL_FRACTION,
+    MANA_BELOW_FRACTION), so shops and houses do not cost a trip to the Commons."""
     if (action or "").strip().lower() != ENTER_ACTION:
         return None
-    if health is not None and health < RECHARGE_HEALTH_FRACTION:
+    if destination is not None and not is_an_instance(destination):
+        return None
+    health_bar, mana_bar = ((RECHARGE_HEALTH_FRACTION, RECHARGE_MANA_FRACTION) if destination is not None
+                            else (HEALTH_TO_TRAVEL_FRACTION, MANA_BELOW_FRACTION))
+    if health is not None and health < health_bar:
         return "health"
-    if mana is not None and mana < RECHARGE_MANA_FRACTION:
+    if mana is not None and mana < mana_bar:
         return "mana"
     return None
 

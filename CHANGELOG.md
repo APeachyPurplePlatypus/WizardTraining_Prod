@@ -208,9 +208,9 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
-- **A "to Enter" door is gone through refilled** (`progress.short_before_entering`, `QuestLoop.refill_before_entering`, `docs/lessons-learned.md`).
-  - **What:** before pressing X at a "to Enter" prompt with health under 90% or mana under 80%, the wizard marks the door and refills in the Commons, then Recalls back to the door and goes in. A dungeon-entry box after X is still left for the operator.
-  - **Why:** "Odd Tidings"' waypoint under Triton Avenue was the door of WC_Triton_Underwater_T1, an instance entered at 525 of 1164 health right after a costly fight (18:40); inside, the wizard refills in place. The coordinator asked for it.
+- **A door known to open on an instance is gone through refilled** (`progress.short_before_entering`, `progress.is_an_instance`, `QuestLoop.door_destination_here`, `QuestLoop.refill_before_entering`, `docs/lessons-learned.md`).
+  - **What:** before pressing X at a "to Enter" prompt, the door's destination is taken from the doors learned walking out of zones (`RunRecord.zone_doors`, within 600). One known to open on an instance (a zone named "_T<n>", a tower or a dungeon) waits for 90% health and 80% mana: the wizard marks the door, refills in the Commons and Recalls back. One known to open on a shop, house or room asks for nothing; one not known yet only asks that the wizard not be low (40% health, 20% mana). A dungeon-entry box after X is still left for the operator.
+  - **Why:** "Odd Tidings"' waypoint under Triton Avenue was the door of WC_Triton_Underwater_T1, entered at 525 of 1164 health right after a costly fight, and 90 s of standing inside gave no health or mana back (18:40 to 18:42). A first version asked for the full refill at every "to Enter" door, which would have sent the wizard to the Commons before shops and houses; the coordinator asked to narrow it.
   - **Verified:** offline (`tests/test_progress.py`; imports, tests).
 
 - **Zones the hand-kept tree lacks are reached by the links and doors learned walking** (`travelplan.next_zone_on_the_way`, `RunRecord.zone_doors`, `QuestLoop.learn_the_door`, `QuestLoop.learned_door_toward`, `docs/lessons-learned.md`).

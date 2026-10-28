@@ -319,12 +319,19 @@ class HeavyFightTest(unittest.TestCase):
         self.assertFalse(heavy_fight(1133, 1033, 1133))
         self.assertFalse(heavy_fight(None, 543, 1133))
 
-    def test_a_to_enter_door_waits_for_a_refill(self):
+    def test_a_door_known_to_open_on_an_instance_waits_for_a_full_refill(self):
         from wizardtraining.progress import short_before_entering
-        self.assertEqual(short_before_entering("Enter", 525 / 1164, 68 / 96), "health")
-        self.assertEqual(short_before_entering("Enter", 1100 / 1164, 60 / 96), "mana")
-        self.assertIsNone(short_before_entering("Enter", 1100 / 1164, 90 / 96))
-        self.assertIsNone(short_before_entering("Jump", 525 / 1164, 68 / 96))
+        tower = "WizardCity/WC_Streets/WC_Triton_Underwater/Interiors/WC_Triton_Underwater_T1"
+        self.assertEqual(short_before_entering("Enter", 525 / 1164, 68 / 96, tower), "health")
+        self.assertEqual(short_before_entering("Enter", 1100 / 1164, 60 / 96, tower), "mana")
+        self.assertIsNone(short_before_entering("Enter", 1100 / 1164, 90 / 96, tower))
+        self.assertIsNone(short_before_entering("Jump", 525 / 1164, 68 / 96, tower))
+
+    def test_a_shop_door_asks_for_nothing_and_an_unknown_door_only_that_the_wizard_not_be_low(self):
+        from wizardtraining.progress import short_before_entering
+        self.assertIsNone(short_before_entering("Enter", 525 / 1164, 30 / 96, "WizardCity/Interiors/WC_Shop_Robes"))
+        self.assertIsNone(short_before_entering("Enter", 525 / 1164, 68 / 96))
+        self.assertEqual(short_before_entering("Enter", 400 / 1164, 68 / 96), "health")
 
     def test_obstacles_learned_near_a_spot_are_forgotten(self):
         from wizardtraining.progress import forget_obstacles_near
