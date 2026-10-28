@@ -216,6 +216,7 @@ Every change, enhancement or addition is listed with its rationale, so later con
 - **A walk may start inside a still enemy's keep-out, and a mark that traps the wizard is forgotten** (`routes.Hazards.enemy_keep_out`, `QuestLoop.forget_a_trapping_mark`).
   - **What:** a route beginning within ENEMY_KEEP_OUT of a tracked enemy may lead away from it, as from a duel circle. And when no route leads anywhere from the wizard's own mark (every method failed, or enemies left none, and it barely moved, within 600 of the mark), the mark is forgotten, so a Recall does not bring it back and a trip to the Commons walks back instead.
   - **Why:** a refill mark was set where the Kraken fight ended, on Kraken Isle, whose way off the planner could not place; each walk strategy that went to the Commons recalled straight back onto the isle, and the run stopped (18:09 to 18:12). The coordinator asked for a general rule.
+  - **And not set again there:** no mark is set within 600 of a forgotten trapping mark for the rest of the run (`QuestLoop.near_a_trapping_mark`): forgotten on Kraken Isle, it was set again on arriving in the goal's zone eight seconds later, three times, 5 mana each (18:16 to 18:17).
   - **Verified:** offline (`tests/test_routes.py`; imports, tests).
 
 - **Volumes named for where they lead are walk-in teleports** (`untracked.walk_in_teleports`, `navigation.load_planner`).
