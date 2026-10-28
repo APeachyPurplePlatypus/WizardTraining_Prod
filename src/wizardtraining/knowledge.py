@@ -73,6 +73,7 @@ class Knowledge:
     trainers: dict[str, dict] = field(default_factory=dict)
     heavy_fights: dict[str, int] = field(default_factory=dict)
     enemy_hits: dict[str, int] = field(default_factory=dict)
+    dead_search_points: dict[str, list] = field(default_factory=dict)
     school_quests_checked: dict[str, int] = field(default_factory=dict)
 
     @classmethod
@@ -117,6 +118,8 @@ class Knowledge:
                    trainers={school: dict(trainer) for school, trainer in data.get("trainers", {}).items()},
                    heavy_fights={zone: int(count) for zone, count in data.get("heavy_fights", {}).items()},
                    enemy_hits={enemy: int(hit) for enemy, hit in data.get("enemy_hits", {}).items()},
+                   dead_search_points={zone: [tuple(point) for point in points]
+                                       for zone, points in data.get("dead_search_points", {}).items()},
                    school_quests_checked={world: int(level)
                                           for world, level in data.get("school_quests_checked", {}).items()})
 
@@ -155,6 +158,7 @@ class Knowledge:
         record.trainers = {school: dict(trainer) for school, trainer in self.trainers.items()}
         record.heavy_fights = dict(self.heavy_fights)
         record.enemy_hits = dict(self.enemy_hits)
+        record.dead_search_points = {zone: list(points) for zone, points in self.dead_search_points.items()}
         record.school_quests_checked = dict(self.school_quests_checked)
 
     def learn_from(self, record) -> None:
@@ -190,6 +194,7 @@ class Knowledge:
         self.trainers = {school: dict(trainer) for school, trainer in record.trainers.items()}
         self.heavy_fights = dict(record.heavy_fights)
         self.enemy_hits = dict(record.enemy_hits)
+        self.dead_search_points = {zone: list(points) for zone, points in record.dead_search_points.items()}
         self.school_quests_checked = dict(record.school_quests_checked)
         for zone, points in record.hidden_doors.items():
             for point in points:

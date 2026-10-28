@@ -134,6 +134,7 @@ DECK_RETRY_SECONDS = 60.0
 PHOTO_TRIES = 2
 RECALL_WAIT_CAP_SECONDS = 180.0
 SEARCH_WALKS_BEFORE_STANDING = 3
+SEARCH_POINT_FAILURES_TO_DROP = 2
 PHOTO_DISTANCE = 600.0
 PHOTO_SUBJECT_TRIES = 4
 DECK_EDIT_CLEARANCE = 3000.0
@@ -183,6 +184,7 @@ class QuestLoop:
         self._trip_started = 0.0
         self._mark_position = None
         self._trip_distances: dict[str, float] = {}
+        self._search_point_failures: dict[tuple, int] = {}
         self._stalled_trips: dict[str, int] = {}
         self._level_table: dict[int, int] | None = None
         self._experience: tuple[int, int] | None = None
@@ -2065,7 +2067,21 @@ class QuestLoop:
         if turn.get("trip", {}).get("reason") in (None, f"{kind} in sight", "every route method failed",
                                                   DUEL_BLOCKS_THE_WAY, ENEMIES_IN_THE_WAY):
             explored.append((round(x), round(y)))
+        if turn.get("trip", {}).get("reason") == "every route method failed":
+            self.note_a_dead_search_point(state["zone"], (round(x), round(y)))
         return turn
+
+    def note_a_dead_search_point(self, zone: str, point: tuple[int, int]) -> None:
+        """A search point whose walk failed every route method SEARCH_POINT_FAILURES_TO_DROP times is left out of the
+        zone's wisp searches from then on, in this run and later ones: in the Commons the walk to (-3339, -2516) got
+        stuck for about 50 s on each of three refills (15:35, 16:02, 16:14)."""
+        key = (zone, point)
+        self._search_point_failures[key] = self._search_point_failures.get(key, 0) + 1
+        dead = self.record.dead_search_points.setdefault(zone, [])
+        if self._search_point_failures[key] >= SEARCH_POINT_FAILURES_TO_DROP and point not in dead:
+            dead.append(point)
+            self.events.emit("knowledge", f"dropped the search point ({point[0]}, {point[1]}) in {zone}: its walk "
+                                          f"failed {SEARCH_POINT_FAILURES_TO_DROP} times")
 
     def area_to_search(self, planner: RoutePlanner, zone: str, me, explored: list):
         """`targets.area_in_zone`: a part of the zone reached without a teleport volume not known to stay in it."""
@@ -2075,8 +2091,11 @@ class QuestLoop:
             way = planner.way_across(me, XYZ(point[0], point[1], 0.0), outcomes, failed)
             return isinstance(way, TeleportVolume) and not isinstance(outcomes.get(way.name), int)
 
-        return area_in_zone(planner.exploration_points, me=(me.x, me.y), explored=explored,
-                            leaves_the_zone=leaves_the_zone)
+        dead = [tuple(point) for point in self.record.dead_search_points.get(zone, [])]
+        seen = [*explored, *dead]
+        area = area_in_zone(planner.exploration_points, me=(me.x, me.y), explored=seen, leaves_the_zone=leaves_the_zone)
+        explored.extend(seen[len(explored) + len(dead):])
+        return area
 
     async def persona_turn(self, arrow, goal: dict) -> dict:
         """Walk to the arrow's NPC and talk. A talk that leaves the goal open reached the wrong NPC: it is not
