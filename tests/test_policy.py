@@ -399,6 +399,12 @@ class TrapTest(unittest.TestCase):
         self.assertEqual(choice, Cast(0, "enemy", 0))
         self.assertIn("full damage", choice.reason)
 
+    def test_no_trap_on_an_enemy_a_castable_attack_is_expected_to_finish(self):
+        nearly_down = (Combatant("Evil Snowman", 73, resistances={"Ice": 0.2, "Fire": -0.2}),)
+        fire_cat = Card("Fire Cat - Starter Wand", "Damage", True, "Fire", 1, item_card=True)
+        choice = SpellTypePolicy().choose(view([self.TRAP, fire_cat, self.SNOWMAN], pips=1, enemies=nearly_down))
+        self.assertEqual(choice, Cast(1, "enemy", 0))
+
     def test_a_trap_instead_of_a_pass(self):
         far_off = Card("Blizzard", "Damage", False, "Ice", 6)
         choice = SpellTypePolicy().choose(view([self.TRAP, far_off], pips=0, enemies=self.COLOSSUS))

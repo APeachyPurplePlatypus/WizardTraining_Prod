@@ -134,6 +134,7 @@ DECK_RETRY_SECONDS = 60.0
 PHOTO_TRIES = 2
 RECALL_WAIT_CAP_SECONDS = 180.0
 SEARCH_WALKS_BEFORE_STANDING = 3
+MARK_CLEARANCE = 1500.0
 PHOTO_DISTANCE = 600.0
 PHOTO_SUBJECT_TRIES = 4
 DECK_EDIT_CLEARANCE = 3000.0
@@ -1704,18 +1705,43 @@ class QuestLoop:
         walks."""
         zone = state["zone"]
         if mark and self._marked_in is None and isinstance(state["mana"], int) and state["mana"] >= MARK_MANA_NEEDED:
-            problem = await mark_here(self.client)
-            since = ("" if self._battle_ended_at is None
-                     else f", {time.monotonic() - self._battle_ended_at:.0f} s after the last battle ended")
-            self.events.emit("travel", f"marked the spot in {zone} before leaving for {stat}{since}" if problem is None
-                                       else f"could not mark the spot in {zone}{since}: {problem}")
-            self._marked_in = zone if problem is None else None
-            if problem is None:
-                self.record.marked_in, self.record.mark_tip = zone, await recall_tip(self.client)
-                self.record.mark_purpose, self.record.mark_quest = FOR_A_REFILL, None
-                self.record.mark_door_for = None
+            if await self.kept_mark_in(zone):
+                self._marked_in = zone
+                self.events.emit("travel", f"keeping the mark already set in {zone} ({self.record.mark_tip}) for the "
+                                           f"way back")
+            elif zone in self.record.zones_with_enemies and not await self.no_enemy_within(MARK_CLEARANCE):
+                self.events.emit("travel", f"not marking in {zone}: an enemy is within {MARK_CLEARANCE:.0f}, where a "
+                                           f"Recall back would land; walking back instead")
+            else:
+                await self.mark_before_the_trip(zone, stat)
         if must_come_back and self._marked_in != zone:
             return None
+        return await self.go_home_for(stat, state)
+
+    async def kept_mark_in(self, zone: str) -> bool:
+        """The Recall button still names the mark recorded for `zone`, such as the one set on arriving in the goal's
+        zone (`mark_the_goal_zone`), so a trip from here can Recall to it rather than mark again. On Colossus
+        Boulevard a Commons trip marked over the arrival mark where a battle had just ended, and the Recall back landed
+        in the next fight among the same Snowmen (14:45)."""
+        if self.record.marked_in != zone or not self.record.mark_tip:
+            return False
+        return await has_mark(self.client) and await recall_tip(self.client) == self.record.mark_tip
+
+    async def mark_before_the_trip(self, zone: str, stat: str) -> None:
+        problem = await mark_here(self.client)
+        since = ("" if self._battle_ended_at is None
+                 else f", {time.monotonic() - self._battle_ended_at:.0f} s after the last battle ended")
+        self.events.emit("travel", f"marked the spot in {zone} before leaving for {stat}{since}" if problem is None
+                                   else f"could not mark the spot in {zone}{since}: {problem}")
+        self._marked_in = zone if problem is None else None
+        if problem is None:
+            self.record.marked_in, self.record.mark_tip = zone, await recall_tip(self.client)
+            self.record.mark_purpose, self.record.mark_quest = FOR_A_REFILL, None
+            self.record.mark_door_for = None
+
+    async def go_home_for(self, stat: str, state: dict) -> dict | None:
+        """Go to The Commons to refill `stat`; None when the button could not be used."""
+        zone = state["zone"]
         started = time.monotonic()
         problem = await go_to_the_commons(self.client)
         if problem is not None:

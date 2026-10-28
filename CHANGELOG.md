@@ -16,6 +16,7 @@ Every change, enhancement or addition is listed with its rationale, so later con
   - **Why:** the wizard learned Ice Trap (0 pips, +40% to the next Ice hit) from the Ice school's quests (13:25); the deck plan had counted it a shield, never cast. Colossus Boulevard's Evil Snowmen resist Ice by 20%, and one fight there was lost. The coordinator had asked for blades and traps before big hits.
   - **Verified:** offline (`tests/test_decks.py`, `tests/test_policy.py`).
   - **Later:** traps cost no pips, so one goes on whenever the round would otherwise play no card (`policy.trap_instead_of_passing`) and whenever a hit of its school waits for pips, whatever the target resists; only a big hit castable that round goes first, unless the trap lifts it to full damage (`policy.TRAP_LIFT`). Each trap's reason is in the round log. The operator, 18:29 UTC: "Sometimes a wasted trap is better than nothing, they cost zero pips". This replaces 5b9a874, which held traps back against the Ice Colossus's 50% Ice resistance.
+  - **Then:** no trap on an enemy a castable attack is expected to finish (`policy.expected_to_finish`): a trap went on an Evil Snowman at 73 while wands that hit it for about 130 were in hand (14:48).
   - **Later:** attacks of one pip now come after the traps and stuns, and stuns take two copies at most: Freeze, then Pixie, carried the wizard through three fights that fell under 25% health, and it is the deck's only stun, while the wand's item cards give one-pip hits every round. The deck is Pixie x3, Evil Snowman x3, Snow Serpent x3, Ice Trap x2, Freeze x2 and Frost Beetle x1. Asked by the coordinator.
 
 - **Clearing Wizard City visits the wizard's school professor once a level for school quests** (`QuestLoop.school_quest_turn`, `Knowledge.school_quests_checked`).
@@ -205,6 +206,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
   - **Why:** the changelog's rationale and the "verified, and not" notes are what make this project useful to the next contributor. The template asks for them at the point a change is proposed.
 
 ### Fixed
+
+- **A refill trip keeps a clean mark and does not mark among enemies** (`QuestLoop.kept_mark_in`, `loop.MARK_CLEARANCE`).
+  - **What:** before Go Home for a refill, the wizard keeps the mark the Recall button already names for this zone (such as the one set on arriving in the goal's zone) rather than marking again; with no such mark, in a zone with enemies, it marks only when no enemy is within 1,500, and otherwise walks back.
+  - **Why:** on Colossus Boulevard, a Commons trip marked where a battle had just ended, over the mark set on arrival; the Recall back landed in the next fight among the same Snowmen (14:45), and the quest object was not reached between 14:28 and 14:48: fight, Commons, Recall into a fight. The coordinator suggested it.
+  - **Verified:** offline (imports, tests); the code that presses Go Home is unchanged, moved into `QuestLoop.go_home_for`.
 
 - **A Mark Location press that leaves no mark is pressed once more, and the failure says what the game showed** (`gametravel.mark_here`, `gametravel.press_mark`).
   - **What:** when the Recall button still shows "No Mark Set" after a press, the wizard waits 3 s and presses again. A failure now logs the Recall tooltip before and after, mana before and after, whether the Mark button showed (and its tooltip), any message box, and the seconds since the last battle ended. The mark's log line names the stat the trip is for (it said "for mana" on every trip).

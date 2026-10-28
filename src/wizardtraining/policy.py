@@ -423,7 +423,7 @@ def trap_before_a_big_hit(view: RoundView, attacks: list[int], target_rule: str)
     if not big:
         return None
     enemy = trap_target(view, target_rule)
-    if enemy is None:
+    if enemy is None or expected_to_finish(view, attacks, view.enemies[enemy]):
         return None
     target = view.enemies[enemy]
     if any(card.castable for card in big):
@@ -447,6 +447,17 @@ def trap_instead_of_passing(view: RoundView, target_rule: str, instead_of: str) 
     if enemy is None:
         return None
     return Cast(trap, "enemy", enemy, f"trap instead of a pass ({instead_of}): it costs no pips")
+
+
+TYPICAL_DAMAGE_PER_PIP = 80
+
+
+def expected_to_finish(view: RoundView, attacks: list[int], target: Combatant) -> bool:
+    """A castable attack is expected to do at least the target's health, at TYPICAL_DAMAGE_PER_PIP per pip (the
+    starter wands' 1-pip hits on Colossus Boulevard did 75 to 132): the hit goes before a trap. A trap went on an
+    Evil Snowman at 73 while a Fire Cat wand, which it is weak to, was in hand (14:48)."""
+    return isinstance(target.health, int) and any(
+        expected_damage(view.cards[index], target) * TYPICAL_DAMAGE_PER_PIP >= target.health for index in attacks)
 
 
 def trap_target(view: RoundView, target_rule: str) -> int | None:
