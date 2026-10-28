@@ -75,8 +75,9 @@ from .spellbook import SpellCatalog, deck_spells, learned_spell_ids, load_level_
 from .spells import KNOWN_AT_FIRST_CHECK, LEARNED, SpellLog, learned_text, newly_learned, spell_entry
 from .session import NoClient, attached, hooks_ready
 from .state import attempt, battle_showing, free_to_move, health_fraction, mana_fraction, snapshot
-from .placed import EXPLORE_GOAL, explore_spot, gate_toward, objects_for_goal
+from .placed import EXPLORE_GOAL, gate_toward, objects_for_goal
 from .ramps import foot_of_the_ramp, top_of_the_ramp
+from .untracked import spots_for_goal
 from .targets import (area_in_zone, essence_enemy, fought_in, found_in, is_essence, is_reagent, looks_like_a_reagent, worth_a_detour, zones_to_search_for, bystanders, enemies_to_route_around, in_grace_after_battle, keeps_blocking,
                       leads_to_another_zone, named_enemies_not_in_a_duel, next_area_to_explore, others, quest_targets,
                       refill_reach, safe_wisps,
@@ -191,6 +192,7 @@ class QuestLoop:
         self._search_point_failures: dict[tuple, int] = {}
         self._obstacles_forgotten_at: set[tuple] = set()
         self._explore_failures: dict[str, int] = {}
+        self._spots_tried: set[str] = set()
         self._stalled_trips: dict[str, int] = {}
         self._level_table: dict[int, int] | None = None
         self._experience: tuple[int, int] | None = None
@@ -1168,8 +1170,10 @@ class QuestLoop:
         return await handler(arrow, goal)
 
     async def target_without_arrow(self, goal: dict):
-        """Where a goal's target is when the quest arrow has none: the nearest placed object matching the goal's
-        tags that has not been used yet, else the nearest loaded enemy whose display code the goal names."""
+        """Where a goal's target is when the quest arrow has none: in another zone, the gate toward it; here, the
+        nearest spot the game files give for it (`untracked.spots_for_goal`: placed objects by its tags, trigger
+        volumes named after the quest, the zone's Explore object) not yet tried; else the nearest loaded enemy
+        whose display code the goal names, else that enemy's patrol path."""
         me = await self.client.body.position()
         planner = await self.planner()
         zone = await self.client.zone_name()
@@ -1182,19 +1186,14 @@ class QuestLoop:
                                            f"{gate.template} at ({gate.x:.0f}, {gate.y:.0f})")
                 return XYZ(gate.x, gate.y, gate.z)
             return None
-        if (spot := explore_spot(planner.placed_objects, goal)) is not None:
-            if self._explore_failures.get(f"{spot.x:.0f},{spot.y:.0f}", 0) >= EXPLORE_FAILED_WALKS_TO_SKIP:
-                return None
-            self.events.emit("target", f"no quest arrow; the goal explores {zone}: going to its spot, "
-                                       f"{spot.template} at ({spot.x:.0f}, {spot.y:.0f})")
+        spots = self.untried_spots(goal, planner, me)
+        if spots:
+            spot = spots[0]
+            if spot.placed is not None:
+                self._object_in_use = spot.placed
+            self.events.emit("target", f"no quest arrow; going to {spot.name} at ({spot.x:.0f}, {spot.y:.0f}), found by "
+                                       f"{spot.source}, {len(spots)} not yet tried in {zone}")
             return XYZ(spot.x, spot.y, spot.z)
-        objects = objects_for_goal(planner.objects_with_tags(goal.get("tags") or []), goal.get("tags") or [], me=(me.x, me.y),
-                                   visited=self.record.visited_objects)
-        if objects:
-            self._object_in_use = objects[0]
-            self.events.emit("target", f"no quest arrow; going to placed object {objects[0].template} at "
-                                       f"({objects[0].x:.0f}, {objects[0].y:.0f}), {len(objects)} not yet used")
-            return XYZ(objects[0].x, objects[0].y, objects[0].z)
         code = goal.get("target_code")
         matching = named_enemies_not_in_a_duel(await nearby_enemies(self.client), code)
         if matching:
@@ -1796,14 +1795,38 @@ class QuestLoop:
                 or top_of_the_ramp(legs, piece_of, (start.x, start.y)))
         return None if step is None else XYZ(step[0], step[1], start.z)
 
+    def untried_spots(self, goal: dict, planner: RoutePlanner, me) -> list:
+        """`untracked.spots_for_goal` for a goal in this zone, leaving out spots already tried and those that
+        EXPLORE_FAILED_WALKS_TO_SKIP walks could not reach."""
+        failed = {key for key, count in self._explore_failures.items() if count >= EXPLORE_FAILED_WALKS_TO_SKIP}
+        title = (self.record.quest or {}).get("title")
+        tags = goal.get("tags") or []
+        return spots_for_goal(goal, quest_title=title, tagged=planner.objects_with_tags(tags) if tags else [],
+                              placed=planner.placed_objects, volumes=getattr(planner, "trigger_volumes", []),
+                              me=(me.x, me.y), tried=self._spots_tried | failed, visited=self.record.visited_objects)
+
     def left_for_this_run(self, goal: dict, planner: RoutePlanner, here: str) -> bool:
-        """A goal in this zone whose Explore spot could not be walked to (`note_a_failed_explore_walk`): it does not
+        """A goal in this zone that the game files gave spots for, all of them tried or out of reach: it does not
         keep the wizard here. Back in the Commons with only its unreachable Smith open here, the walk to the other
         Smiths' zones was never tried and the quest was parked (17:11)."""
         if goal.get("destination_zone") != here:
             return False
-        spot = explore_spot(planner.placed_objects, goal)
-        return spot is not None and self._explore_failures.get(f"{spot.x:.0f},{spot.y:.0f}", 0) >= EXPLORE_FAILED_WALKS_TO_SKIP
+        failed = {key for key, count in self._explore_failures.items() if count >= EXPLORE_FAILED_WALKS_TO_SKIP}
+        if not failed and not self._spots_tried:
+            return False
+        everything = spots_for_goal(goal, quest_title=(self.record.quest or {}).get("title"), tagged=[],
+                                    placed=planner.placed_objects, volumes=getattr(planner, "trigger_volumes", []),
+                                    me=(0.0, 0.0))
+        return bool(everything) and all(spot.key in self._spots_tried | failed for spot in everything)
+
+    def try_the_spot(self, spot) -> None:
+        """The wizard stands at a spot the game files gave for a goal with no arrow and steps in: it is not tried
+        again, so if the goal does not move on, the next spot is (`untried_spots`)."""
+        key = f"{spot.x:.0f},{spot.y:.0f}"
+        if key not in self._spots_tried:
+            self._spots_tried.add(key)
+            self.events.emit("target", f"stepping into the spot at ({spot.x:.0f}, {spot.y:.0f}); if the goal stays "
+                                       "open there, it is not tried again")
 
     def note_a_failed_explore_walk(self, spot) -> None:
         """A walk to an Explore spot that failed every route method; after EXPLORE_FAILED_WALKS_TO_SKIP of them the
@@ -2709,6 +2732,8 @@ class QuestLoop:
         if await self.door_prompt_near(arrow):
             return await self.enter_with_x_turn()
         if flat_distance(here, arrow) <= WAYPOINT_ARRIVE_RADIUS:
+            if exploring:
+                self.try_the_spot(arrow)
             return await self.zone_door_turn(arrow)
 
         async def prompt_shows():

@@ -27,6 +27,7 @@ from .config import DEIMOS_VARIABLE
 from .routes import NavGraph, RoutePlanner, parse_nav_file
 from .patrols import PatrolMap, parse_nodes, parse_paths
 from .placed import parse_placed_objects
+from .untracked import parse_trigger_volumes
 from .teleports import parse_teleport_volumes
 
 WALL_CLEARANCE = 45.0
@@ -54,6 +55,7 @@ async def load_planner(zone: str, deimos_root: Path | None) -> RoutePlanner:
                            status={"collision": collision_status, "nav": nav_status, "teleports": teleport_status,
                                    "placed objects": placed_status, "patrols": patrol_status})
     planner.placed_objects = placed
+    planner.trigger_volumes = await _trigger_volumes(wad)
     planner.zone_data = zone_data
     planner.patrols = patrols
     if free is not None:
@@ -256,6 +258,13 @@ async def _teleport_volumes(wad):
     except Exception as exc:
         return [], f"unavailable: {type(exc).__name__}"
     return volumes, f"{len(volumes)} teleport volumes"
+
+
+async def _trigger_volumes(wad):
+    try:
+        return parse_trigger_volumes(await wad.get_file("volumes.xml"))
+    except Exception:
+        return []
 
 
 async def _nav_graph(wad):

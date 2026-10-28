@@ -208,6 +208,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **One lookup for goals the quest arrow does not lead to** (`untracked.py`, `QuestLoop.untried_spots`, `QuestLoop.try_the_spot`, `navigation._trigger_volumes`, `docs/lessons-learned.md`).
+  - **What:** with no quest arrow, a goal in the wizard's zone is looked for in the zone's files, in order: placed objects named by its tags, trigger volumes in `volumes.xml` named after the quest (every volume with an "Enter_" event is now read, `untracked.parse_trigger_volumes`), and the zone's Explore object for an "Explore" goal. The wizard walks to the nearest spot not yet tried; one it stepped into without the goal moving on is not tried again, and one that three walks could not reach is left; with none left, the quest is parked as before. The cog and Smith handling are now cases of it.
+  - **Why:** the operator, 2026-10-28 21:34 UTC: "Please add a similar framework update regarding quests where we need to pick up items that the quest arrow does not assist with. Like the cogs or smiths". Wizard City's zones each hold 8 to 38 named trigger volumes; the quest's words ("smith") pick its one "<zone> Smith" volume in each of the ten zones.
+  - **Verified:** offline (`tests/test_untracked.py`, with the Cogs and Smiths as fixtures; the parser checked on seven Wizard City zones' files).
+
 - **Ramps and stairs missing from the collision data are climbed by the nav graph, for every walk** (`ramps.foot_of_the_ramp`, `QuestLoop.ramp_foot`, `docs/lessons-learned.md`).
   - **What:** when a walk's destination is on another walkable piece, no gap step or teleport volume joins them, the collision data has no route and the nav graph has one, the wizard walks by the collision data to the nav route's last waypoint on its own piece, the foot of the ramp, and goes on by the nav legs from there. It replaces the same step that only "Explore" goals had.
   - **Why:** the operator, 2026-10-28 21:29 UTC: "Can you add the ramp/stair context to the framework? I feel like that's something that is repeatable enough and can be described vaguely enough that it is appropriate for the framework." The Commons and Olde Town Smiths were reached this way.
