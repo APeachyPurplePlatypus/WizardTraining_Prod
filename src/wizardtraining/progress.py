@@ -277,14 +277,17 @@ def worth_marking(here: str, goal_zone: str | None, marked_in: str | None, mana,
             and spare_mana(mana))
 
 
-def worth_recalling(here: str, goal_zone: str | None, marked_in: str | None, mana, door_for: str | None = None) -> bool:
+def worth_recalling(here: str, goal_zone: str | None, marked_in: str | None, mana, door_for: str | None = None,
+                    came_from: str | None = None) -> bool:
     """The Recall button holds a mark in the zone the goal is in, or at the door of the dungeon the goal is in
     (`door_for`), the wizard is elsewhere, not in the goal's zone, and it has the mana for Recall Location (about 5).
     The operator: "you might have forgot to use the teleport to the chamber of fire you created to get back there".
     In Cyclops Lane, the goal's zone, the wizard recalled to a mark set in the Dark Cave at a "door" for Cyclops Lane
-    (11:39)."""
+    (11:39). Not when the wizard walked here from the mark's zone (`came_from`): it is on its way from the door, and
+    the Recall would undo the walk. Triton Avenue's door to the underwater zone was marked for the instance below
+    it, and the wizard, through the door, recalled back to Triton at once (19:09:58)."""
     return (marked_in is not None and goal_zone in (marked_in, door_for) and here not in (marked_in, goal_zone)
-            and isinstance(mana, int) and mana >= RECALL_MANA_NEEDED)
+            and came_from != marked_in and isinstance(mana, int) and mana >= RECALL_MANA_NEEDED)
 
 
 PARK_AFTER_STRATEGIES = 3

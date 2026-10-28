@@ -514,6 +514,7 @@ class QuestLoop:
         if arrived and isinstance(state["zone"], str) and self._entering_with_x_from is not None:
             if state["zone"] != self._entering_with_x_from and state["zone"] not in self.record.entered_with_x:
                 self.record.entered_with_x.append(state["zone"])
+            self.mark_the_door_for(state["zone"], self._entering_with_x_from)
             self._entering_with_x_from = None
         if arrived and isinstance(state["zone"], str) and isinstance(state["position"], dict):
             self.record.arrivals[state["zone"]] = {"from": self._last_state["zone"],
@@ -2080,7 +2081,8 @@ class QuestLoop:
         marked_in = self.record.marked_in
         if (time.monotonic() < self._no_recall_until or marked_in is None or not self.travel_allowed_in(marked_in)
                 or not worth_recalling(state["zone"], goal.get("destination_zone"), marked_in, state["mana"],
-                                       self.record.mark_door_for)):
+                                       self.record.mark_door_for,
+                                       came_from=self.record.arrivals.get(state["zone"], {}).get("from"))):
             return None
         if await recall_tip(self.client) != self.record.mark_tip:
             self.events.emit("travel", f"the Recall button no longer names the mark in {marked_in}; forgetting it")
@@ -2841,6 +2843,18 @@ class QuestLoop:
         self.record.mark_door_for = goal_zone
         self.events.emit("travel", f"marked the door in {zone} before entering {goal_zone}, to recall to after a "
                                    "defeat or on the way back")
+
+    def mark_the_door_for(self, entered: str, door_zone: str) -> None:
+        """A door marked for the goal's zone (`mark_at_the_door`) that opened on another zone is that zone's door: the
+        goal is further in, so the mark is not one to recall to on the way to it. Triton Avenue's door to the
+        underwater zone was marked for the instance below it, and the wizard, through the door, recalled back to
+        Triton at once (19:09:58). The door further in is marked when the wizard reaches it."""
+        door_for = self.record.mark_door_for
+        if self.record.marked_in != door_zone or door_for in (None, entered):
+            return
+        self.record.mark_door_for = entered
+        self.events.emit("travel", f"the door marked in {door_zone} for {door_for} opened on {entered}; the mark is "
+                                   f"that zone's door")
 
     async def enter_with_x_turn(self, goal_zone: str | None = None) -> dict:
         """Press X at a door's interact prompt and give the zone change a few seconds to start. When a dialog opens

@@ -6,6 +6,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **No Recall back to a door the wizard just walked through** (`QuestLoop.mark_the_door_for`, `progress.worth_recalling`).
+  - **What:** a door marked for the goal's zone (`mark_at_the_door`) that opens on another zone becomes that zone's door, so it is not recalled to on the way to the goal further in; the door further in is marked when the wizard reaches it. And a Recall toward the goal is not worth it when the wizard walked here from the mark's zone.
+  - **Why:** Triton Avenue's "to Jump" door to the underwater zone was marked for the instance below it (WC_Triton_Underwater_T1). Once the underwater zone counted as a street, where the travel buttons work, the wizard came through the door and recalled back to Triton at once, pressed X again, and found Recall cooling down (19:09:43 to 19:10:06).
+  - **Verified:** offline (`tests/test_progress.py`); in the game: the next nested door.
+
 - **A street entered with X is not a dungeon** (`training.in_dungeon`).
   - **What:** a zone entered with X counts as a dungeon only when it is an interior ("/Interiors/" in its name); towers and dungeons named as such count as before.
   - **Why:** Triton Avenue's underwater zone (WC_Triton_Underwater/WC_Triton_Underwater) opens with X at a prompt, so it was kept as a dungeon, where the travel buttons are not pressed and the wizard refills in place. After each heavy fight there (465 to 707 of 1195 health) it took the wisps in reach and walked on at under half health, and at 554 of 1195 lost to a Royal Guard and a Riverclaw Guard in three rounds (19:02).

@@ -248,6 +248,13 @@ class WispTest(unittest.TestCase):
         self.assertTrue(worth_recalling(hub, dungeon, lane, 80, door_for=dungeon))
         self.assertFalse(worth_recalling(hub, dungeon, lane, 80))
         self.assertFalse(worth_recalling(lane, dungeon, lane, 80, door_for=dungeon))
+        self.assertTrue(worth_recalling(hub, dungeon, lane, 80, door_for=dungeon, came_from="WizardCity/WC_Streets/WC_Cyclops_Cave"))
+
+    def test_no_recall_back_to_the_door_just_walked_through(self):
+        triton, underwater = "WizardCity/WC_Streets/WC_Triton", "WizardCity/WC_Streets/WC_Triton_Underwater/WC_Triton_Underwater"
+        instance = "WizardCity/WC_Streets/WC_Triton_Underwater/Interiors/WC_Triton_Underwater_T1"
+        self.assertFalse(worth_recalling(underwater, instance, triton, 88, door_for=instance, came_from=triton))
+        self.assertTrue(worth_recalling("WizardCity/WC_Hub", instance, triton, 88, door_for=instance, came_from=underwater))
 
     def test_a_parked_quest_waits_for_the_next_level(self):
         self.assertTrue(parked({"Mad Maximus": 13}, "Mad Maximus", 13))
