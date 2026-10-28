@@ -30,6 +30,8 @@ class DungeonTest(unittest.TestCase):
     def test_towers_and_dungeons_by_name(self):
         self.assertTrue(in_dungeon("WizardCity/WC_Streets/Interiors/WC_HauntedCave_T1", []))
         self.assertTrue(in_dungeon("WizardCity/WC_Streets/Interiors/WC_Cyclops_T2", []))
+        self.assertTrue(in_dungeon("WizardCity/WC_Streets/WC_Golem_Tower/WC_Golem_Tower_3", []))
+        self.assertFalse(in_dungeon("WizardCity/WC_Golem_Tower", []))
         self.assertFalse(in_dungeon("WizardCity/WC_Streets/Interiors/WC_Firecat_H2", []))
         self.assertFalse(in_dungeon("WizardCity/WC_Streets/WC_HauntedCave", []))
         self.assertFalse(in_dungeon(COMMONS, []))

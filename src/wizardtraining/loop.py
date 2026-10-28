@@ -106,6 +106,7 @@ DUEL_WAIT_SECONDS = 30.0
 MAX_ACTIVATIONS_PER_QUEST = 2
 MARK_MANA_NEEDED = 8
 FEW_PLACES_TO_LOOK = 2
+MAX_WAITS_WITHOUT_GAIN_IN_A_DUNGEON = 2
 DUEL_WAIT_POLL_SECONDS = 3.0
 DEFEATED_HEALTH_FRACTION = 0.05
 NOT_FREE_TO_MOVE_WAIT_SECONDS = 3.0
@@ -134,6 +135,7 @@ class QuestLoop:
         self.wear_gear = wear_gear
         self.use_travel_buttons = use_travel_buttons
         self._marked_in: str | None = None
+        self._waits_without_gain = 0
         self._gear_checked: tuple | None = None
         self._finishing_since: float | None = None
         self.approaches = ApproachLog()
@@ -714,7 +716,9 @@ class QuestLoop:
                           "to follow it")
         if topped_up(mana_fraction(state)):
             self._topping_up_in = None
-        refill = short_for_a_fight(health_fraction(state), mana_fraction(state)) if goal["type"] in FIGHT_GOALS else None
+        inside_a_dungeon = in_dungeon(state["zone"], self.record.entered_with_x)
+        mana_for_the_gate = 1.0 if inside_a_dungeon else mana_fraction(state)
+        refill = short_for_a_fight(health_fraction(state), mana_for_the_gate) if goal["type"] in FIGHT_GOALS else None
         if refill is None and (self._topping_up_in == state["zone"] or not mana_to_travel(mana_fraction(state))):
             refill = "mana"
         if refill is not None:
@@ -889,6 +893,8 @@ class QuestLoop:
         nine to thirteen enemies lost mana, since the fights it led into cost 5 to 10 each and a wisp gives 3 to 6.
         The exit leads back toward the hub: from Cyclops Lane, to Olde Town. For health in a street, explore it:
         wisps are spawned, not placed, and load only nearby. Potions are never bought."""
+        if in_dungeon(state["zone"], self.record.entered_with_x):
+            return await self.dungeon_refill_turn(stat, state)
         indoors = INTERIOR_WORD in state["zone"]
         safe_zone = not indoors and state["zone"] not in self.record.zones_with_enemies
         if safe_zone and stat == "health" and not mana_for_a_fight(mana_fraction(state)):
@@ -915,6 +921,28 @@ class QuestLoop:
         if indoors:
             return stalled(f"too little {stat} for the fight, and no {stat} wisp here to fetch")
         return await self.explore_for_wisps_turn(stat, state, planner, reach=refill_reach(safe_zone))
+
+    async def dungeon_refill_turn(self, stat: str, state: dict) -> dict | None:
+        """Inside a tower or dungeon the wizard never leaves to refill: a walk out gives up its progress (the
+        operator: "I don't think you can leave a tower without losing progress"; the Golem Tower's floors were full
+        again after each trip out, and the game refuses Mark Location there). So: a wisp of the kind in reach,
+        else standing still between fights (health comes back as the wizard stands, about 2.4 a second in the
+        Commons), and after MAX_WAITS_WITHOUT_GAIN_IN_A_DUNGEON waits that gain nothing, None: the fight goes on
+        with the heals in hand. Health potions are drunk before this (`potion_turn`)."""
+        turn = await self.wisp_turn(stat, state, reach=refill_reach(False))
+        if turn is not None:
+            return turn
+        self.say_once("refill", f"{state[stat]} of {state['max_' + stat]} {stat} in {state['zone']}, a dungeon: "
+                                "refilling here, not leaving")
+        waited = await self.wait_for_mana_turn(state)
+        if waited["progress"]:
+            self._waits_without_gain = 0
+            return waited
+        self._waits_without_gain += 1
+        if self._waits_without_gain > MAX_WAITS_WITHOUT_GAIN_IN_A_DUNGEON:
+            self.say_once("refill", f"nothing came back while waiting in {state['zone']}; the fight goes on")
+            return None
+        return waited
 
     def saw_enemies(self, zone) -> None:
         """Remember that `zone` has enemies, for this run and, through the knowledge file, later ones."""

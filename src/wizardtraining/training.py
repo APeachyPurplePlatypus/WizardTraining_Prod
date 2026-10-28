@@ -28,7 +28,7 @@ from dataclasses import dataclass
 
 COMMONS = "WizardCity/WC_Hub"
 RAVENWOOD = "WizardCity/WC_Ravenwood"
-TOWER_OR_DUNGEON_NAME = re.compile(r"/Interiors/[^/]*_T\d+$")
+TOWER_OR_DUNGEON_NAME = re.compile(r"/Interiors/[^/]*_T\d+$|/WC_Golem_Tower/WC_Golem_Tower_\d+$")
 HUB_WORD, EXIT_WORD, ENTRANCE_WORD = "hub", "exit", "entrance"
 TRAINER, VOLUME, GATE = "trainer", "volume", "gate"
 
