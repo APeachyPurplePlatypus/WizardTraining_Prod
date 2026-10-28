@@ -394,6 +394,7 @@ def cheapest_finisher(view: RoundView, attacks: list[int]) -> Cast | None:
 
 
 TRAP_WORD = "trap"
+TRAP_LIFT = 0.4
 
 
 def is_trap(card: Card) -> bool:
@@ -403,7 +404,9 @@ def is_trap(card: Card) -> bool:
 def trap_before_a_big_hit(view: RoundView, attacks: list[int], target_rule: str) -> Cast | None:
     """A castable trap on the enemy the next attack goes to, when an attack of 2 pips or more is in hand (castable now
     or within two pips) and that enemy has no trap of its school on it yet: Ice Trap adds 40% to the next Ice hit, and
-    Colossus Boulevard's Evil Snowmen resist Ice by 20% (12:32 to 13:11, one fight lost). None otherwise."""
+    Colossus Boulevard's Evil Snowmen resist Ice by 20% (12:32 to 13:11, one fight lost). Only when the trap lifts
+    that school's hit to full damage or more: the Ice tower's Ice Colossus resists Ice by 50%, a trapped Ice hit still
+    did 70%, and two rounds went to traps while wands of other schools hit in full (14:21). None otherwise."""
     trap = first_castable(view.cards, is_trap)
     if trap is None or not view.enemies:
         return None
@@ -414,7 +417,10 @@ def trap_before_a_big_hit(view: RoundView, attacks: list[int], target_rule: str)
         return None
     enemy = most_dangerous(view.enemies) if target_rule == MOST_DANGEROUS else weakest(view.enemies)
     school = view.cards[trap].school
-    if any(modifier.percent > 0 and modifier.school in (school, UNIVERSAL) for modifier in view.enemies[enemy].incoming):
+    target = view.enemies[enemy]
+    if any(modifier.percent > 0 and modifier.school in (school, UNIVERSAL) for modifier in target.incoming):
+        return None
+    if target.damage_factor(school) * (1 + TRAP_LIFT) < 1.0:
         return None
     return Cast(trap, "enemy", enemy)
 
