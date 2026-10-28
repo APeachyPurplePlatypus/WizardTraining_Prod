@@ -92,6 +92,7 @@ ARROW_ARRIVE_RADIUS = 250.0
 WAYPOINT_ARRIVE_RADIUS = 150.0
 EXPLORE_ARRIVE_RADIUS = 40.0
 EXPLORE_FAILED_WALKS_TO_SKIP = 3
+STAGING_MIN_DISTANCE = 500.0
 PROMPT_DOOR_REACH = 2500.0
 NPC_PROMPT_RANGE = 400.0
 NOT_A_DOOR_RADIUS = 600.0
@@ -1776,6 +1777,25 @@ class QuestLoop:
             return None
         return await self.go_home_for(stat, state)
 
+    async def nav_staging_point(self, me, goal) -> XYZ | None:
+        """When the collision data has no route to `goal` but the nav graph has one: the last waypoint of the nav
+        route still on the wizard's walkable piece, at least STAGING_MIN_DISTANCE away, to walk to by the collision
+        route first; else None. In the Commons the ramps up to the Smith's terrace are missing from the collision
+        data, and the nav route's one long leg across the middle left the wizard stuck at (-1012, 851), far off it;
+        the collision route reaches the foot of the ramp at (-3877, 1443) around the middle (17:05)."""
+        planner = await self.planner()
+        if not planner.piece_of or await asyncio.to_thread(planner.route, "collision", me, goal) is not None:
+            return None
+        legs = await asyncio.to_thread(planner.route, "nav", me, goal)
+        here = planner.piece_of((me.x, me.y), 150)
+        if not legs or here is None:
+            return None
+        on_this_side = [point for point in legs if planner.piece_of((point[0], point[1]), 150) == here]
+        if not on_this_side or flat_distance(me, XYZ(on_this_side[-1][0], on_this_side[-1][1], 0.0)) < STAGING_MIN_DISTANCE:
+            return None
+        last = on_this_side[-1]
+        return XYZ(last[0], last[1], me.z)
+
     def left_for_this_run(self, goal: dict, planner: RoutePlanner, here: str) -> bool:
         """A goal in this zone whose Explore spot could not be walked to (`note_a_failed_explore_walk`): it does not
         keep the wizard here. Back in the Commons with only its unreachable Smith open here, the walk to the other
@@ -2680,6 +2700,11 @@ class QuestLoop:
         here = await self.client.body.position()
         exploring = not leads_to_another_zone(goal, await self.client.zone_name())
         if exploring and flat_distance(here, arrow) > WAYPOINT_ARRIVE_RADIUS:
+            if goal.get("name_key") == EXPLORE_GOAL and (staging := await self.nav_staging_point(here, arrow)) is not None:
+                self.events.emit("walk", f"no collision route to the spot; walking by collision to the nav graph's last "
+                                         f"waypoint on this side, ({staging.x:.0f}, {staging.y:.0f}), then on by its legs")
+                return await self.travel_turn("walk to the foot of the nav route", staging,
+                                              arrive_radius=WAYPOINT_ARRIVE_RADIUS, avoid=await nearby_enemies(self.client))
             radius = EXPLORE_ARRIVE_RADIUS if goal.get("name_key") == EXPLORE_GOAL else WAYPOINT_ARRIVE_RADIUS
             turn = await self.travel_turn("explore toward the waypoint", arrow, arrive_radius=radius,
                                           avoid=await nearby_enemies(self.client))
