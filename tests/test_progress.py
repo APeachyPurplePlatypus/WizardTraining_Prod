@@ -319,6 +319,13 @@ class HeavyFightTest(unittest.TestCase):
         self.assertFalse(heavy_fight(1133, 1033, 1133))
         self.assertFalse(heavy_fight(None, 543, 1133))
 
+    def test_a_to_enter_door_waits_for_a_refill(self):
+        from wizardtraining.progress import short_before_entering
+        self.assertEqual(short_before_entering("Enter", 525 / 1164, 68 / 96), "health")
+        self.assertEqual(short_before_entering("Enter", 1100 / 1164, 60 / 96), "mana")
+        self.assertIsNone(short_before_entering("Enter", 1100 / 1164, 90 / 96))
+        self.assertIsNone(short_before_entering("Jump", 525 / 1164, 68 / 96))
+
     def test_obstacles_learned_near_a_spot_are_forgotten(self):
         from wizardtraining.progress import forget_obstacles_near
         shop = record()

@@ -52,7 +52,7 @@ from .navigation import load_planner
 from .policy import LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, SpellTypePolicy, biggest_hits
 from .progress import (DUEL_BLOCKS_THE_WAY, DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY, ENEMY_NEAR_PATH, LimitReached, Limits, PATH_THREATS,
                        PlannedRoute, RunRecord, StopRun, check_limits, leaves_world, health_to_travel, mana_for_a_fight, mana_to_travel, still_to_recharge, worth_marking, worth_recalling,
-                       PARK_AFTER_STRATEGIES, HEAVY_ZONE_FIGHTS, RECALL_MANA_NEEDED, RECHARGE_HEALTH_FRACTION, heavy_fight, parked, worth_pushing_on, made_headway, GOAL_HEADWAY, STALLED_TRIPS_TO_PARK, forget_obstacles_near, OBSTACLE_FORGET_RADIUS,
+                       PARK_AFTER_STRATEGIES, HEAVY_ZONE_FIGHTS, RECALL_MANA_NEEDED, RECHARGE_HEALTH_FRACTION, heavy_fight, parked, worth_pushing_on, short_before_entering, made_headway, GOAL_HEADWAY, STALLED_TRIPS_TO_PARK, forget_obstacles_near, OBSTACLE_FORGET_RADIUS,
                        nav_did_better, progressed, ready_to_recall, remember_obstacles, safe_to_stand, short_for_a_fight,
                        should_drink_potion, stalled, topped_up, travel_outcome, wanted_wisp,
                        WISP_ANY_DIRECTION_BELOW_FRACTION, world_of)
@@ -2849,6 +2849,8 @@ class QuestLoop:
         zone = await self.client.zone_name()
         here = await self.client.body.position()
         action = prompt_action(await or_default(interact_prompt_text(self.client), ""))
+        if (refill := await self.refill_before_entering(action, zone)) is not None:
+            return refill
         await self.mark_at_the_door(zone)
         await tap(self.client, Keycode.X, TALK_KEY_SECONDS)
         self.events.emit("door", f"the interact prompt showed near a door into another zone (\"to {action}\"); "
@@ -2866,6 +2868,21 @@ class QuestLoop:
                 return progressed("pressed X at the interact prompt: a dialog opened")
             await asyncio.sleep(DOOR_POLL_SECONDS)
         return stalled("pressed X at the interact prompt, but the zone did not change")
+
+    async def refill_before_entering(self, action: str | None, zone: str) -> dict | None:
+        """At a "to Enter" door with health or mana short of a recharge (`progress.short_before_entering`), and the
+        travel buttons allowed here: mark the door and refill in the Commons first, so the Recall comes back to the
+        door and the wizard goes in refilled. None to go in now."""
+        state = await snapshot(self.client)
+        stat = short_before_entering(action, health_fraction(state), mana_fraction(state))
+        if stat is None or not self.use_travel_buttons or not self.travel_allowed_in(zone):
+            return None
+        trip = await self.commons_trip_turn(stat, state)
+        if trip is not None:
+            self.events.emit("door", f"a \"to Enter\" door with {state['health']} of {state['max_health']} health and "
+                                     f"{state['mana']} of {state['max_mana']} mana: refilling in the Commons first, "
+                                     "then Recall back to the door")
+        return trip
 
     async def gap_turn(self, step: GapStep, zone: str, planner: RoutePlanner) -> dict:
         """Walk to the edge of the wizard's walkable piece where the goal's comes nearest (`RoutePlanner.gap_step`),

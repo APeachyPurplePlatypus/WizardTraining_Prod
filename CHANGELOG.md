@@ -208,6 +208,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **A "to Enter" door is gone through refilled** (`progress.short_before_entering`, `QuestLoop.refill_before_entering`, `docs/lessons-learned.md`).
+  - **What:** before pressing X at a "to Enter" prompt with health under 90% or mana under 80%, the wizard marks the door and refills in the Commons, then Recalls back to the door and goes in. A dungeon-entry box after X is still left for the operator.
+  - **Why:** "Odd Tidings"' waypoint under Triton Avenue was the door of WC_Triton_Underwater_T1, an instance entered at 525 of 1164 health right after a costly fight (18:40); inside, the wizard refills in place. The coordinator asked for it.
+  - **Verified:** offline (`tests/test_progress.py`; imports, tests).
+
 - **Zones the hand-kept tree lacks are reached by the links and doors learned walking** (`travelplan.next_zone_on_the_way`, `RunRecord.zone_doors`, `QuestLoop.learn_the_door`, `QuestLoop.learned_door_toward`, `docs/lessons-learned.md`).
   - **What:** after each walked zone change, the spot where the wizard came in is kept as the door back toward the zone it left. Where the zone tree knows no way to a goal's zone, the zone walk takes the first zone of the fewest-doors way through the learned links and walks to that door.
   - **Why:** the coordinator asked to derive the zone tree from the game data after Colossus Boulevard and Triton Avenue's underwater zone were both missing. The zone files do not name where street doors lead (a scan of four Wizard City zones found only interiors and sub-zones named in `gamedata.bin`), so the links walked are the data; the learned links already held Shopping District to Colossus Boulevard.

@@ -310,6 +310,24 @@ def made_headway(distance_to_goal: float | None, at_last_trip: float | None) -> 
     return distance_to_goal is None or at_last_trip is None or distance_to_goal <= at_last_trip - GOAL_HEADWAY
 
 
+ENTER_ACTION = "enter"
+
+
+def short_before_entering(action: str | None, health: float | None, mana: float | None) -> str | None:
+    """Before pressing X at a "to Enter" door, "health" or "mana" when either is under what a recharge refills to
+    (RECHARGE_HEALTH_FRACTION, RECHARGE_MANA_FRACTION), health first; None otherwise or for other prompts. Such a
+    door can open on a tower or an instance the wizard does not walk out of partway: Triton Avenue's underwater
+    "Odd Tidings" waypoint was the door of WC_Triton_Underwater_T1, entered at 45% health after a costly fight
+    (18:40). The prompt does not name the zone it opens on, so every "to Enter" door is treated alike."""
+    if (action or "").strip().lower() != ENTER_ACTION:
+        return None
+    if health is not None and health < RECHARGE_HEALTH_FRACTION:
+        return "health"
+    if mana is not None and mana < RECHARGE_MANA_FRACTION:
+        return "mana"
+    return None
+
+
 def worth_pushing_on(health: float | None, distance_to_goal: float | None, *, stalled: bool = False) -> bool:
     """After a heavy fight, the goal is within GOAL_PUSH_DISTANCE and the wizard has GOAL_PUSH_HEALTH_FRACTION of
     its health or more: go on to the goal rather than refill first. On Colossus Boulevard every fight cost more than

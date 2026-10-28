@@ -61,6 +61,8 @@ These come from one character's first unattended play, level 1 to level 5 in Wiz
 
 ## Health
 
+- **Go in refilled.** A "to Enter" door can open on a tower or an instance the wizard does not walk out of partway, and its prompt does not name the zone. So at any "to Enter" door with health under 90% or mana under 80%, the wizard marks the door and refills in the Commons first, then Recalls back and goes in (`progress.short_before_entering`, `QuestLoop.refill_before_entering`). A quest waypoint under Triton Avenue was such a door, entered at 45% health (2026-10-28).
+
 - **Health regenerates outdoors** (about 1.6 HP/s in the Commons) **but not in every interior**, nor on Triton Avenue or Cyclops Lane. Resting in one froze the run. Resting was later dropped altogether as too slow: health comes from potions, wisps, in-battle heals and level-ups.
 - **A dungeon keeps its progress for 30 minutes after the wizard leaves.** Sunken City's entry box says so ("If you log out or leave for more than 30 minutes, you will lose all of the progress you have made in this Dungeon"). The operator, 2026-10-28 20:48 UTC, relayed: after leaving, the game may show an extra teleport button by Go Home and Recall that returns to the dungeon within the timer; the 01:11 Recall back into WC_Cyclops_T1 used Recall instead and failed. Not yet tried: at the next dungeon, read the HUD's buttons (names, tooltips, timers) right after leaving, log them, and test one refill trip with that button, back well inside 30 minutes. Until that works, dungeons are refilled in place.
 
