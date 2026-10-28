@@ -314,6 +314,14 @@ class QuestLoop:
             return None
         if in_dungeon(state["zone"], self.record.entered_with_x) and not self.travel_allowed_in(state["zone"]):
             return None
+        if (self._heavy_fights.get(state["zone"], 0) >= HEAVY_ZONE_FIGHTS and self.use_travel_buttons
+                and self._marked_in is None and self.travel_allowed_in(state["zone"])):
+            trip = await self.commons_trip_turn("health", state)
+            if trip is not None:
+                self.events.emit("health", f"{self._heavy_fights[state['zone']]} heavy fights in {state['zone']}: "
+                                           "refilling in the Commons, then Recall back, rather than looking for "
+                                           "wisps among its enemies")
+                return trip
         return await self.refill_turn("health", state)
 
     async def check_experience(self, turn: dict) -> None:
