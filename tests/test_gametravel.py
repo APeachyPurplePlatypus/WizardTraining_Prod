@@ -117,6 +117,20 @@ class GameTravelTest(unittest.TestCase):
         self.assertIsNone(run(game, gametravel.recall))
         self.assertEqual(game.clicked, ["RecallButton"])
 
+    def test_a_recall_the_game_refuses_after_a_load_began_is_not_taken_for_done(self):
+        """At 01:32 the game began a load, then refused: "The dungeon timer has ended and the dungeon has been reset."
+        The wizard stayed in the Commons."""
+        game = Game(zone="WizardCity/WC_Hub", marked=True)
+
+        async def refused_click(client, path):
+            game.clicked.append(path[-1])
+            game.loading = True
+            asyncio.get_running_loop().call_later(0.05, setattr, game, "loading", False)
+
+        game.click = refused_click
+        self.assertEqual(run(game, gametravel.recall), gametravel.RECALL_NOT_REACHED)
+        self.assertEqual(game.zone, "WizardCity/WC_Hub")
+
     def test_only_the_three_travel_buttons_are_ever_clicked(self):
         game = Game()
         run(game, gametravel.mark_here)

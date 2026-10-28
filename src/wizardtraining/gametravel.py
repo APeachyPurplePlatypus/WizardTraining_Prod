@@ -101,11 +101,26 @@ async def go_to_the_commons(client) -> str | None:
 
 
 async def recall(client) -> str | None:
-    """Press Recall Location and wait for the zone, or the position, to change. None when it did."""
+    """Press Recall Location and wait for the zone to change and the load to end. None when the wizard is in another
+    zone then. A load that began is not enough: at 01:32 the game began one, then refused ("You cannot teleport to
+    that location. The dungeon timer has ended and the dungeon has been reset.") and the wizard stayed in the
+    Commons, while the run took the Recall for done."""
     if not await has_mark(client):
         return "no spot is marked"
     if await cooling_down(client, RECALL_TIMER):
         return "Recall is cooling down"
     zone = await client.zone_name()
     await click(client, RECALL_BUTTON)
-    return None if await wait_for_zone_change(client, zone) else RECALL_NOT_REACHED
+    if not await wait_for_zone_change(client, zone):
+        return RECALL_NOT_REACHED
+    return None if await zone_after_loading(client) not in (None, zone) else RECALL_NOT_REACHED
+
+
+async def zone_after_loading(client) -> str | None:
+    """The zone once loading has ended, waiting up to ZONE_CHANGE_WAIT_SECONDS; None when it does not end."""
+    deadline = asyncio.get_running_loop().time() + ZONE_CHANGE_WAIT_SECONDS
+    while asyncio.get_running_loop().time() < deadline:
+        if await or_default(client.is_loading(), False) is not True:
+            return await or_default(client.zone_name(), None)
+        await asyncio.sleep(ZONE_CHANGE_POLL_SECONDS)
+    return None
