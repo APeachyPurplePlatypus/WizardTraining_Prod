@@ -178,6 +178,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **A search point a players' fight blocks counts as searched, for wisps, photo subjects and essence enemies too** (`QuestLoop.explore_for_wisps_turn`, `photo_of_turn`, `essence_turn`).
+  - **What:** as in the reagent search, a point the walk could not reach because of another players' fight or a crowd of enemies is counted as searched, and the search goes on to the next point.
+  - **Why:** in Colossus Boulevard (12:45), at 543 health, the wisp search's next point was cut off by a players' fight, and the walk waited for it to end, again and again (up to 20 waits), where any other point would do.
+  - **Verified:** offline (imports, tests); in the game: the waits of 12:45.
+
 - **"The Gravulum Order" is played again: Colossus Boulevard is open** (`sidequests.UNSUPPORTED`).
   - **What:** the quest is no longer passed over.
   - **Why:** the Quest Finder led to the Headmistress, whose menu gave "Colossal Trouble" (12:29); its talks led to "Pixiecrown Project" and into Colossus Boulevard (12:31:08), the tunnel that had stopped the wizard at its blocker that morning. The operator had said it likely needed another quest first.

@@ -1825,7 +1825,9 @@ class QuestLoop:
         """Walk to the nearest part of the zone not explored for this kind of wisp yet, stopping as soon as an
         untried one loads within `reach`, the distance the refill fetches from (`targets.refill_reach`). Once every
         part has been seen, start over, since used-up wisps come back; or, with `again` false, None. Parts reached
-        only through a door not known to stay in the zone are skipped (`area_to_search`)."""
+        only through a door not known to stay in the zone are skipped (`area_to_search`). A part a players' fight or
+        a crowd of enemies keeps the walk from counts as seen: in Colossus Boulevard one players' fight held the
+        search at its point for wait after wait (12:45)."""
         kind = HEALTH_WISP if stat == "health" else MANA_WISP
         explored = self.record.explored.setdefault(f"{state['zone']}|{kind}s", [])
         me = await self.client.body.position()
@@ -1850,7 +1852,8 @@ class QuestLoop:
 
         turn = await self.travel_turn(f"explore for {kind}s", XYZ(x, y, 0.0), arrive_radius=WAYPOINT_ARRIVE_RADIUS * 3,
                                       also=wisp_in_sight, avoid=await nearby_enemies(self.client))
-        if turn.get("trip", {}).get("reason") in (None, f"{kind} in sight", "every route method failed"):
+        if turn.get("trip", {}).get("reason") in (None, f"{kind} in sight", "every route method failed",
+                                                  DUEL_BLOCKS_THE_WAY, ENEMIES_IN_THE_WAY):
             explored.append((round(x), round(y)))
         return turn
 
@@ -2014,7 +2017,8 @@ class QuestLoop:
             self.say_once("photo", f"{subject} not in sight in {zone}; looking at ({x:.0f}, {y:.0f})")
             turn = await self.travel_turn(f"look for {subject}", XYZ(x, y, 0.0), arrive_radius=WAYPOINT_ARRIVE_RADIUS * 3,
                                           also=subject_in_sight, avoid=await nearby_enemies(self.client))
-            if turn.get("trip", {}).get("reason") in (None, f"{subject} in sight", "every route method failed"):
+            if turn.get("trip", {}).get("reason") in (None, f"{subject} in sight", "every route method failed",
+                                                      DUEL_BLOCKS_THE_WAY, ENEMIES_IN_THE_WAY):
                 explored.append((round(x), round(y)))
             return turn
         if flat_distance(me, where) > PHOTO_DISTANCE:
@@ -2132,7 +2136,8 @@ class QuestLoop:
         self.say_once("gather", f"no {enemy} in sight in {zone}; looking at ({x:.0f}, {y:.0f})")
         turn = await self.travel_turn(f"look for a {enemy}", XYZ(x, y, 0.0), arrive_radius=WAYPOINT_ARRIVE_RADIUS * 3,
                                       also=enemy_in_sight, avoid=enemies)
-        if turn.get("trip", {}).get("reason") in (None, f"{enemy} in sight", "every route method failed"):
+        if turn.get("trip", {}).get("reason") in (None, f"{enemy} in sight", "every route method failed",
+                                                  DUEL_BLOCKS_THE_WAY, ENEMIES_IN_THE_WAY):
             explored.append((round(x), round(y)))
         return turn
 
