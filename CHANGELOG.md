@@ -178,6 +178,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **"A River Runs Through It" is passed over: its goal is a fish** (`sidequests.UNSUPPORTED`).
+  - **What:** the fishing quest from the Commons fisherman is listed as one the framework cannot do.
+  - **Why:** its scavenge goal is a "Frost Dekoi", caught with the fishing minigame, which the framework does not play; the ground of the Commons was searched for it as if it were a reagent (12:22).
+  - **Verified:** offline (`tests/test_sidequests.py`).
+
 - **Ravenwood's way back to the Commons is its "to Commons" volume** (`training.way_out_toward_the_commons`).
   - **What:** a volume named for the Commons counts as the way back toward it, as one named for the hub does.
   - **Why:** "Ready, Aim, Shoot!" photographed Mr. Lincoln in Ravenwood (12:20, the Viewfinder naming him at 150 units), then was parked: "no way is known to WizardCity/WC_Hub, where Hilda Brewer is to be photographed". Ravenwood's volumes are named "to Commons" and "to ...School", none for the hub or as an exit.

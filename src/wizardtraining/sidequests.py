@@ -20,6 +20,9 @@ UNSUPPORTED = {
                           "prerequisite quest: the account is a premium member, so it is not membership (the "
                           "operator, 2026-10-28: \"it's likely you can't get into Colossus boulevard because you need "
                           "need to compete another quest to gain access\")",
+    "A River Runs Through It": "its goal is a fish (\"Frost Dekoi\") caught with the fishing minigame, from the "
+                               "Commons fisherman's menu (12:21); the framework does not fish, and the ground was "
+                               "searched for it as if it were a reagent (12:22)",
 }
 
 
