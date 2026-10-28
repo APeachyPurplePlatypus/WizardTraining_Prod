@@ -45,7 +45,13 @@ WALK_STRATEGIES = (
     ("forget the obstacles here", "obstacles recorded here may be enemies or players that have moved on"),
     ("wait for the way to clear", "enemies or another player's fight may be in the way for a while"),
     ("go to the Commons and come back", "a fresh start from the hub, by the game's own travel buttons"),
+    ("go to the Commons and walk back", "the way here is held by enemies: from the hub, another way in, without a mark "
+                                        "that would bring the wizard back into them"),
 )
+NO_CLOSER_SECONDS = 300.0
+NO_CLOSER_FIGHTS = 3
+CLOSER_BY = 300.0
+CROWD_STRATEGIES = ("wait for the way to clear", "go to the Commons and walk back")
 
 
 def next_combat_strategy(tried: list[str]) -> CombatStrategy | None:
@@ -53,10 +59,38 @@ def next_combat_strategy(tried: list[str]) -> CombatStrategy | None:
     return next((strategy for strategy in COMBAT_STRATEGIES if strategy.name not in tried), None)
 
 
-def next_walk_strategy(tried: list[str], available: set[str] | None = None) -> tuple[str, str] | None:
-    """The first walk strategy, as (name, why), not among `tried` and among `available` when given, or None."""
-    return next(((name, why) for name, why in WALK_STRATEGIES
+def next_walk_strategy(tried: list[str], available: set[str] | None = None, first=()) -> tuple[str, str] | None:
+    """The first walk strategy, as (name, why), not among `tried` and among `available` when given, those named in
+    `first` before the rest; or None."""
+    ordered = sorted(WALK_STRATEGIES, key=lambda strategy: (strategy[0] not in first, list(first).index(strategy[0])
+                                                            if strategy[0] in first else 0))
+    return next(((name, why) for name, why in ordered
                  if name not in tried and (available is None or name in available)), None)
+
+
+class GoalApproach:
+    """Whether the wizard is getting any closer to its goal. Fights count as progress for a turn, so a walk held by
+    a spawn that keeps engaging never stalled: in the Pyramid's Chamber the wizard won fight after fight, 15,000
+    units from the assistant it was walking to, for over ten minutes. The operator: "you should be trying different
+    strategies if something isn't working". No closer by CLOSER_BY for NO_CLOSER_SECONDS, or over NO_CLOSER_FIGHTS
+    fights, is a stall."""
+
+    def __init__(self):
+        self.key, self.best, self.since, self.fights = None, float("inf"), 0.0, 0
+
+    def note(self, key, distance: float, now: float, fought: bool) -> bool:
+        if key != self.key:
+            self.key, self.best, self.since, self.fights = key, distance, now, 0
+            return False
+        if distance < self.best - CLOSER_BY:
+            self.best, self.since, self.fights = distance, now, 0
+            return False
+        if fought:
+            self.fights += 1
+        return now - self.since >= NO_CLOSER_SECONDS or self.fights >= NO_CLOSER_FIGHTS
+
+    def restart(self, now: float) -> None:
+        self.since, self.fights = now, 0
 
 
 def fight_situation(enemy_names: list[str]) -> str:

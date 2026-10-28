@@ -1,6 +1,7 @@
 import unittest
 
-from wizardtraining.strategies import (COMBAT_STRATEGIES, WALK_STRATEGIES, fight_situation, next_combat_strategy,
+from wizardtraining.strategies import (COMBAT_STRATEGIES, CROWD_STRATEGIES, NO_CLOSER_FIGHTS, NO_CLOSER_SECONDS,
+                                       WALK_STRATEGIES, GoalApproach, fight_situation, next_combat_strategy,
                                        next_walk_strategy)
 
 
@@ -29,6 +30,29 @@ class StrategiesTest(unittest.TestCase):
         available = {"wait for the way to clear"}
         self.assertEqual(next_walk_strategy([], available)[0], "wait for the way to clear")
         self.assertIsNone(next_walk_strategy(["wait for the way to clear"], available))
+
+    def test_crowd_strategies_come_first_when_asked_for(self):
+        self.assertEqual(next_walk_strategy([], first=CROWD_STRATEGIES)[0], "wait for the way to clear")
+        self.assertEqual(next_walk_strategy(["wait for the way to clear"], first=CROWD_STRATEGIES)[0],
+                         "go to the Commons and walk back")
+
+    def test_a_walk_no_closer_for_three_fights_or_five_minutes_is_a_stall(self):
+        approach, key = GoalApproach(), ("Krokotopia/KT_Pyramid/KT_Chamber", "QuestTitle", 1)
+        self.assertFalse(approach.note(key, 15000, 0.0, fought=False))
+        for fight in range(NO_CLOSER_FIGHTS - 1):
+            self.assertFalse(approach.note(key, 15100, 10.0 + fight, fought=True))
+        self.assertTrue(approach.note(key, 14900, 20.0, fought=True))
+        approach.restart(20.0)
+        self.assertFalse(approach.note(key, 15000, 30.0, fought=False))
+        self.assertTrue(approach.note(key, 15000, 20.0 + NO_CLOSER_SECONDS, fought=False))
+
+    def test_getting_closer_or_a_new_goal_starts_over(self):
+        approach, key = GoalApproach(), ("zone", "quest", 1)
+        approach.note(key, 15000, 0.0, fought=False)
+        approach.note(key, 15000, 10.0, fought=True)
+        approach.note(key, 15000, 11.0, fought=True)
+        self.assertFalse(approach.note(key, 10000, 12.0, fought=True))
+        self.assertFalse(approach.note(("zone", "quest", 2), 10000, 999.0, fought=True))
 
     def test_a_fight_is_known_by_its_enemies_in_any_order(self):
         self.assertEqual(fight_situation(["Lord Nightshade", "Field Guard"]), fight_situation(["Field Guard", "Lord Nightshade"]))

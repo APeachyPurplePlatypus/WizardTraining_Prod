@@ -55,7 +55,7 @@ from .reports import plain, save_report
 from .patrols import VIEWS_TO_JUDGE, note_sightings, unwalked_paths
 from .routes import GapStep, Hazards, RoutePlanner, duel_clearance
 from .sidequests import unsupported_reason
-from .strategies import fight_situation, next_combat_strategy, next_walk_strategy
+from .strategies import CROWD_STRATEGIES, GoalApproach, fight_situation, next_combat_strategy, next_walk_strategy
 from .screen import or_default, prompt_action, prompt_offers_talk
 from .spellbook import SpellCatalog, deck_spells, learned_spell_ids
 from .spells import KNOWN_AT_FIRST_CHECK, LEARNED, SpellLog, learned_text, newly_learned, spell_entry
@@ -140,6 +140,7 @@ class QuestLoop:
         self._marked_in: str | None = None
         self._dungeons_give_nothing_back = False
         self._refill_fully = False
+        self.goal_approach = GoalApproach()
         self._gear_checked: tuple | None = None
         self._finishing_since: float | None = None
         self.approaches = ApproachLog()
@@ -218,13 +219,29 @@ class QuestLoop:
                         goal=(quest.get("goal"), quest.get("goal_zone")), arrow=plain_xy({"position": quest.get("arrow")}))
             self.record.record_turn(turn)
             self.record.note_place(state["zone"], (quest.get("name"), quest.get("goal_id")))
+            await self.check_getting_closer(state, turn, quest)
             await self.check_spells(state)
             log.info("turn %d: %s (progress=%s, level=%s, health=%s, zone=%s, goal=%s %s)", len(self.record.turns),
                      turn["did"], turn["progress"], state["level"], health_text(state), state["zone"], quest.get("goal"),
                      quest.get("goal_zone") or "")
             self.note_changes(state)
 
-    async def try_another_walk_strategy(self, state: dict) -> None:
+    async def check_getting_closer(self, state: dict, turn: dict, quest: dict) -> None:
+        """For a goal that is not a fight, a walk that gets no closer to the quest arrow for a while is a stall
+        (`strategies.GoalApproach`), and another walk strategy is tried, the crowd strategies first: waiting for
+        the way to clear, then the Commons and back another way."""
+        arrow, position = quest.get("arrow"), state.get("position")
+        if not isinstance(arrow, dict) or not isinstance(position, dict) or quest.get("goal") in FIGHT_GOALS:
+            return
+        key = (state["zone"], quest.get("name"), quest.get("goal_id"))
+        distance = flat_distance(XYZ(position["x"], position["y"], 0.0), XYZ(arrow["x"], arrow["y"], 0.0))
+        if self.goal_approach.note(key, distance, time.monotonic(), fought=turn.get("did") == "battle"):
+            self.events.emit("strategy", f"no closer to the goal in {state['zone']} ({distance:.0f} units) for "
+                                         f"{self.goal_approach.fights} fights or longer")
+            await self.try_another_walk_strategy(state, first=CROWD_STRATEGIES)
+            self.goal_approach.restart(time.monotonic())
+
+    async def try_another_walk_strategy(self, state: dict, first=()) -> None:
         """Several turns went by without progress: take the next walk strategy not yet tried in this zone for this
         goal (`strategies.next_walk_strategy`), say which and why, and count the turns again. When every one has
         been tried here, the run stops for the operator, naming them."""
@@ -233,8 +250,8 @@ class QuestLoop:
         tried = self.record.walk_strategies_tried.setdefault(situation, [])
         available = {"nav graph first", "collision data first", "forget the obstacles here", "wait for the way to clear"}
         if self.use_travel_buttons and not in_dungeon(state["zone"], self.record.entered_with_x):
-            available.add("go to the Commons and come back")
-        choice = next_walk_strategy(tried, available)
+            available |= {"go to the Commons and come back", "go to the Commons and walk back"}
+        choice = next_walk_strategy(tried, available, first)
         if choice is None:
             raise StopRun(f"several turns without progress at {situation}, after trying {', '.join(tried) or 'nothing'}")
         name, why = choice
@@ -261,6 +278,8 @@ class QuestLoop:
                 await asyncio.sleep(1.0)
         elif name == "go to the Commons and come back":
             await self.commons_trip_turn("mana", state)
+        elif name == "go to the Commons and walk back":
+            await self.commons_trip_turn("mana", state, mark=False)
 
     async def check_spells(self, state: dict) -> None:
         """Every SPELL_CHECK_SECONDS, and at once after a level up, compare the learned spells with those known
@@ -1078,7 +1097,7 @@ class QuestLoop:
                      for stat in ("mana", "health"))
         return (progressed if gained else stalled)("waited for mana", before=state["mana"], after=now["mana"])
 
-    async def commons_trip_turn(self, stat: str, state: dict) -> dict | None:
+    async def commons_trip_turn(self, stat: str, state: dict, mark: bool = True) -> dict | None:
         """Short of mana in a street with no wisp to fetch, or of health in a zone too small to look for wisps in
         (a Golem Tower floor has one place to look): mark the spot (Mark Location costs about 5 mana, so only with
         MARK_MANA_NEEDED), then Go to The Commons, the world's hub, where mana and health come back (free; a walk
@@ -1086,7 +1105,7 @@ class QuestLoop:
         `back_from_the_commons_turn` returns to the mark. None when the tools cannot be used now, so the wizard
         walks."""
         zone = state["zone"]
-        if self._marked_in is None and isinstance(state["mana"], int) and state["mana"] >= MARK_MANA_NEEDED:
+        if mark and self._marked_in is None and isinstance(state["mana"], int) and state["mana"] >= MARK_MANA_NEEDED:
             problem = await mark_here(self.client)
             self.events.emit("travel", f"marked the spot in {zone} before leaving for mana" if problem is None else
                                        f"could not mark the spot in {zone}: {problem}")
