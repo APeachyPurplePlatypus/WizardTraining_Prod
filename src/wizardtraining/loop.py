@@ -1862,6 +1862,13 @@ class QuestLoop:
             if door is not None:
                 self.say_once("gather", f"no {reagent} left to find in {zone}; going on to {other}")
                 return await self.walk_to_door_turn(f"walk toward {other} for {reagent}", *door)
+        title = " ".join(((self.record.quest or {}).get("title") or "").split())
+        level = (await snapshot(self.client))["level"]
+        if self.record.clearing_world and title and isinstance(level, int):
+            self.record.parked_quests[title] = level
+            self.events.emit("gather", f"no {reagent} found in {', '.join(sorted(searched))}; parking {title} until the "
+                                       f"wizard is past level {level}, while the world's other quests go on")
+            return progressed("parked a quest whose reagent was not found", quest=title)
         raise StopRun(f"no {reagent} found in {', '.join(sorted(searched))}, and no way to another open zone of "
                       f"{world_of(zone)} is known; left for the operator")
 
