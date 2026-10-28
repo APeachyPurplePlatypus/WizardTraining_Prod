@@ -34,6 +34,8 @@ MAX_PAGES = 8
 BOOK_OPEN_SECONDS = 2.0
 PAGE_SETTLE_SECONDS = 1.5
 ACTIVATE_SETTLE_SECONDS = 2.0
+TAB_WAIT_SECONDS = 6.0
+TAB_POLL_SECONDS = 0.5
 
 
 @dataclass(frozen=True)
@@ -55,6 +57,20 @@ async def quest_entries(client) -> list[tuple[object, str]]:
     return entries
 
 
+def same_title(first: str, second: str) -> bool:
+    """Quest titles are equal ignoring stray spaces: the journal holds "The Lore You Know " with a trailing space, and
+    the quest page shows it without."""
+    return " ".join(first.split()) == " ".join(second.split())
+
+
+async def wait_for_window(client, path: list[str]) -> None:
+    """Wait up to TAB_WAIT_SECONDS for a window to exist: the book takes a moment to open, and a second use right
+    after a close found no Quest tab."""
+    deadline = asyncio.get_running_loop().time() + TAB_WAIT_SECONDS
+    while await window_at(client.root_window, path) is None and asyncio.get_running_loop().time() < deadline:
+        await asyncio.sleep(TAB_POLL_SECONDS)
+
+
 async def go_to_first_page(client) -> None:
     for _ in range(MAX_PAGES):
         before = [title for _, title in await quest_entries(client)]
@@ -72,13 +88,14 @@ async def activate_quest(client, title: str, *, click_activate: bool = True) -> 
         if not await showing(client, BOOK):
             await click(client, SPELLBOOK_BUTTON)
             await asyncio.sleep(BOOK_OPEN_SECONDS)
+        await wait_for_window(client, QUEST_TAB)
         await click(client, QUEST_TAB)
         await asyncio.sleep(PAGE_SETTLE_SECONDS)
         await go_to_first_page(client)
         for _ in range(MAX_PAGES):
             entries = await quest_entries(client)
             for entry, entry_title in entries:
-                if entry_title == title:
+                if same_title(entry_title, title):
                     button = await window_at(entry, ENTRY_ACTIVATE)
                     if button is None:
                         raise LookupError(f"no Activate button on {title}")

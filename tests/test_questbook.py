@@ -87,6 +87,13 @@ def run(book, title):
             patch.stop()
 
 
+class SameTitleTest(unittest.TestCase):
+    def test_stray_spaces_do_not_matter(self):
+        self.assertTrue(questbook.same_title("The Lore You Know ", "The Lore You Know"))
+        self.assertTrue(questbook.same_title("Looking  Sharp!", "Looking Sharp!"))
+        self.assertFalse(questbook.same_title("Walkabout", "Looking Sharp!"))
+
+
 class ActivateQuestTest(unittest.TestCase):
     def test_a_quest_on_the_first_page_is_activated_and_the_book_closed(self):
         book = QuestBook([["A Whole New World", "Looking Sharp!", "You Can Dig It", "Walkabout"]])
@@ -108,6 +115,11 @@ class ActivateQuestTest(unittest.TestCase):
         self.assertEqual((activation.problem, activation.area), (None, "Cyclops Lane"))
         self.assertNotIn("btnActivate", book.clicked)
         self.assertFalse(book.book_open)
+
+    def test_a_title_with_a_trailing_space_is_found(self):
+        book = QuestBook([["The Lore You Know"]])
+        self.assertIsNone(run(book, "The Lore You Know ").problem)
+        self.assertIn("btnActivate", book.clicked)
 
     def test_a_quest_on_a_later_page_is_found_by_turning_pages(self):
         book = QuestBook([["A Whole New World", "Looking Sharp!", "You Can Dig It", "Walkabout"],

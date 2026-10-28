@@ -824,23 +824,24 @@ class QuestLoop:
             return None
         quests = await read_quests(self.client)
         journal, active_title = quests["journal"], (quests["active"] or {}).get("title")
-        titled = [entry for entry in journal if entry.get("title") and entry["title"] != active_title
+        active_title = " ".join(active_title.split()) if active_title else None
+        titled = [entry for entry in journal if entry.get("title") and " ".join(entry["title"].split()) != active_title
                   and not unsupported_reason(entry["title"])
-                  and self.record.quests_activated.get(entry["title"], 0) < MAX_ACTIVATIONS_PER_QUEST]
+                  and self.record.quests_activated.get(" ".join(entry["title"].split()), 0) < MAX_ACTIVATIONS_PER_QUEST]
         side_quests = [entry for entry in titled if entry["mainline"] is not True]
         main_quests = [] if side_quests_only else [entry for entry in titled if entry["mainline"] is True]
         candidates = side_quests or main_quests
         if not candidates:
             return None
         choice = next((entry for entry in candidates if entry["ready_to_turn_in"]), candidates[0])
-        title = choice["title"]
+        title = " ".join(choice["title"].split())
         self.record.quests_activated[title] = self.record.quests_activated.get(title, 0) + 1
         activation = await activate_quest(self.client, title)
         problem = activation.problem
         if activation.area:
             self._quest_areas[title] = activation.area
         active = (await read_quests(self.client))["active"]
-        switched = problem is None and active is not None and active.get("title") == title
+        switched = problem is None and active is not None and " ".join((active.get("title") or "").split()) == title
         self.events.emit("quest", f"made {title} the active quest through the quest book" if switched else
                                   f"could not make {title} the active quest: "
                                   f"{problem or 'another quest is active after Activate'}")
