@@ -6,7 +6,7 @@ from wizardtraining.targets import (AFTER_BATTLE_GRACE_SECONDS, ENEMY_CLEARANCE,
                                     back_away, bystanders, detour, enemies_to_route_around, in_grace_after_battle,
                                     is_duel_circle, is_dungeon_entrance, keeps_blocking, leads_to_another_zone,
                                     measured, named_enemies_not_in_a_duel,
-                                    next_area_to_explore, others, quest_targets, area_in_zone,
+                                    next_area_to_explore, others, quest_targets, area_in_zone, close_enough,
                                     refill_reach, safe_wisps, threat_centre, too_close)
 
 
@@ -90,6 +90,15 @@ class TargetsTest(unittest.TestCase):
                                       leaves_the_zone=lambda point: point == (0, 1000)), ((0, 3000), 1))
         self.assertEqual(explored, [(0, 1000)])
         self.assertIsNone(area_in_zone(points, me=(0, 0), explored=[], leaves_the_zone=lambda point: True))
+
+    def test_a_talk_across_a_desk_is_close_enough_once_the_wizard_can_get_no_closer(self):
+        def nudge(distance, in_range=True):
+            return {"distance": distance, "in_range": in_range, "within": 80.0, "prompt_for_this_one": False}
+        self.assertTrue(close_enough([nudge(206), nudge(205)]))
+        self.assertFalse(close_enough([nudge(320), nudge(205)]))
+        self.assertFalse(close_enough([nudge(206), nudge(205, in_range=False)]))
+        self.assertFalse(close_enough([nudge(301), nudge(300)]))
+        self.assertTrue(close_enough([nudge(60)]))
 
     def test_preferred_pieces_are_explored_first(self):
         points = [((0, 5000), 0), ((0, 1000), 0), ((0, 3000), 1)]

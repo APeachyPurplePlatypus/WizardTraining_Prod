@@ -128,6 +128,26 @@ def next_area_to_explore(points: list, *, me, explored=(), prefer=()) -> tuple |
     return min(preferred or left, key=lambda point: flat_distance(me, point[0]), default=None)
 
 
+BLOCKED_TALK_DISTANCE = 260.0
+STALLED_NUDGE_DISTANCE = 5.0
+
+
+def close_enough(nudges: list[dict]) -> bool:
+    """The prompt is for this one; or the wizard is within `within` with a prompt showing; or it can get no closer
+    (the last two nudges within STALLED_NUDGE_DISTANCE of each other) and a prompt shows within
+    BLOCKED_TALK_DISTANCE. A Cyclops Lane quest NPC stands 164 units up, with no walkable ground there: every
+    nudge stopped 102 units away, with the prompt showing, and the run stopped for turns without progress. In the
+    Wizard City Library the quest NPC stands behind a desk: every nudge stopped 205 units away, with the prompt
+    showing and that NPC the nearest, and the wizard tried 15 times "to get close enough" (2026-10-28, 00:24)."""
+    if not nudges:
+        return False
+    last = nudges[-1]
+    if last["prompt_for_this_one"] or (last["distance"] <= last["within"] and last["in_range"] is True):
+        return True
+    return (len(nudges) >= 2 and abs(nudges[-2]["distance"] - last["distance"]) <= STALLED_NUDGE_DISTANCE
+            and last["distance"] <= BLOCKED_TALK_DISTANCE and last["in_range"] is True)
+
+
 def area_in_zone(points: list, *, me, explored: list, leaves_the_zone) -> tuple | None:
     """The nearest exploration point not explored yet that is not reached only through a door out of the zone
     (`leaves_the_zone`, given the point); the points that are, are added to `explored`. Woken in the Krokotopia hub

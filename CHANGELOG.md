@@ -95,6 +95,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **A quest NPC behind a desk is talked to from as close as the wizard gets, up to 260 units** (`targets.close_enough`, moved from `dialog.py` so it is tested offline).
+  - **What:** when the wizard can get no closer (its last two nudges within 5 units) and the interact prompt shows, it talks from up to 260 units away, up from 200.
+  - **Why:** in the Wizard City Library, the NPC for "Bear Market" (the arrow's, `WC-HUB-NPC03`) stands behind a desk: every nudge stopped 205 units from it, with "Press X to Talk" showing and that NPC the nearest, and the wizard tried 15 times to get close enough (00:24 to 00:26) while the walk strategies went round.
+  - **Verified:** in the game (positions, prompt and NPCs read at 00:27); offline (`tests/test_targets.py`).
+
 - **"Wizards in the Mist" is passed over until reagents can be gathered** (`sidequests.UNSUPPORTED`).
   - **What:** the quest, whose one goal is a scavenge goal ("Get" Mist Wood, `Reagents_00000000`, in Wizard City), is listed as one the framework cannot do yet, so `--clear-world` goes on to the Quest Finder's next giver.
   - **Why:** taken from the Quest Finder's Olde Town giver, the quest stopped the run at 00:18: the goal has no tags, no target and no quest arrow, and the framework cannot find or gather reagents.
