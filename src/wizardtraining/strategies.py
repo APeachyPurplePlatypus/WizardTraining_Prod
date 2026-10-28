@@ -78,20 +78,22 @@ class GoalApproach:
     a spawn that keeps engaging never stalled: in the Pyramid's Chamber the wizard won fight after fight, 15,000
     units from the assistant it was walking to, for over ten minutes. The operator: "you should be trying different
     strategies if something isn't working". No closer by CLOSER_BY for NO_CLOSER_SECONDS, or over NO_CLOSER_FIGHTS
-    fights, is a stall."""
+    fights, is a stall. Time spent fighting is not counted in those seconds: a single fight with two Nirini Sentries
+    took six minutes, and the stall fired after it alone."""
 
     def __init__(self):
         self.key, self.best, self.since, self.fights = None, float("inf"), 0.0, 0
 
-    def note(self, key, distance: float, now: float, fought: bool) -> bool:
+    def note(self, key, distance: float, now: float, fight_seconds: float | None = None) -> bool:
         if key != self.key:
             self.key, self.best, self.since, self.fights = key, distance, now, 0
             return False
         if distance < self.best - CLOSER_BY:
             self.best, self.since, self.fights = distance, now, 0
             return False
-        if fought:
+        if fight_seconds is not None:
             self.fights += 1
+            self.since += fight_seconds
         return now - self.since >= NO_CLOSER_SECONDS or self.fights >= NO_CLOSER_FIGHTS
 
     def restart(self, now: float) -> None:

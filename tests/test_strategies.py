@@ -38,21 +38,26 @@ class StrategiesTest(unittest.TestCase):
 
     def test_a_walk_no_closer_for_three_fights_or_five_minutes_is_a_stall(self):
         approach, key = GoalApproach(), ("Krokotopia/KT_Pyramid/KT_Chamber", "QuestTitle", 1)
-        self.assertFalse(approach.note(key, 15000, 0.0, fought=False))
+        self.assertFalse(approach.note(key, 15000, 0.0))
         for fight in range(NO_CLOSER_FIGHTS - 1):
-            self.assertFalse(approach.note(key, 15100, 10.0 + fight, fought=True))
-        self.assertTrue(approach.note(key, 14900, 20.0, fought=True))
+            self.assertFalse(approach.note(key, 15100, 10.0 + fight, fight_seconds=1.0))
+        self.assertTrue(approach.note(key, 14900, 20.0, fight_seconds=1.0))
         approach.restart(20.0)
-        self.assertFalse(approach.note(key, 15000, 30.0, fought=False))
-        self.assertTrue(approach.note(key, 15000, 20.0 + NO_CLOSER_SECONDS, fought=False))
+        self.assertFalse(approach.note(key, 15000, 30.0))
+        self.assertTrue(approach.note(key, 15000, 20.0 + NO_CLOSER_SECONDS))
+
+    def test_a_long_fight_alone_is_not_a_stall(self):
+        approach, key = GoalApproach(), ("Krokotopia/KT_Pyramid/KT_Chamber", "QuestTitle", 1)
+        approach.note(key, 22900, 0.0)
+        self.assertFalse(approach.note(key, 22890, 360.0, fight_seconds=356.0))
 
     def test_getting_closer_or_a_new_goal_starts_over(self):
         approach, key = GoalApproach(), ("zone", "quest", 1)
-        approach.note(key, 15000, 0.0, fought=False)
-        approach.note(key, 15000, 10.0, fought=True)
-        approach.note(key, 15000, 11.0, fought=True)
-        self.assertFalse(approach.note(key, 10000, 12.0, fought=True))
-        self.assertFalse(approach.note(("zone", "quest", 2), 10000, 999.0, fought=True))
+        approach.note(key, 15000, 0.0)
+        approach.note(key, 15000, 10.0, fight_seconds=1.0)
+        approach.note(key, 15000, 11.0, fight_seconds=1.0)
+        self.assertFalse(approach.note(key, 10000, 12.0, fight_seconds=1.0))
+        self.assertFalse(approach.note(("zone", "quest", 2), 10000, 999.0, fight_seconds=1.0))
 
     def test_a_strategy_is_found_by_its_name_and_an_unknown_name_is_the_default(self):
         self.assertEqual(combat_strategy_named("heal earlier"), COMBAT_STRATEGIES[1])

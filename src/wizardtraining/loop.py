@@ -55,7 +55,7 @@ from .reports import plain, save_report
 from .patrols import VIEWS_TO_JUDGE, note_sightings, unwalked_paths
 from .routes import GapStep, Hazards, RoutePlanner, duel_clearance
 from .sidequests import unsupported_reason
-from .strategies import (CROWD_STRATEGIES, GoalApproach, combat_strategy_named, fight_situation, next_combat_strategy,
+from .strategies import (CROWD_STRATEGIES, NO_CLOSER_SECONDS, GoalApproach, combat_strategy_named, fight_situation, next_combat_strategy,
                          next_walk_strategy)
 from .screen import or_default, prompt_action, prompt_offers_talk
 from .spellbook import SpellCatalog, deck_spells, learned_spell_ids
@@ -207,27 +207,30 @@ class QuestLoop:
             state = await snapshot(self.client)
             try:
                 if self.record.turns_without_progress >= self.limits.max_turns_without_progress:
-                    await self.try_another_walk_strategy(state)
+                    await self.try_another_walk_strategy(state, f"{self.record.turns_without_progress} turns without "
+                                                                "progress")
                 check_limits(self.record, seconds_left=deadline - time.monotonic(),
                              stop_requested=self.settings.stop_requested())
                 if isinstance(state["level"], int) and state["level"] >= self.limits.target_level:
                     raise LimitReached(f"reached level {state['level']}")
             except LimitReached as reached:
                 await self.finish_safely(reached, state)
+            started = time.monotonic()
             turn = await self.checked_turn(state)
+            turn_seconds = time.monotonic() - started
             quest = self.record.quest or {}
             turn.update(level=state["level"], health=state["health"], zone=state["zone"], position=plain_xy(state),
                         goal=(quest.get("goal"), quest.get("goal_zone")), arrow=plain_xy({"position": quest.get("arrow")}))
             self.record.record_turn(turn)
             self.record.note_place(state["zone"], (quest.get("name"), quest.get("goal_id")))
-            await self.check_getting_closer(state, turn, quest)
+            await self.check_getting_closer(state, turn, quest, turn_seconds)
             await self.check_spells(state)
             log.info("turn %d: %s (progress=%s, level=%s, health=%s, zone=%s, goal=%s %s)", len(self.record.turns),
                      turn["did"], turn["progress"], state["level"], health_text(state), state["zone"], quest.get("goal"),
                      quest.get("goal_zone") or "")
             self.note_changes(state)
 
-    async def check_getting_closer(self, state: dict, turn: dict, quest: dict) -> None:
+    async def check_getting_closer(self, state: dict, turn: dict, quest: dict, turn_seconds: float) -> None:
         """For a goal that is not a fight, a walk that gets no closer to the quest arrow for a while is a stall
         (`strategies.GoalApproach`), and another walk strategy is tried, the crowd strategies first: waiting for
         the way to clear, then the Commons and back another way."""
@@ -236,14 +239,16 @@ class QuestLoop:
             return
         key = (state["zone"], quest.get("name"), quest.get("goal_id"))
         distance = flat_distance(XYZ(position["x"], position["y"], 0.0), XYZ(arrow["x"], arrow["y"], 0.0))
-        if self.goal_approach.note(key, distance, time.monotonic(), fought=turn.get("did") == "battle"):
-            self.events.emit("strategy", f"no closer to the goal in {state['zone']} ({distance:.0f} units) for "
-                                         f"{self.goal_approach.fights} fights or longer")
-            await self.try_another_walk_strategy(state, first=CROWD_STRATEGIES)
+        fight_seconds = turn_seconds if turn.get("did") == "battle" else None
+        if self.goal_approach.note(key, distance, time.monotonic(), fight_seconds):
+            await self.try_another_walk_strategy(
+                state, f"no closer to the goal than {self.goal_approach.best:.0f} units ({distance:.0f} now) over "
+                       f"{self.goal_approach.fights} fights or {NO_CLOSER_SECONDS / 60:.0f} minutes of walking",
+                first=CROWD_STRATEGIES)
             self.goal_approach.restart(time.monotonic())
 
-    async def try_another_walk_strategy(self, state: dict, first=()) -> None:
-        """Several turns went by without progress: take the next walk strategy not yet tried in this zone for this
+    async def try_another_walk_strategy(self, state: dict, what_failed: str, first=()) -> None:
+        """A walk is not getting there (`what_failed`): take the next walk strategy not yet tried in this zone for this
         goal (`strategies.next_walk_strategy`), say which and why, and count the turns again. When every one has
         been tried here, the run stops for the operator, naming them."""
         quest = self.record.quest or {}
@@ -254,11 +259,10 @@ class QuestLoop:
             available |= {"go to the Commons and come back", "go to the Commons and walk back"}
         choice = next_walk_strategy(tried, available, first)
         if choice is None:
-            raise StopRun(f"several turns without progress at {situation}, after trying {', '.join(tried) or 'nothing'}")
+            raise StopRun(f"{what_failed} at {situation}, after trying {', '.join(tried) or 'nothing'}")
         name, why = choice
         tried.append(name)
-        self.events.emit("strategy", f"{self.record.turns_without_progress} turns without progress at {situation}; "
-                                     f"trying '{name}': {why}")
+        self.events.emit("strategy", f"{what_failed} at {situation}; trying '{name}': {why}")
         await self.apply_walk_strategy(name, state)
         self.record.turns_without_progress = 0
 
