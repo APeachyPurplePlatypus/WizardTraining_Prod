@@ -75,7 +75,7 @@ from .spellbook import SpellCatalog, deck_spells, learned_spell_ids, load_level_
 from .spells import KNOWN_AT_FIRST_CHECK, LEARNED, SpellLog, learned_text, newly_learned, spell_entry
 from .session import NoClient, attached, hooks_ready
 from .state import attempt, battle_showing, free_to_move, health_fraction, mana_fraction, snapshot
-from .placed import gate_toward, objects_for_goal
+from .placed import explore_spot, gate_toward, objects_for_goal
 from .targets import (area_in_zone, essence_enemy, fought_in, found_in, is_essence, is_reagent, looks_like_a_reagent, worth_a_detour, zones_to_search_for, bystanders, enemies_to_route_around, in_grace_after_battle, keeps_blocking,
                       leads_to_another_zone, named_enemies_not_in_a_duel, next_area_to_explore, others, quest_targets,
                       refill_reach, safe_wisps,
@@ -1175,6 +1175,10 @@ class QuestLoop:
                                            f"{gate.template} at ({gate.x:.0f}, {gate.y:.0f})")
                 return XYZ(gate.x, gate.y, gate.z)
             return None
+        if (spot := explore_spot(planner.placed_objects, goal)) is not None:
+            self.events.emit("target", f"no quest arrow; the goal explores {zone}: going to its spot, "
+                                       f"{spot.template} at ({spot.x:.0f}, {spot.y:.0f})")
+            return XYZ(spot.x, spot.y, spot.z)
         objects = objects_for_goal(planner.objects_with_tags(goal.get("tags") or []), goal.get("tags") or [], me=(me.x, me.y),
                                    visited=self.record.visited_objects)
         if objects:

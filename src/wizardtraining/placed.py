@@ -125,3 +125,18 @@ def objects_for_goal(placed: list[PlacedObject], tags: list[str], *, me, visited
     wanted = set(tags)
     found = [thing for thing in placed if thing.template in wanted and thing.key not in visited]
     return sorted(found, key=lambda thing: math.dist(thing.point, (me[0], me[1])))
+
+
+EXPLORE_GOAL = "WizardQuestGoals_Explore"
+EXPLORE_OBJECT = "ExploreObject"
+
+
+def explore_spot(placed_objects: list[PlacedObject], goal: dict) -> PlacedObject | None:
+    """An "Explore" waypoint goal's spot in its zone: the zone's one placed ExploreObject, or None. "Find the Smiths"
+    has one such goal per Wizard City zone, with no tags and no arrow outside the goal's zone; each zone's "<zone>
+    Smith" trigger volume (volumes.xml) sits on its only ExploreObject_WC, in all ten zones. The operator,
+    2026-10-28: "the smiths quest is similar to cogs. No quest finder, but you should be able to find the game data"."""
+    if goal.get("name_key") != EXPLORE_GOAL:
+        return None
+    spots = [thing for thing in placed_objects if thing.template.startswith(EXPLORE_OBJECT)]
+    return spots[0] if len(spots) == 1 else None

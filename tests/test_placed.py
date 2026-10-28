@@ -14,6 +14,16 @@ def placed_bytes(name: str, x: float, y: float, z: float) -> bytes:
 
 
 class ParseTest(unittest.TestCase):
+    def test_an_explore_goal_goes_to_the_zones_one_explore_object(self):
+        from wizardtraining.placed import explore_spot
+        spot = PlacedObject("ExploreObject_WC", -5089, -2734, 253)
+        placed = [PlacedObject("WC_GateCommons_ToRavenWood", 0, 0, 0), spot]
+        goal = {"name_key": "WizardQuestGoals_Explore", "type": "waypoint", "destination_zone": "WizardCity/WC_Hub",
+                "tags": []}
+        self.assertEqual(explore_spot(placed, goal), spot)
+        self.assertIsNone(explore_spot(placed, {**goal, "name_key": "WizardQuestGoals_Other"}))
+        self.assertIsNone(explore_spot(placed + [PlacedObject("ExploreObject_WC", 1, 1, 0)], goal))
+
     def test_reads_templates_and_positions(self):
         data = (placed_bytes("WC_TA_Cog instance", -18329.4, -6217.8, 0.5)
                 + placed_bytes("WC_TA_LuminaCrystals instance (1)", 1544.5, -792.1, -151.1))

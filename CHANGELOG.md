@@ -208,6 +208,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **"Explore" waypoint goals go to their zone's ExploreObject** (`placed.explore_spot`, `QuestLoop.target_without_arrow`).
+  - **What:** when the quest arrow shows nothing, a goal named `WizardQuestGoals_Explore` in the wizard's zone targets that zone's one placed `ExploreObject`; reaching it walks the wizard into the trigger volume that completes the goal.
+  - **Why:** "Find the Smiths" ("Find all the Smiths for Zeke in Wizard City") has ten such waypoint goals, one per zone, with no tags, so the tag match that found Triton's Cogs had nothing to go on. Each zone's `volumes.xml` holds a "<zone> Smith" volume, and it sits on the zone's only `ExploreObject_WC` in all ten zones (read offline from the game files; the goal list read from memory while the run was stopped). The operator: "the smiths quest is similar to cogs. No quest finder, but you should be able to find the game data".
+  - **Verified:** offline (`tests/test_placed.py`).
+
 - **A quest page that does not open no longer stops the run** (`questbook.open_quest_page`, `QuestLoop.clearing_turn`).
   - **What:** when the spellbook opens without its Quest tab, the book is closed and opened once more; a page that still cannot be read raises `QuestBookUnreadable`, which the clearing takes as a turn without progress, tried again next turn.
   - **Why:** right after The Gravulum Order's hand-in and the gear check after it, the book opened without its Quest tab and the run stopped on `LookupError: no window at WorldView/DeckConfiguration/Quest` (16:22).
