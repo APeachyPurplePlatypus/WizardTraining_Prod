@@ -36,7 +36,7 @@ from .equipment import count_items, equip, read_items, read_wizard
 from .events import (EventLog, describe_battle, describe_changes, describe_round, dialog_text, enemies_at_once,
                      enemy_names, health_text, threat_text)
 from .gear import describe_stats, upgrades
-from .gametravel import go_to_the_commons, has_mark, mark_here, recall, recall_tip
+from .gametravel import go_home_ready, go_to_the_commons, has_mark, mark_here, recall, recall_ready, recall_tip
 from .geometry import Point, distance_to_path, flat_distance, path_within, xy
 from .keys import tap
 from .knowledge import Knowledge
@@ -57,6 +57,8 @@ from .routes import GapStep, Hazards, RoutePlanner, duel_clearance
 from .sidequests import unsupported_reason
 from .strategies import (COMBAT_STRATEGIES, CROWD_STRATEGIES, NO_CLOSER_SECONDS, CombatStrategy, GoalApproach,
                          fight_situation, next_combat_strategy, next_walk_strategy)
+from .travelplan import (GO_HOME, HUBS, RECALL, WALK, TravelCosts, choose_travel, link_zones,
+                         worth_a_way_back_mark)
 from .screen import or_default, prompt_action, prompt_offers_talk
 from .spellbook import SpellCatalog, deck_spells, learned_spell_ids
 from .spells import KNOWN_AT_FIRST_CHECK, LEARNED, SpellLog, learned_text, newly_learned, spell_entry
@@ -110,6 +112,12 @@ MAX_ACTIVATIONS_PER_QUEST = 2
 FULL_HEALTH_FRACTION = 0.95
 WAIT_FOR_THE_WAY_SECONDS = 30.0
 MARK_MANA_NEEDED = 8
+TELEPORT_LOAD_LIMIT_SECONDS = 60.0
+DEFEAT_ARRIVAL_SECONDS = 30.0
+ZONE_SAMPLE_SECONDS = (5.0, 180.0)
+WALK_SAMPLE_MOVED = 1500.0
+MAX_TELEPORTS_PER_GOAL = 2
+WAY_BACK, AFTER_A_DEFEAT, FOR_A_REFILL = "way back", "after a defeat", "refill"
 FEW_PLACES_TO_LOOK = 2
 DUEL_WAIT_POLL_SECONDS = 3.0
 DEFEATED_HEALTH_FRACTION = 0.05
@@ -141,6 +149,16 @@ class QuestLoop:
         self._marked_in: str | None = None
         self._unmarkable: set[str] = set()
         self._no_recall_until = 0.0
+        self.travel_costs = TravelCosts.from_dict(record.travel_costs)
+        self._teleport_pressed: tuple[str, float] | None = None
+        self._defeated_at = 0.0
+        self._zone_entered_at: float | None = None
+        self._entered_walking = False
+        self._last_goal: tuple | None = None
+        self._last_goal_zone: str | None = None
+        self._teleports_for: dict[tuple, int] = {}
+        self._travel_planned_for: tuple | None = None
+        self._no_teleport_until = 0.0
         self._dungeons_give_nothing_back = False
         self._refill_fully = False
         self._fight_situation: str | None = None
@@ -229,6 +247,7 @@ class QuestLoop:
             self.record.record_turn(turn)
             self.record.note_place(state["zone"], (quest.get("name"), quest.get("goal_id")))
             await self.check_getting_closer(state, turn, quest, turn_seconds)
+            self.learn_walk_speed(turn, turn_seconds)
             await self.check_spells(state)
             log.info("turn %d: %s (progress=%s, level=%s, health=%s, zone=%s, goal=%s %s)", len(self.record.turns),
                      turn["did"], turn["progress"], state["level"], health_text(state), state["zone"], quest.get("goal"),
@@ -336,6 +355,8 @@ class QuestLoop:
         if arrived and isinstance(state["zone"], str) and isinstance(state["position"], dict):
             self.record.arrivals[state["zone"]] = {"from": self._last_state["zone"],
                                                    "position": (state["position"]["x"], state["position"]["y"])}
+        if arrived and isinstance(state["zone"], str):
+            self.learn_the_way(self._last_state["zone"], state["zone"])
         self._last_state, self._last_quest = state, dict(self.record.quest or {})
 
     async def checked_turn(self, state: dict) -> dict:
@@ -619,6 +640,7 @@ class QuestLoop:
         if defeated:
             self.record.defeats += 1
             self.record.recharging = True
+            self._defeated_at = time.monotonic()
             if self.limits.max_defeats is not None and self.record.defeats > self.limits.max_defeats:
                 raise StopRun("defeated in battle; stopping for the operator")
             self.change_combat_strategy(battle)
@@ -848,7 +870,10 @@ class QuestLoop:
         if refill is None and self.use_travel_buttons and not inside_a_dungeon:
             if (recalled := await self.recall_toward_the_goal_turn(state, goal)) is not None:
                 return recalled
+            await self.mark_the_way_back(state, goal)
             await self.mark_the_goal_zone(state, goal)
+            if (shortcut := await self.travel_plan_turn(state, goal, arrow)) is not None:
+                return shortcut
         if leads_to_another_zone(goal, await self.client.zone_name()):
             return await self.waypoint_turn(arrow, goal)
         handler = self.goal_handlers().get(goal["type"])
@@ -1151,14 +1176,109 @@ class QuestLoop:
             self._marked_in = zone if problem is None else None
             if problem is None:
                 self.record.marked_in, self.record.mark_tip = zone, await recall_tip(self.client)
+                self.record.mark_purpose, self.record.mark_quest = FOR_A_REFILL, None
+        started = time.monotonic()
         problem = await go_to_the_commons(self.client)
         if problem is not None:
             self.events.emit("travel", f"could not go to the Commons for mana: {problem}")
             return None
+        self._teleport_pressed = (GO_HOME, started)
         self.events.emit("travel", f"went to the Commons from {zone} with {state['mana']} mana and {state['health']} "
                                    f"health, to refill {stat} there")
         self.record.last_place = None
         return progressed("went to the Commons for a refill", stat=stat)
+
+    def learn_the_way(self, left: str | None, arrived: str) -> None:
+        """A zone change: when it was walked (not a travel button, not waking after a defeat), the two zones are
+        linked for the travel plan, and the time spent crossing the zone left is learned; after Go Home or Recall,
+        its time from the press to the arrival is learned, and after Go Home, where the world's hub is."""
+        now = time.monotonic()
+        if self._teleport_pressed is not None:
+            way, pressed = self._teleport_pressed
+            if now - pressed <= TELEPORT_LOAD_LIMIT_SECONDS:
+                self.learn_cost("go_home_seconds" if way == GO_HOME else "recall_seconds", now - pressed)
+            if way == GO_HOME and world_of(arrived):
+                self.record.hubs[world_of(arrived)] = arrived
+        walked = self._teleport_pressed is None and now - self._defeated_at > DEFEAT_ARRIVAL_SECONDS
+        if walked and isinstance(left, str) and world_of(left) == world_of(arrived):
+            link_zones(self.record.zone_links, left, arrived)
+            spent = None if self._zone_entered_at is None else now - self._zone_entered_at
+            if self._entered_walking and spent is not None and ZONE_SAMPLE_SECONDS[0] <= spent <= ZONE_SAMPLE_SECONDS[1]:
+                self.learn_cost("zone_seconds", spent)
+        self._teleport_pressed = None
+        self._zone_entered_at, self._entered_walking = now, walked
+
+    def learn_walk_speed(self, turn: dict, seconds: float) -> None:
+        moved = (turn.get("trip") or {}).get("moved") if isinstance(turn.get("trip"), dict) else None
+        if isinstance(moved, (int, float)) and moved >= WALK_SAMPLE_MOVED and seconds > 0:
+            self.learn_cost("walk_speed", moved / seconds)
+
+    def learn_cost(self, name: str, measured: float) -> None:
+        self.travel_costs.learn(name, measured)
+        self.record.travel_costs = self.travel_costs.as_dict()
+
+    async def mark_the_way_back(self, state: dict, goal: dict) -> None:
+        """A goal was just finished here and the next is in another zone (`travelplan.worth_a_way_back_mark`): Mark
+        Location, so the quest's way back here, often to the one who gave it, is a Recall instead of a walk. The
+        operator: "this could help a lot with but not limited to back tracking". The mark is kept for the rest of
+        the quest: the goal's zone is not marked over it."""
+        here, goal_zone = state["zone"], goal.get("destination_zone")
+        quest_name = (self.record.quest or {}).get("name")
+        current = (quest_name, goal.get("id"))
+        finished_zone = self._last_goal_zone if self._last_goal not in (None, current) else None
+        self._last_goal, self._last_goal_zone = current, goal_zone
+        hub = self.record.hubs.get(world_of(here)) or HUBS.get(world_of(here))
+        if here in self._unmarkable or not worth_a_way_back_mark(here, finished_zone, goal_zone, hub,
+                                                                  self.record.zone_links, self.record.marked_in,
+                                                                  state["mana"]):
+            return
+        problem = await mark_here(self.client)
+        if problem is not None:
+            self._unmarkable.add(here)
+            self.events.emit("travel", f"could not mark the way back in {here}: {problem}")
+            return
+        self.record.marked_in, self.record.mark_tip = here, await recall_tip(self.client)
+        self.record.mark_purpose, self.record.mark_quest = WAY_BACK, quest_name
+        self.events.emit("travel", f"marked the way back in {here} before leaving for {goal_zone} "
+                                   f"({state['mana']} mana before)")
+
+    async def travel_plan_turn(self, state: dict, goal: dict, arrow) -> dict | None:
+        """For a goal in another zone: walk, Go Home or Recall, whichever `travelplan.choose_travel` expects to get
+        there first, with both estimates in one logged line (once a goal when walking). A goal gets at most
+        MAX_TELEPORTS_PER_GOAL teleports, and after a refused press the wizard walks for a minute."""
+        here, goal_zone = state["zone"], goal.get("destination_zone")
+        if not goal_zone or goal_zone == here or time.monotonic() < self._no_teleport_until:
+            return None
+        key = ((self.record.quest or {}).get("name"), goal.get("id"))
+        if self._teleports_for.get(key, 0) >= MAX_TELEPORTS_PER_GOAL:
+            return None
+        door_distance = flat_distance(await self.client.body.position(), arrow) if arrow is not None else 0.0
+        marked = self.record.marked_in
+        if marked is not None and await recall_tip(self.client) != self.record.mark_tip:
+            marked = None
+        choice = choose_travel(here=here, goal_zone=goal_zone, door_distance=door_distance,
+                               links=self.record.zone_links,
+                               hub=self.record.hubs.get(world_of(here)) or HUBS.get(world_of(here)), marked_in=marked,
+                               mana=state["mana"], costs=self.travel_costs,
+                               go_home_ready=await go_home_ready(self.client),
+                               recall_ready=marked is not None and await recall_ready(self.client))
+        line = f"plan {choice.describe(here, goal_zone)}"
+        if choice.way == WALK:
+            if self._travel_planned_for != (here, *key):
+                self._travel_planned_for = (here, *key)
+                self.events.emit("travel", line)
+            return None
+        self.events.emit("travel", line)
+        started = time.monotonic()
+        problem = await (go_to_the_commons(self.client) if choice.way == GO_HOME else recall(self.client))
+        if problem is not None:
+            self._no_teleport_until = time.monotonic() + 60.0
+            self.events.emit("travel", f"could not {choice.way}: {problem}; walking instead")
+            return None
+        self._teleport_pressed = (choice.way, started)
+        self._teleports_for[key] = self._teleports_for.get(key, 0) + 1
+        self.record.last_place = None
+        return progressed(f"took {choice.way} toward the goal", estimates=choice.estimates)
 
     async def mark_the_goal_zone(self, state: dict, goal: dict) -> None:
         """Arrived in the zone the goal is in, where enemies have been met (`progress.worth_marking`): Mark Location,
@@ -1166,6 +1286,8 @@ class QuestLoop:
         (`recall_toward_the_goal_turn`) instead of a walk through the same enemies. A zone that refuses a mark is
         not asked again in this run."""
         zone = state["zone"]
+        if self.record.mark_purpose == WAY_BACK and self.record.mark_quest == (self.record.quest or {}).get("name"):
+            return
         if not worth_marking(zone, goal.get("destination_zone"), self.record.marked_in, state["mana"],
                              enemies_here=zone in self.record.zones_with_enemies, refused=zone in self._unmarkable):
             return
@@ -1175,6 +1297,7 @@ class QuestLoop:
             self.events.emit("travel", f"could not mark the spot in {zone}: {problem}")
             return
         self.record.marked_in, self.record.mark_tip = zone, await recall_tip(self.client)
+        self.record.mark_purpose, self.record.mark_quest = AFTER_A_DEFEAT, None
         self.events.emit("travel", f"marked the spot in {zone}, the goal's zone, to recall to after a defeat "
                                    f"({state['mana']} mana before)")
 
@@ -1191,11 +1314,13 @@ class QuestLoop:
             self.events.emit("travel", f"the Recall button no longer names the mark in {marked_in}; forgetting it")
             self.record.marked_in = self.record.mark_tip = None
             return None
+        started = time.monotonic()
         problem = await recall(self.client)
         if problem is not None:
             self._no_recall_until = time.monotonic() + 60.0
             self.events.emit("travel", f"could not recall to the mark in {marked_in}: {problem}; walking instead")
             return None
+        self._teleport_pressed = (RECALL, started)
         self.events.emit("travel", f"recalled from {state['zone']} to the mark in {marked_in}, the goal's zone, with "
                                    f"{state['mana']} mana")
         self.record.last_place = None
@@ -1225,11 +1350,13 @@ class QuestLoop:
         if state["zone"] == marked_in or not await has_mark(self.client):
             self._marked_in = None
             return None
+        started = time.monotonic()
         problem = await recall(self.client)
         self._marked_in = None
         if problem is not None:
             self.events.emit("travel", f"could not recall to {marked_in}: {problem}; the quest walk goes on")
             return stalled("could not recall", problem=problem)
+        self._teleport_pressed = (RECALL, started)
         self.events.emit("travel", f"recalled to the spot marked in {marked_in}, with {state['mana']} mana")
         self.record.last_place = None
         return progressed("recalled to the marked spot", zone=marked_in)

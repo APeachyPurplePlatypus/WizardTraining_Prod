@@ -12,7 +12,9 @@ walkable pieces that did not land in the other piece, which the same two pieces 
 combat strategies already lost with against each group of enemies, so a run started again after a defeat does not
 fight them with one that lost, and whether the wizard was still recharging after a defeat (`progress.
 still_to_recharge`): a run started again in the hub after one walked out with 31 of 89 mana, and the zone the
-Recall button's mark is in, with the place the button names, so a defeat or a new run can still recall to it. Without them, every new run walked into teleporters
+Recall button's mark is in, with the place the button names and why it was set, so a defeat or a new run can
+still recall to it, and for planning with the travel buttons (`travelplan`): which zones a door leads between, each
+world's hub, and the measured walk speed, zone crossing time and load times of Go Home and Recall. Without them, every new run walked into teleporters
 to find out again, and walked into Cyclops Lane's tents again. Not kept: obstacles, because the players and
 enemies that caused most of them move on, and "no effect" teleport verdicts, because a walk that fell short of a
 volume once looked like one.
@@ -25,6 +27,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from .teleports import NO_EFFECT
+from .travelplan import link_zones
 
 
 @dataclass
@@ -42,6 +45,11 @@ class Knowledge:
     recharging: bool = False
     marked_in: str | None = None
     mark_tip: str | None = None
+    zone_links: dict[str, list[str]] = field(default_factory=dict)
+    travel_costs: dict[str, float] = field(default_factory=dict)
+    hubs: dict[str, str] = field(default_factory=dict)
+    mark_purpose: str | None = None
+    mark_quest: str | None = None
 
     @classmethod
     def load(cls, path: Path) -> "Knowledge":
@@ -64,7 +72,11 @@ class Knowledge:
                    combat_strategies_tried={enemies: list(names)
                                             for enemies, names in data.get("combat_strategies_tried", {}).items()},
                    recharging=bool(data.get("recharging", False)),
-                   marked_in=data.get("marked_in"), mark_tip=data.get("mark_tip"))
+                   marked_in=data.get("marked_in"), mark_tip=data.get("mark_tip"),
+                   zone_links={zone: list(others) for zone, others in data.get("zone_links", {}).items()},
+                   travel_costs={name: float(value) for name, value in data.get("travel_costs", {}).items()},
+                   hubs=dict(data.get("hubs", {})), mark_purpose=data.get("mark_purpose"),
+                   mark_quest=data.get("mark_quest"))
 
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -84,6 +96,9 @@ class Knowledge:
         record.combat_strategies_tried = {enemies: list(names) for enemies, names in self.combat_strategies_tried.items()}
         record.recharging = self.recharging
         record.marked_in, record.mark_tip = self.marked_in, self.mark_tip
+        record.mark_purpose, record.mark_quest = self.mark_purpose, self.mark_quest
+        record.zone_links = {zone: list(others) for zone, others in self.zone_links.items()}
+        record.travel_costs, record.hubs = dict(self.travel_costs), dict(self.hubs)
 
     def learn_from(self, record) -> None:
         """Keep what a run found out, leaving out "no effect" verdicts."""
@@ -99,6 +114,12 @@ class Knowledge:
         self.trained_at_level = max(self.trained_at_level, record.trained_at_level)
         self.recharging = record.recharging
         self.marked_in, self.mark_tip = record.marked_in, record.mark_tip
+        self.mark_purpose, self.mark_quest = record.mark_purpose, record.mark_quest
+        for zone, others in record.zone_links.items():
+            for other in others:
+                link_zones(self.zone_links, zone, other)
+        self.travel_costs.update(record.travel_costs)
+        self.hubs.update(record.hubs)
         for enemies, names in record.combat_strategies_tried.items():
             kept = self.combat_strategies_tried.setdefault(enemies, [])
             kept.extend(name for name in names if name not in kept)

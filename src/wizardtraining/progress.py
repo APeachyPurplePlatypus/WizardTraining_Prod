@@ -12,6 +12,7 @@ import datetime
 from dataclasses import asdict, dataclass, field
 
 from .routes import COLLISION, NAV
+from .travelplan import spare_mana
 
 ENEMY_NEAR_PATH = "an enemy is near the path ahead"
 DUEL_NEAR_PATH = "a duel is near the path ahead"
@@ -112,6 +113,11 @@ class RunRecord:
     recharging: bool = False
     marked_in: str | None = None
     mark_tip: str | None = None
+    zone_links: dict[str, list[str]] = field(default_factory=dict)
+    travel_costs: dict[str, float] = field(default_factory=dict)
+    hubs: dict[str, str] = field(default_factory=dict)
+    mark_purpose: str | None = None
+    mark_quest: str | None = None
     walk_strategies_tried: dict[str, list[str]] = field(default_factory=dict)
     tried_wisps: dict[str, float] = field(default_factory=dict)
     visited_objects: list[str] = field(default_factory=list)
@@ -241,11 +247,11 @@ def still_to_recharge(health: float | None, mana: float | None) -> str | None:
 def worth_marking(here: str, goal_zone: str | None, marked_in: str | None, mana, *, enemies_here: bool,
                   refused: bool) -> bool:
     """Arrived in the zone the goal is in, where enemies have been met, with no mark there yet and mana for Mark
-    Location (about 5): a defeat here wakes the wizard in the world's hub, and a mark brings it back by Recall
+    Location (about 5) to spare (`travelplan.spare_mana`): a defeat here wakes the wizard in the world's hub, and a mark brings it back by Recall
     Location. At 22:55 and 23:11 the wizard woke in the Krokotopia hub with no mark in the Pyramid's Chamber and
     walked back through the same enemies."""
     return (goal_zone == here and marked_in != here and enemies_here and not refused
-            and isinstance(mana, int) and mana >= RECALL_MANA_NEEDED)
+            and spare_mana(mana))
 
 
 def worth_recalling(here: str, goal_zone: str | None, marked_in: str | None, mana) -> bool:

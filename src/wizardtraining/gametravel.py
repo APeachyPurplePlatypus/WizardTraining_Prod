@@ -47,6 +47,14 @@ async def recall_tip(client) -> str:
     return await tip_of(client, RECALL_BUTTON)
 
 
+async def go_home_ready(client) -> bool:
+    return not await cooling_down(client, HUB_TIMER)
+
+
+async def recall_ready(client) -> bool:
+    return await has_mark(client) and not await cooling_down(client, RECALL_TIMER)
+
+
 async def has_mark(client) -> bool:
     tip = await tip_of(client, RECALL_BUTTON)
     return bool(tip) and tip != NO_MARK_TIP

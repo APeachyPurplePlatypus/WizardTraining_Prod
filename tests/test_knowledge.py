@@ -120,6 +120,9 @@ class KnowledgeTest(unittest.TestCase):
         run.combat_strategies_tried.setdefault("Nirini Sentry", []).append("heal earlier")
         run.recharging = True
         run.marked_in, run.mark_tip = "Krokotopia/KT_Pyramid/KT_Chamber", "Chamber of Fire"
+        run.zone_links = {"Krokotopia/KT_Hub": ["Krokotopia/KT_Pyramid/KT_AltarOfKings"]}
+        run.travel_costs = {"walk_speed": 359.0}
+        run.hubs = {"Krokotopia": "Krokotopia/KT_Hub"}
         knowledge.learn_from(run)
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "knowledge.json"
@@ -129,6 +132,9 @@ class KnowledgeTest(unittest.TestCase):
         self.assertEqual(later.combat_strategies_tried, {"Flame Servant": ["default"], "Nirini Sentry": ["heal earlier"]})
         self.assertTrue(later.recharging)
         self.assertEqual((later.marked_in, later.mark_tip), ("Krokotopia/KT_Pyramid/KT_Chamber", "Chamber of Fire"))
+        self.assertEqual(later.zone_links, {"Krokotopia/KT_Hub": ["Krokotopia/KT_Pyramid/KT_AltarOfKings"],
+                                            "Krokotopia/KT_Pyramid/KT_AltarOfKings": ["Krokotopia/KT_Hub"]})
+        self.assertEqual((later.travel_costs, later.hubs), ({"walk_speed": 359.0}, {"Krokotopia": "Krokotopia/KT_Hub"}))
 
     def test_a_new_run_starts_with_it(self):
         run = RunRecord(limits=Limits())
