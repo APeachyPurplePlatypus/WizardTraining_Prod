@@ -197,6 +197,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **Before the Recall back from the Commons, the wizard walks the wisp search instead of standing** (`QuestLoop.back_from_the_commons_turn`).
+  - **What:** after a refill trip, with mana over the Recall line and health not, the return waits by walking the safe zone's wisp search (`keep_looking_turn`), as the other safe-zone refills do.
+  - **Why:** after the heavy-fight trip from Colossus Boulevard the wizard stood still in the Commons for 90 seconds (13:37). The operator, 2026-10-28: "Standing to regenerate is fine, but it should continue to hunt for wisps in known safe areas since that is faster than just waiting around plus you regen health as you are looking."
+  - **Verified:** offline (imports, tests); in the game: the wait of 13:37.
+
 - **A search point a players' fight blocks counts as searched, for wisps, photo subjects and essence enemies too** (`QuestLoop.explore_for_wisps_turn`, `photo_of_turn`, `essence_turn`).
   - **What:** as in the reagent search, a point the walk could not reach because of another players' fight or a crowd of enemies is counted as searched, and the search goes on to the next point.
   - **Why:** in Colossus Boulevard (12:45), at 543 health, the wisp search's next point was cut off by a players' fight, and the walk waited for it to end, again and again (up to 20 waits), where any other point would do.
