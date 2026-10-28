@@ -124,6 +124,7 @@ class RunRecord:
     hidden_doors: dict[str, list[tuple[int, int]]] = field(default_factory=dict)
     mark_door_for: str | None = None
     parked_quests: dict[str, int] = field(default_factory=dict)
+    reagent_zones: dict[str, list[str]] = field(default_factory=dict)
     walk_strategies_tried: dict[str, list[str]] = field(default_factory=dict)
     tried_wisps: dict[str, float] = field(default_factory=dict)
     visited_objects: list[str] = field(default_factory=list)

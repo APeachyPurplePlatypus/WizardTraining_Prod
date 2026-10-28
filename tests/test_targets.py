@@ -6,7 +6,7 @@ from wizardtraining.targets import (AFTER_BATTLE_GRACE_SECONDS, ENEMY_CLEARANCE,
                                     back_away, bystanders, detour, enemies_to_route_around, in_grace_after_battle,
                                     is_duel_circle, is_dungeon_entrance, keeps_blocking, leads_to_another_zone,
                                     measured, named_enemies_not_in_a_duel,
-                                    next_area_to_explore, others, quest_targets, area_in_zone, close_enough, is_reagent,
+                                    next_area_to_explore, others, quest_targets, area_in_zone, close_enough, is_reagent, zones_to_search_for, found_in,
                                     refill_reach, safe_wisps, threat_centre, too_close)
 
 
@@ -108,6 +108,15 @@ class TargetsTest(unittest.TestCase):
         self.assertFalse(is_reagent("WC_WispMana", "Mist Wood"))
         self.assertFalse(is_reagent("FrostedFlax_01", ""))
         self.assertTrue(is_reagent("WC_MistWood_03", "Mist Wood"))
+
+    def test_zones_a_reagent_grows_in_are_searched_first(self):
+        unicorn, triton, olde = "WizardCity/WC_Streets/WC_Unicorn", "WizardCity/WC_Streets/WC_Triton", "WizardCity/WC_Streets/WC_OldeTown"
+        zones = {"Mist Wood": [unicorn]}
+        self.assertEqual(zones_to_search_for(zones, "Mist Wood", [(1, olde), (3, unicorn), (2, triton)]),
+                         [unicorn, olde, triton])
+        self.assertTrue(found_in(zones, "Mist Wood", triton))
+        self.assertEqual(zones["Mist Wood"], [triton, unicorn])
+        self.assertFalse(found_in(zones, "Mist Wood", triton))
 
     def test_preferred_pieces_are_explored_first(self):
         points = [((0, 5000), 0), ((0, 1000), 0), ((0, 3000), 1)]

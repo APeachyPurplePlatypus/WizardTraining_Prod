@@ -70,7 +70,7 @@ from .spells import KNOWN_AT_FIRST_CHECK, LEARNED, SpellLog, learned_text, newly
 from .session import NoClient, attached, hooks_ready
 from .state import attempt, battle_showing, free_to_move, health_fraction, mana_fraction, snapshot
 from .placed import gate_toward, objects_for_goal
-from .targets import (area_in_zone, is_reagent, bystanders, enemies_to_route_around, in_grace_after_battle, keeps_blocking,
+from .targets import (area_in_zone, found_in, is_reagent, zones_to_search_for, bystanders, enemies_to_route_around, in_grace_after_battle, keeps_blocking,
                       leads_to_another_zone, named_enemies_not_in_a_duel, next_area_to_explore, others, quest_targets,
                       refill_reach, safe_wisps,
                       summary, too_close, WISP_REACH)
@@ -1775,6 +1775,8 @@ class QuestLoop:
                  if found["id"] not in recent]
         me = await self.client.body.position()
         if found:
+            if found_in(self.record.reagent_zones, reagent, zone):
+                self.events.emit("gather", f"{reagent} grows in {zone}: kept as the first zone to look in for it")
             target = min(found, key=lambda found: flat_distance(me, found["position"]))
             if flat_distance(me, target["position"]) <= OBJECT_USE_DISTANCE:
                 return await self.gather_turn(reagent, target)
@@ -1818,15 +1820,16 @@ class QuestLoop:
 
     async def next_zone_for_reagent_turn(self, reagent: str, zone: str, planner: RoutePlanner) -> dict:
         """This zone was searched for the reagent: walk one door toward the nearest open zone of the world (not an
-        interior, tower or dungeon) not yet searched for it, by the zones walked between (`travelplan.zone_hops`)."""
+        interior, tower or dungeon) not yet searched for it: those it is known or said to grow in first
+        (`targets.zones_to_search_for`), then the nearest by the zones walked between (`travelplan.zone_hops`)."""
         searched = self._searched_for.setdefault(reagent, set())
         searched.add(zone)
         candidates = [other for other in self.record.zone_links
                       if world_of(other) == world_of(zone) and other not in searched and INTERIOR_WORD not in other
                       and not in_dungeon(other, self.record.entered_with_x)]
-        reachable = sorted((hops, other) for other in candidates
-                           if (hops := zone_hops(self.record.zone_links, zone, other)) is not None)
-        for _, other in reachable:
+        reachable = [(hops, other) for other in candidates
+                     if (hops := zone_hops(self.record.zone_links, zone, other)) is not None]
+        for other in zones_to_search_for(self.record.reagent_zones, reagent, reachable):
             way = way_toward_zone(zone, other, [volume.name for volume, _ in planner.teleports])
             door = None if way is None else self.door_on_the_way(way, planner)
             if door is not None:

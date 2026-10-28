@@ -142,6 +142,26 @@ def is_reagent(entity_name: str, reagent: str) -> bool:
     return bool(key) and stem != name and stem.endswith(key)
 
 
+def zones_to_search_for(reagent_zones: dict[str, list[str]], reagent: str, candidates: list[tuple[int, str]]) -> list[str]:
+    """The zones to look in next for a reagent: those it is known or said to grow in first, in that order, then the
+    others nearest first (`candidates` as (doors away, zone))."""
+    known = reagent_zones.get(reagent, [])
+    doors_away = {zone: doors for doors, zone in candidates}
+    return sorted(doors_away, key=lambda zone: (zone not in known,
+                                                known.index(zone) if zone in known else doors_away[zone]))
+
+
+def found_in(reagent_zones: dict[str, list[str]], reagent: str, zone: str) -> bool:
+    """Put `zone` first among the zones `reagent` grows in; True when that changed the list."""
+    known = reagent_zones.setdefault(reagent, [])
+    if known[:1] == [zone]:
+        return False
+    if zone in known:
+        known.remove(zone)
+    known.insert(0, zone)
+    return True
+
+
 BLOCKED_TALK_DISTANCE = 260.0
 STALLED_NUDGE_DISTANCE = 5.0
 

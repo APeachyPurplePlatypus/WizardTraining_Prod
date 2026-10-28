@@ -127,6 +127,7 @@ class KnowledgeTest(unittest.TestCase):
         run.clearing_world, run.paused_quest = "WizardCity", "Gather the Troops"
         run.hidden_doors = {"WizardCity/WC_Streets/WC_Cyclops": [(-50, 13621)]}
         run.mark_door_for, run.parked_quests = "WizardCity/WC_Streets/Interiors/WC_Cyclops_T1", {"Mad Maximus": 13}
+        run.reagent_zones = {"Mist Wood": ["WizardCity/WC_Streets/WC_Unicorn"]}
         knowledge.learn_from(run)
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "knowledge.json"
@@ -144,6 +145,7 @@ class KnowledgeTest(unittest.TestCase):
         self.assertEqual(later.hidden_doors, {"WizardCity/WC_Streets/WC_Cyclops": [(-50, 13621)]})
         self.assertEqual((later.mark_door_for, later.parked_quests),
                          ("WizardCity/WC_Streets/Interiors/WC_Cyclops_T1", {"Mad Maximus": 13}))
+        self.assertEqual(later.reagent_zones, {"Mist Wood": ["WizardCity/WC_Streets/WC_Unicorn"]})
 
     def test_a_new_run_starts_with_it(self):
         run = RunRecord(limits=Limits())
