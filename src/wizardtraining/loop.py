@@ -194,7 +194,6 @@ class QuestLoop:
         self._obstacles_forgotten_at: set[tuple] = set()
         self._explore_failures: dict[str, int] = {}
         self._spots_tried: set[str] = set()
-        self._trapping_marks: list[tuple[str, float, float]] = []
         self._stalled_trips: dict[str, int] = {}
         self._level_table: dict[int, int] | None = None
         self._experience: tuple[int, int] | None = None
@@ -1850,15 +1849,16 @@ class QuestLoop:
             return
         self.events.emit("travel", f"no route leads anywhere from the mark in {zone} at ({mark.x:.0f}, {mark.y:.0f}); "
                                    "forgetting it, so the way back is walked, and not marking near here again this run")
-        self._trapping_marks.append((zone, mark.x, mark.y))
+        self.record.trapping_marks.setdefault(zone, []).append((round(mark.x), round(mark.y)))
         self.forget_the_mark_in(zone)
 
     def near_a_trapping_mark(self, zone: str, where) -> bool:
         """Within MARK_TRAP_RADIUS of a spot whose mark was forgotten for trapping the wizard: no mark is set there
-        again this run. Forgotten on Kraken Isle, the mark was set again on arriving in the goal's zone eight seconds
+        again, in this run or later ones (`RunRecord.trapping_marks`, in knowledge.json); kept for this run only, it
+        was set again after a restart, before a refill trip (18:22). Forgotten on Kraken Isle, the mark was set again on arriving in the goal's zone eight seconds
         later, three times, 5 mana each (18:16 to 18:17)."""
-        return any(zone == trapped_zone and flat_distance(where, XYZ(x, y, 0.0)) <= MARK_TRAP_RADIUS
-                   for trapped_zone, x, y in self._trapping_marks)
+        return any(flat_distance(where, XYZ(x, y, 0.0)) <= MARK_TRAP_RADIUS
+                   for x, y in self.record.trapping_marks.get(zone, []))
 
     def forget_learned_obstacles_here(self, zone: str, where) -> None:
         """Every route method failed and the wizard barely moved, with no enemy or players' fight to blame: drop the

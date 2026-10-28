@@ -75,6 +75,7 @@ class Knowledge:
     enemy_hits: dict[str, int] = field(default_factory=dict)
     dead_search_points: dict[str, list] = field(default_factory=dict)
     held_quests: dict[str, str] = field(default_factory=dict)
+    trapping_marks: dict[str, list] = field(default_factory=dict)
     school_quests_checked: dict[str, int] = field(default_factory=dict)
 
     @classmethod
@@ -122,6 +123,8 @@ class Knowledge:
                    dead_search_points={zone: [tuple(point) for point in points]
                                        for zone, points in data.get("dead_search_points", {}).items()},
                    held_quests=dict(data.get("held_quests", {})),
+                   trapping_marks={zone: [tuple(spot) for spot in spots]
+                                   for zone, spots in data.get("trapping_marks", {}).items()},
                    school_quests_checked={world: int(level)
                                           for world, level in data.get("school_quests_checked", {}).items()})
 
@@ -162,6 +165,7 @@ class Knowledge:
         record.enemy_hits = dict(self.enemy_hits)
         record.dead_search_points = {zone: list(points) for zone, points in self.dead_search_points.items()}
         record.held_quests = dict(self.held_quests)
+        record.trapping_marks = {zone: list(spots) for zone, spots in self.trapping_marks.items()}
         record.school_quests_checked = dict(self.school_quests_checked)
 
     def learn_from(self, record) -> None:
@@ -199,6 +203,7 @@ class Knowledge:
         self.enemy_hits = dict(record.enemy_hits)
         self.dead_search_points = {zone: list(points) for zone, points in record.dead_search_points.items()}
         self.held_quests = dict(record.held_quests)
+        self.trapping_marks = {zone: list(spots) for zone, spots in record.trapping_marks.items()}
         self.school_quests_checked = dict(record.school_quests_checked)
         for zone, points in record.hidden_doors.items():
             for point in points:
