@@ -36,7 +36,7 @@ from .equipment import count_items, equip, read_items, read_wizard
 from .events import (EventLog, describe_battle, describe_changes, describe_round, dialog_text, enemies_at_once,
                      enemy_names, health_text, threat_text)
 from .gear import describe_stats, upgrades
-from .gametravel import go_home_ready, go_to_the_commons, has_mark, mark_here, recall, recall_ready, recall_tip
+from .gametravel import RECALL_NOT_REACHED, go_home_ready, go_to_the_commons, has_mark, mark_here, recall, recall_ready, recall_tip
 from .geometry import Point, distance_to_path, flat_distance, path_within, xy
 from .keys import tap
 from .knowledge import Knowledge
@@ -74,7 +74,7 @@ from .targets import (area_in_zone, bystanders, enemies_to_route_around, in_grac
                       summary, too_close, WISP_REACH)
 from .teleports import LEFT_ZONE, NO_EFFECT, TeleportVolume, describe_outcome, volume_at
 from .trainer import OPENED_DIALOG, OPENED_MENU, close_training, learn_free_spells, open_training, open_with_professor
-from .training import (GATE, SCHOOLS, TRAINER, School, in_dungeon, in_tower, spells_to_learn, way_to_school, way_toward_zone,
+from .training import (GATE, SCHOOLS, TRAINER, School, in_dungeon, in_tower, travel_buttons_allowed, spells_to_learn, way_to_school, way_toward_zone,
                        zone_for_area)
 from .worldgate import go_to_world, leave_the_map, spiral_map_open
 from .ui import POTION_BUTTON, answer_known_popup, click, interact_prompt_text, message_box, visible_children
@@ -120,6 +120,8 @@ DEFEAT_ARRIVAL_SECONDS = 30.0
 ZONE_SAMPLE_SECONDS = (5.0, 180.0)
 WALK_SAMPLE_MOVED = 1500.0
 MAX_TELEPORTS_PER_GOAL = 2
+BOX_CLOSE_WAIT_SECONDS = 10.0
+BOX_CLOSE_POLL_SECONDS = 0.5
 WAY_BACK, AFTER_A_DEFEAT, FOR_A_REFILL = "way back", "after a defeat", "refill"
 FEW_PLACES_TO_LOOK = 2
 DUEL_WAIT_POLL_SECONDS = 3.0
@@ -144,8 +146,10 @@ log = logging.getLogger(__name__)
 class QuestLoop:
     def __init__(self, client, settings: Settings, record: RunRecord, *,
                  combat_policy: CombatPolicy, offer_policy: OfferPolicy, events: EventLog | None = None,
-                 use_potions: bool = False, wear_gear: bool = False, use_travel_buttons: bool = False):
+                 use_potions: bool = False, wear_gear: bool = False, use_travel_buttons: bool = False,
+                 leave_dungeons: bool = False):
         self.client = client
+        self.leave_dungeons = leave_dungeons
         self.use_potions = use_potions
         self.wear_gear = wear_gear
         self.use_travel_buttons = use_travel_buttons
@@ -368,6 +372,17 @@ class QuestLoop:
             self.learn_the_way(self._last_state["zone"], state["zone"])
         self._last_state, self._last_quest = state, dict(self.record.quest or {})
 
+    async def box_closes_by_itself(self) -> bool:
+        """Wait up to BOX_CLOSE_WAIT_SECONDS for an open message box to close with no click. After Recall could not
+        reach a mark in a dungeon, the game showed a box titled "INFO" that closed by itself, but the run had already
+        stopped for it, twice (01:12, 01:13)."""
+        deadline = time.monotonic() + BOX_CLOSE_WAIT_SECONDS
+        while time.monotonic() < deadline:
+            await asyncio.sleep(BOX_CLOSE_POLL_SECONDS)
+            if await message_box(self.client) is None:
+                return True
+        return False
+
     async def checked_turn(self, state: dict) -> dict:
         """A turn, after answering known popups. An open message box the framework does not answer takes every
         click, so the run stops for the operator with the box's title (never its text, which can name a player):
@@ -376,6 +391,9 @@ class QuestLoop:
             self.events.emit("popup", answered)
             return progressed(answered)
         if (box := await message_box(self.client)) is not None:
+            if await self.box_closes_by_itself():
+                self.events.emit("popup", f"a message box titled {box.title!r} closed by itself")
+                return stalled("waited for a message box to close by itself", title=box.title)
             raise StopRun(f"a message box titled {box.title!r} is open and takes every click; left for the operator")
         try:
             return await self.play_turn(state)
@@ -1093,12 +1111,19 @@ class QuestLoop:
                                                                            for title, zone in zones.items()))
         return self._journal_zones[1]
 
+    def forget_a_mark_out_of_reach(self, problem: str) -> None:
+        """Recall pressed but no zone change: the marked place can no longer be reached (a dungeon closes once the
+        wizard leaves it), so the mark is forgotten rather than tried again."""
+        if problem == RECALL_NOT_REACHED:
+            self.events.emit("travel", f"forgetting the mark in {self.record.marked_in}: Recall cannot reach it")
+            self.record.marked_in = self.record.mark_tip = None
+
     async def recall_into_the_world_turn(self, world: str, here: str) -> dict | None:
         """The Recall button's mark is in the world the wizard is going to: Recall Location there, about 5 mana, before
         any Spiral Door. Handing in "Bear Market" in Olde Town took the wizard to Grizzleheim's hub, a world with no
         known way to its Spiral Door, while the Recall button still named the Olde Town mark (00:31)."""
         marked_in = self.record.marked_in
-        if marked_in is None or world_of(marked_in) != world:
+        if marked_in is None or world_of(marked_in) != world or not self.travel_allowed_in(marked_in):
             return None
         mana = await attempt(self.client.stats.current_mana())
         if not isinstance(mana, int) or mana < MARK_MANA_NEEDED or await recall_tip(self.client) != self.record.mark_tip:
@@ -1107,6 +1132,7 @@ class QuestLoop:
         problem = await recall(self.client)
         if problem is not None:
             self.events.emit("travel", f"could not recall to the mark in {marked_in} from {here}: {problem}")
+            self.forget_a_mark_out_of_reach(problem)
             return None
         self._teleport_pressed = (RECALL, started)
         self.record.last_place = None
@@ -1363,10 +1389,9 @@ class QuestLoop:
         return (progressed if gained else stalled)(f"waited for {waiting_for}", before=state["mana"], after=now["mana"])
 
     def travel_allowed_in(self, zone: str) -> bool:
-        """The travel buttons may be pressed here: with `--use-travel-buttons`, not on a tower floor, nor in a
-        dungeon found reset after a trip out. The operator, 2026-10-28: "it works in dungeons but not towers"."""
-        return (self.use_travel_buttons and not in_tower(zone, self.record.entered_with_x)
-                and zone not in self.record.leaving_resets)
+        """The travel buttons may be pressed here (`training.travel_buttons_allowed`)."""
+        return travel_buttons_allowed(zone, self.record.entered_with_x, self.record.leaving_resets,
+                                      use_travel_buttons=self.use_travel_buttons, leave_dungeons=self.leave_dungeons)
 
     async def dungeon_trip_turn(self, stat: str, state: dict) -> dict | None:
         """In a dungeon, not a tower: a wisp in reach, else mark the spot, Go Home, refill and Recall back
@@ -1495,7 +1520,8 @@ class QuestLoop:
             return None
         door_distance = flat_distance(await self.client.body.position(), arrow) if arrow is not None else 0.0
         marked = self.record.marked_in
-        if marked is not None and await recall_tip(self.client) != self.record.mark_tip:
+        if marked is not None and (not self.travel_allowed_in(marked)
+                                   or await recall_tip(self.client) != self.record.mark_tip):
             marked = None
         choice = choose_travel(here=here, goal_zone=goal_zone, door_distance=door_distance,
                                links=self.record.zone_links,
@@ -1548,7 +1574,7 @@ class QuestLoop:
         instead of the walk back. A mark the button no longer names (marked over, or gone) is forgotten; after a
         failed Recall (cooling down), the wizard walks for a minute before trying again."""
         marked_in = self.record.marked_in
-        if (time.monotonic() < self._no_recall_until
+        if (time.monotonic() < self._no_recall_until or marked_in is None or not self.travel_allowed_in(marked_in)
                 or not worth_recalling(state["zone"], goal.get("destination_zone"), marked_in, state["mana"])):
             return None
         if await recall_tip(self.client) != self.record.mark_tip:
@@ -1560,6 +1586,7 @@ class QuestLoop:
         if problem is not None:
             self._no_recall_until = time.monotonic() + 60.0
             self.events.emit("travel", f"could not recall to the mark in {marked_in}: {problem}; walking instead")
+            self.forget_a_mark_out_of_reach(problem)
             return None
         self._teleport_pressed = (RECALL, started)
         self.events.emit("travel", f"recalled from {state['zone']} to the mark in {marked_in}, the goal's zone, with "
@@ -2203,7 +2230,7 @@ def reroute_text(attempt: dict) -> str:
 async def play(settings: Settings, limits: Limits, *, combat_policy: CombatPolicy | None = None,
                offer_policy: OfferPolicy | None = None, loop_class: type[QuestLoop] = QuestLoop,
                use_potions: bool = False, wear_gear: bool = False, use_travel_buttons: bool = False,
-               clear_world: str | None = None):
+               clear_world: str | None = None, leave_dungeons: bool = False):
     """Attach to the game, play, remove the hooks, and always save the report, even when interrupted.
     Returns the report and the path it was saved to. `clear_world` starts clearing that world of its quests
     (`QuestLoop.clear_world_turn`); a clearing begun by an earlier run goes on without it."""
@@ -2223,7 +2250,8 @@ async def play(settings: Settings, limits: Limits, *, combat_policy: CombatPolic
             loop = loop_class(attachment.client, settings, record,
                               combat_policy=combat_policy or SpellTypePolicy(),
                               offer_policy=offer_policy or MainQuestsOnly(), events=events,
-                              use_potions=use_potions, wear_gear=wear_gear, use_travel_buttons=use_travel_buttons)
+                              use_potions=use_potions, wear_gear=wear_gear, use_travel_buttons=use_travel_buttons,
+                              leave_dungeons=leave_dungeons)
             await loop.play()
     except NoClient as exc:
         record.stopped = str(exc)

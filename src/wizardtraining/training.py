@@ -91,6 +91,17 @@ def in_tower(zone: str | None, entered_with_x: list[str]) -> bool:
     return in_dungeon(zone, entered_with_x) and TOWER_WORD in zone.rsplit("/", 1)[-1].lower()
 
 
+def travel_buttons_allowed(zone: str | None, entered_with_x: list[str], leaving_resets: list[str], *,
+                           use_travel_buttons: bool, leave_dungeons: bool) -> bool:
+    """Whether Mark Location, Recall Location and Go Home may be pressed in `zone`: with the travel buttons on, never
+    on a tower floor nor in a dungeon found reset after a trip out, and in any other dungeon only with
+    `leave_dungeons`. The first trip out of a dungeon (WC_Cyclops_T1, 01:07 to 01:12) marked the spot and went home,
+    but Recall could not bring the wizard back in; until the operator decides, dungeons are refilled in place."""
+    if not use_travel_buttons or in_tower(zone, entered_with_x) or zone in leaving_resets:
+        return False
+    return leave_dungeons or not in_dungeon(zone, entered_with_x)
+
+
 def way_out_toward_the_commons(volume_names: list[str]) -> str | None:
     """The volume that leads back toward the Commons: one named for the hub ("Street1 Hub Exit", "WC_Shop Hub"),
     else one named as an exit and not an entrance ("Street4 Street2 Exit"), else the zone's only volume ("Cavern to

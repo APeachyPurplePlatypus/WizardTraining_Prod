@@ -126,5 +126,19 @@ class TowerTest(unittest.TestCase):
         self.assertFalse(in_tower("Krokotopia/KT_Pyramid/KT_Chamber", []))
 
 
+class TravelButtonsAllowedTest(unittest.TestCase):
+    def test_dungeons_are_refilled_in_place_unless_trips_out_are_allowed(self):
+        from wizardtraining.training import travel_buttons_allowed
+        street, dungeon = "WizardCity/WC_Streets/WC_Cyclops", "WizardCity/WC_Streets/Interiors/WC_Cyclops_T1"
+        golem = "WizardCity/WC_Streets/WC_Golem_Tower/WC_Golem_Tower_3"
+        on = {"use_travel_buttons": True, "leave_dungeons": False}
+        self.assertTrue(travel_buttons_allowed(street, [], [], **on))
+        self.assertFalse(travel_buttons_allowed(dungeon, [], [], **on))
+        self.assertTrue(travel_buttons_allowed(dungeon, [], [], use_travel_buttons=True, leave_dungeons=True))
+        self.assertFalse(travel_buttons_allowed(dungeon, [], [dungeon], use_travel_buttons=True, leave_dungeons=True))
+        self.assertFalse(travel_buttons_allowed(golem, [], [], use_travel_buttons=True, leave_dungeons=True))
+        self.assertFalse(travel_buttons_allowed(street, [], [], use_travel_buttons=False, leave_dungeons=True))
+
+
 if __name__ == "__main__":
     unittest.main()

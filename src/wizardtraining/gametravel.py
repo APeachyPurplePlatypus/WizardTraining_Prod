@@ -27,6 +27,7 @@ NO_MARK_TIP = "No Mark Set"
 MARK_SETTLE_SECONDS = 2.0
 ZONE_CHANGE_WAIT_SECONDS = 25.0
 ZONE_CHANGE_POLL_SECONDS = 0.5
+RECALL_NOT_REACHED = "the zone did not change after Recall"
 
 
 async def tip_of(client, path: list[str]) -> str:
@@ -107,4 +108,4 @@ async def recall(client) -> str | None:
         return "Recall is cooling down"
     zone = await client.zone_name()
     await click(client, RECALL_BUTTON)
-    return None if await wait_for_zone_change(client, zone) else "the zone did not change after Recall"
+    return None if await wait_for_zone_change(client, zone) else RECALL_NOT_REACHED
