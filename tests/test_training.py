@@ -115,5 +115,16 @@ class ZoneTreeTest(unittest.TestCase):
         self.assertIsNone(zone_for_area(None))
 
 
+class TowerTest(unittest.TestCase):
+    def test_a_tower_floor_is_a_dungeon_named_for_a_tower(self):
+        from wizardtraining.training import in_dungeon, in_tower
+        golem = "WizardCity/WC_Streets/WC_Golem_Tower/WC_Golem_Tower_3"
+        interior = "WizardCity/WC_Streets/Interiors/WC_OldeTown_T2"
+        self.assertTrue(in_tower(golem, []) and in_dungeon(golem, []))
+        self.assertFalse(in_tower(interior, []))
+        self.assertTrue(in_dungeon(interior, []))
+        self.assertFalse(in_tower("Krokotopia/KT_Pyramid/KT_Chamber", []))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -29,7 +29,7 @@ from dataclasses import dataclass
 COMMONS = "WizardCity/WC_Hub"
 RAVENWOOD = "WizardCity/WC_Ravenwood"
 TOWER_OR_DUNGEON_NAME = re.compile(r"/Interiors/[^/]*_T\d+$|/WC_Golem_Tower/WC_Golem_Tower_\d+$")
-HUB_WORD, EXIT_WORD, ENTRANCE_WORD = "hub", "exit", "entrance"
+HUB_WORD, EXIT_WORD, ENTRANCE_WORD, TOWER_WORD = "hub", "exit", "entrance", "tower"
 TRAINER, VOLUME, GATE = "trainer", "volume", "gate"
 
 
@@ -82,6 +82,13 @@ def spells_to_learn(school: str | None, level: int, known: list[str]) -> list[st
 
 def in_dungeon(zone: str | None, entered_with_x: list[str]) -> bool:
     return isinstance(zone, str) and (zone in entered_with_x or TOWER_OR_DUNGEON_NAME.search(zone) is not None)
+
+
+def in_tower(zone: str | None, entered_with_x: list[str]) -> bool:
+    """A tower floor: a dungeon whose zone is named for a tower. The game's travel buttons do not work there (the
+    operator, 2026-10-28: "it works in dungeons but not towers"; Mark Location did nothing on a Golem Tower floor),
+    and a walk out gives up its progress ("I don't think you can leave a tower without losing progress")."""
+    return in_dungeon(zone, entered_with_x) and TOWER_WORD in zone.rsplit("/", 1)[-1].lower()
 
 
 def way_out_toward_the_commons(volume_names: list[str]) -> str | None:

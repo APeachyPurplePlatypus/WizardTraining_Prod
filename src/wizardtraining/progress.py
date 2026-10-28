@@ -118,6 +118,7 @@ class RunRecord:
     hubs: dict[str, str] = field(default_factory=dict)
     mark_purpose: str | None = None
     mark_quest: str | None = None
+    leaving_resets: list[str] = field(default_factory=list)
     walk_strategies_tried: dict[str, list[str]] = field(default_factory=dict)
     tried_wisps: dict[str, float] = field(default_factory=dict)
     visited_objects: list[str] = field(default_factory=list)

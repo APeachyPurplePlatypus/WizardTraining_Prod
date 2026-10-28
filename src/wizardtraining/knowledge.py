@@ -14,7 +14,8 @@ fight them with one that lost, and whether the wizard was still recharging after
 still_to_recharge`): a run started again in the hub after one walked out with 31 of 89 mana, and the zone the
 Recall button's mark is in, with the place the button names and why it was set, so a defeat or a new run can
 still recall to it, and for planning with the travel buttons (`travelplan`): which zones a door leads between, each
-world's hub, and the measured walk speed, zone crossing time and load times of Go Home and Recall. Without them, every new run walked into teleporters
+world's hub, and the measured walk speed, zone crossing time and load times of Go Home and Recall, and the
+dungeons found reset after a refill trip out by the travel buttons, refilled in place from then on. Without them, every new run walked into teleporters
 to find out again, and walked into Cyclops Lane's tents again. Not kept: obstacles, because the players and
 enemies that caused most of them move on, and "no effect" teleport verdicts, because a walk that fell short of a
 volume once looked like one.
@@ -50,6 +51,7 @@ class Knowledge:
     hubs: dict[str, str] = field(default_factory=dict)
     mark_purpose: str | None = None
     mark_quest: str | None = None
+    leaving_resets: list[str] = field(default_factory=list)
 
     @classmethod
     def load(cls, path: Path) -> "Knowledge":
@@ -76,7 +78,7 @@ class Knowledge:
                    zone_links={zone: list(others) for zone, others in data.get("zone_links", {}).items()},
                    travel_costs={name: float(value) for name, value in data.get("travel_costs", {}).items()},
                    hubs=dict(data.get("hubs", {})), mark_purpose=data.get("mark_purpose"),
-                   mark_quest=data.get("mark_quest"))
+                   mark_quest=data.get("mark_quest"), leaving_resets=list(data.get("leaving_resets", [])))
 
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -99,6 +101,7 @@ class Knowledge:
         record.mark_purpose, record.mark_quest = self.mark_purpose, self.mark_quest
         record.zone_links = {zone: list(others) for zone, others in self.zone_links.items()}
         record.travel_costs, record.hubs = dict(self.travel_costs), dict(self.hubs)
+        record.leaving_resets = list(self.leaving_resets)
 
     def learn_from(self, record) -> None:
         """Keep what a run found out, leaving out "no effect" verdicts."""
@@ -120,6 +123,7 @@ class Knowledge:
                 link_zones(self.zone_links, zone, other)
         self.travel_costs.update(record.travel_costs)
         self.hubs.update(record.hubs)
+        self.leaving_resets.extend(zone for zone in record.leaving_resets if zone not in self.leaving_resets)
         for enemies, names in record.combat_strategies_tried.items():
             kept = self.combat_strategies_tried.setdefault(enemies, [])
             kept.extend(name for name in names if name not in kept)

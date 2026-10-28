@@ -71,7 +71,7 @@ from .targets import (bystanders, enemies_to_route_around, in_grace_after_battle
                       summary, too_close, WISP_REACH)
 from .teleports import LEFT_ZONE, NO_EFFECT, TeleportVolume, describe_outcome, volume_at
 from .trainer import OPENED_DIALOG, OPENED_MENU, close_training, learn_free_spells, open_training, open_with_professor
-from .training import (GATE, SCHOOLS, TRAINER, School, in_dungeon, spells_to_learn, way_to_school, way_toward_zone,
+from .training import (GATE, SCHOOLS, TRAINER, School, in_dungeon, in_tower, spells_to_learn, way_to_school, way_toward_zone,
                        zone_for_area)
 from .worldgate import go_to_world, leave_the_map, spiral_map_open
 from .ui import POTION_BUTTON, answer_known_popup, click, interact_prompt_text, message_box, visible_children
@@ -159,6 +159,7 @@ class QuestLoop:
         self._teleports_for: dict[tuple, int] = {}
         self._travel_planned_for: tuple | None = None
         self._no_teleport_until = 0.0
+        self._left_dungeon: tuple[str, int] | None = None
         self._dungeons_give_nothing_back = False
         self._refill_fully = False
         self._fight_situation: str | None = None
@@ -279,7 +280,7 @@ class QuestLoop:
         situation = f"{state['zone']} | {quest.get('title') or quest.get('name')} | {quest.get('goal')}"
         tried = self.record.walk_strategies_tried.setdefault(situation, [])
         available = {"nav graph first", "collision data first", "forget the obstacles here", "wait for the way to clear"}
-        if self.use_travel_buttons and not in_dungeon(state["zone"], self.record.entered_with_x):
+        if self.travel_allowed_in(state["zone"]):
             available |= {"go to the Commons and come back", "go to the Commons and walk back"}
         choice = next_walk_strategy(tried, available, first)
         if choice is None:
@@ -803,6 +804,8 @@ class QuestLoop:
         if self.use_travel_buttons and self._marked_in is not None:
             if (back := await self.back_from_the_commons_turn(state)) is not None:
                 return back
+        if self._left_dungeon is not None and self._marked_in is None:
+            await self.check_the_dungeon_held(state)
         wanted = wanted_wisp(fraction, mana_fraction(state))
         if wanted is not None:
             turn = await self.wisp_turn(wanted, state, heading=await self.wisp_heading(wanted, state))
@@ -849,16 +852,17 @@ class QuestLoop:
                           "to follow it")
         if topped_up(mana_fraction(state)):
             self._topping_up_in = None
-        inside_a_dungeon = in_dungeon(state["zone"], self.record.entered_with_x)
-        mana_for_the_gate = 1.0 if inside_a_dungeon else mana_fraction(state)
+        stuck_inside = (in_dungeon(state["zone"], self.record.entered_with_x)
+                        and not self.travel_allowed_in(state["zone"]))
+        mana_for_the_gate = 1.0 if stuck_inside else mana_fraction(state)
         refill = short_for_a_fight(health_fraction(state), mana_for_the_gate) if goal["type"] in FIGHT_GOALS else None
-        if refill is None and goal["type"] in FIGHT_GOALS and self._refill_fully and not inside_a_dungeon:
+        if refill is None and goal["type"] in FIGHT_GOALS and self._refill_fully and not stuck_inside:
             health = health_fraction(state)
             refill = ("health" if health is not None and health < FULL_HEALTH_FRACTION
                       else "mana" if not topped_up(mana_fraction(state)) else None)
-        if not inside_a_dungeon and not health_to_travel(health_fraction(state)):
+        if not stuck_inside and not health_to_travel(health_fraction(state)):
             self.record.recharging = True
-        if refill is None and self.record.recharging and not inside_a_dungeon:
+        if refill is None and self.record.recharging and not stuck_inside:
             refill = still_to_recharge(health_fraction(state), mana_fraction(state))
             self.record.recharging = refill is not None
         if refill is None and (self._topping_up_in == state["zone"] or not mana_to_travel(mana_fraction(state))):
@@ -867,7 +871,7 @@ class QuestLoop:
             turn = await self.refill_turn(refill, state)
             if turn is not None:
                 return turn
-        if refill is None and self.use_travel_buttons and not inside_a_dungeon:
+        if refill is None and self.use_travel_buttons and not stuck_inside:
             if (recalled := await self.recall_toward_the_goal_turn(state, goal)) is not None:
                 return recalled
             await self.mark_the_way_back(state, goal)
@@ -1063,6 +1067,8 @@ class QuestLoop:
         The exit leads back toward the hub: from Cyclops Lane, to Olde Town. For health in a street, explore it:
         wisps are spawned, not placed, and load only nearby. Potions are never bought."""
         if in_dungeon(state["zone"], self.record.entered_with_x):
+            if self.travel_allowed_in(state["zone"]) and (trip := await self.dungeon_trip_turn(stat, state)) is not None:
+                return trip
             return await self.dungeon_refill_turn(stat, state)
         indoors = INTERIOR_WORD in state["zone"]
         safe_zone = not indoors and state["zone"] not in self.record.zones_with_enemies
@@ -1161,7 +1167,45 @@ class QuestLoop:
                      for stat in ("mana", "health"))
         return (progressed if gained else stalled)(f"waited for {waiting_for}", before=state["mana"], after=now["mana"])
 
-    async def commons_trip_turn(self, stat: str, state: dict, mark: bool = True) -> dict | None:
+    def travel_allowed_in(self, zone: str) -> bool:
+        """The travel buttons may be pressed here: with `--use-travel-buttons`, not on a tower floor, nor in a
+        dungeon found reset after a trip out. The operator, 2026-10-28: "it works in dungeons but not towers"."""
+        return (self.use_travel_buttons and not in_tower(zone, self.record.entered_with_x)
+                and zone not in self.record.leaving_resets)
+
+    async def dungeon_trip_turn(self, stat: str, state: dict) -> dict | None:
+        """In a dungeon, not a tower: a wisp in reach, else mark the spot, Go Home, refill and Recall back
+        (`commons_trip_turn`), leaving only once the mark is set, so the way back is sure. The enemies near the
+        mark are counted, to see on the way back whether the dungeon held (`check_the_dungeon_held`)."""
+        if (turn := await self.wisp_turn(stat, state, reach=refill_reach(False))) is not None:
+            return turn
+        enemies = len(await nearby_enemies(self.client))
+        turn = await self.commons_trip_turn(stat, state, must_come_back=True)
+        if turn is not None:
+            self._left_dungeon = (state["zone"], enemies)
+            self.events.emit("dungeon", f"left {state['zone']} by Go Home to refill {stat}, {enemies} enemies near "
+                                        "the mark; Recall brings the wizard back")
+        return turn
+
+    async def check_the_dungeon_held(self, state: dict) -> None:
+        """Back from a refill trip out of a dungeon: if Recall did not land in it, or more enemies stand near the mark
+        than when the wizard left, the dungeon reset; it is kept in the knowledge file as one that resets when left,
+        and refilled in place from then on."""
+        zone, enemies_before = self._left_dungeon
+        self._left_dungeon = None
+        if state["zone"] != zone:
+            reset, detail = True, f"Recall brought the wizard to {state['zone']}, not back in"
+        else:
+            enemies_now = len(await nearby_enemies(self.client))
+            reset = enemies_now > enemies_before + 1
+            detail = f"{enemies_before} enemies near the mark when it left, {enemies_now} now"
+        if reset and zone not in self.record.leaving_resets:
+            self.record.leaving_resets.append(zone)
+        self.events.emit("dungeon", f"{zone} {'reset' if reset else 'held'} after a refill trip ({detail})"
+                                    + ("; refilling in place there from now on" if reset else ""))
+
+    async def commons_trip_turn(self, stat: str, state: dict, mark: bool = True,
+                                must_come_back: bool = False) -> dict | None:
         """Short of mana in a street with no wisp to fetch, or of health in a zone too small to look for wisps in
         (a Golem Tower floor has one place to look): mark the spot (Mark Location costs about 5 mana, so only with
         MARK_MANA_NEEDED), then Go to The Commons, the world's hub, where mana and health come back (free; a walk
@@ -1177,6 +1221,8 @@ class QuestLoop:
             if problem is None:
                 self.record.marked_in, self.record.mark_tip = zone, await recall_tip(self.client)
                 self.record.mark_purpose, self.record.mark_quest = FOR_A_REFILL, None
+        if must_come_back and self._marked_in != zone:
+            return None
         started = time.monotonic()
         problem = await go_to_the_commons(self.client)
         if problem is not None:
