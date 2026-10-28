@@ -69,7 +69,7 @@ from .travelplan import (GO_HOME, HUBS, RECALL, TRAVEL_MANA_RESERVE, WALK, Trave
                          zone_hops,
                          spare_mana,
                          worth_a_way_back_mark, worth_going_home_for_wisps)
-from .screen import or_default, prompt_action, prompt_offers_talk
+from .screen import or_default, prompt_action, prompt_is_not_a_doors, prompt_offers_talk
 from .spellbook import SpellCatalog, deck_spells, learned_spell_ids
 from .spells import KNOWN_AT_FIRST_CHECK, LEARNED, SpellLog, learned_text, newly_learned, spell_entry
 from .session import NoClient, attached, hooks_ready
@@ -2309,7 +2309,7 @@ class QuestLoop:
         zone = await self.client.zone_name()
         if any(where == zone and flat_distance(here, spot) <= NOT_A_DOOR_RADIUS for where, spot in self._not_doors):
             return False
-        if prompt_offers_talk(await or_default(interact_prompt_text(self.client), "")):
+        if prompt_is_not_a_doors(await or_default(interact_prompt_text(self.client), "")):
             return False
         npc = await or_default(nearest_npc(self.client), None)
         return npc is None or flat_distance(here, npc) > NPC_PROMPT_RANGE

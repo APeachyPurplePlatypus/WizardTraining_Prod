@@ -11,6 +11,9 @@ MARKUP = re.compile(r"<[^>]*>")
 FRIEND_BOX_TITLE = "friend"
 FRIEND_REQUEST_QUESTION = "as your friend?"
 TALK_PROMPT_ENDING = "to talk"
+NOT_DOOR_ACTIONS = ("talk", "collect", "use", "open", "read")
+# What X does at a prompt that is not a door's: a person's "to Talk", a reagent's "to Collect" (leaving the Dark Cave a
+# reagent's was taken for the door's, 11:39), an object's "to Use", a chest's "to Open", a sign's "to Read".
 
 
 async def or_default(coro, default):
@@ -99,6 +102,10 @@ def prompt_offers_talk(prompt: str) -> bool:
     """The interact prompt is a person's: it reads "Press X to Talk" (the game's NPCInteractText). A door's reads
     "to Enter" or "to Teleport", a chest's "to Open", an object's "to Use"."""
     return plain_text(prompt).lower().endswith(TALK_PROMPT_ENDING)
+
+
+def prompt_is_not_a_doors(prompt: str) -> bool:
+    return prompt_action(prompt).lower() in NOT_DOOR_ACTIONS
 
 
 def prompt_action(prompt: str) -> str:

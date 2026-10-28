@@ -302,5 +302,13 @@ class SafeToStandTest(unittest.TestCase):
         self.assertFalse(safe_to_stand("WizardCity/WC_Streets/WC_OldeTown", [firecat], enemies_in_sight=1))
 
 
+
+class RecallInTheGoalZoneTest(unittest.TestCase):
+    def test_no_recall_while_in_the_goals_zone(self):
+        from wizardtraining.progress import worth_recalling
+        cyclops, cave = "WizardCity/WC_Streets/WC_Cyclops", "WizardCity/WC_Streets/WC_DarkCave"
+        self.assertFalse(worth_recalling(cyclops, cyclops, cave, 80, door_for=cyclops))
+        self.assertTrue(worth_recalling("WizardCity/WC_Hub", cyclops, cave, 80, door_for=cyclops))
+
 if __name__ == "__main__":
     unittest.main()

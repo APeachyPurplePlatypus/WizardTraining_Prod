@@ -1,7 +1,7 @@
 import asyncio
 import unittest
 
-from wizardtraining.screen import (is_friend_request, is_game_notice, prompt_fits, TALK, USE, plain_text, prompt_action, prompt_offers_talk, visible_named,
+from wizardtraining.screen import (is_friend_request, is_game_notice, prompt_fits, TALK, USE, prompt_is_not_a_doors, plain_text, prompt_action, prompt_offers_talk, visible_named,
                                    visible_names_under, window_saying)
 
 
@@ -73,6 +73,12 @@ class ScreenTest(unittest.TestCase):
         self.assertFalse(prompt_fits(True, "Press X or to Teleport", wants=TALK))
         self.assertTrue(prompt_fits(True, "Press X or to Use", wants=None))
         self.assertFalse(prompt_fits(False, "Press X or to Talk", wants=TALK))
+
+    def test_a_reagents_or_persons_prompt_is_not_a_doors(self):
+        self.assertTrue(prompt_is_not_a_doors("Press X or to Collect"))
+        self.assertTrue(prompt_is_not_a_doors("Press X or to Talk"))
+        self.assertFalse(prompt_is_not_a_doors("Press X or to Enter"))
+        self.assertFalse(prompt_is_not_a_doors("Press X or to Teleport"))
 
     def test_a_persons_prompt_is_not_a_quest_objects(self):
         self.assertFalse(prompt_fits(True, "Press X or to Talk", wants=USE))

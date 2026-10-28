@@ -168,6 +168,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **A reagent's "to Collect" is not taken for a door, and no Recall from inside the goal's zone** (`screen.prompt_is_not_a_doors`, `progress.worth_recalling`).
+  - **What:** near a door's arrow, an interact prompt whose action is Talk, Collect, Use, Open or Read is not a door's, so no Mark is set and no X pressed for it. Recall toward the goal is not pressed while the wizard is already in the goal's zone.
+  - **Why:** leaving the Dark Cave (11:39), a reagent's "to Collect" prompt by the way out was taken for the door's: the wizard set a Mark there "before entering" Cyclops Lane and pressed X. In Cyclops Lane, the goal's zone, it then recalled to that Mark in the Dark Cave, and walked back out.
+  - **Verified:** offline (`tests/test_screen.py`, `tests/test_progress.py`); in the game: the events of 11:39:18 to 11:39:57.
+
 - **With no quest arrow, the wizard walks to the zone an open goal names; a goal that cannot be found parks its quest while clearing a world** (`QuestLoop.go_to_goal_zone_turn`).
   - **What:** when the quest arrow shows nothing, the wizard walks one door at a time toward the nearest zone of its world that an open goal names and a way is known to. While clearing a world, a goal still not found parks its quest until the next level instead of stopping the run.
   - **Why:** "Find the Smiths" (Prospector Zeke) has a "Go To" goal for each hidden Smith (Firecat Alley, Colossus Boulevard, ...). The arrow shows nothing outside the goal's zone, the goals have no tags, and the run stopped in the Dark Cave (10:58).
