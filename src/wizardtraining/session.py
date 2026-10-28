@@ -14,8 +14,6 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 
-from wizwalker import ClientHandler
-
 HOOK_TIMEOUT_SECONDS = 15.0
 HOOKS_WRITTEN_EVERY_FRAME = ("player", "player_stat", "client", "root_window")
 
@@ -34,6 +32,8 @@ class Attachment:
 @asynccontextmanager
 async def attached():
     """The first running game client, with the reading hooks installed. Read `hooks_removed` after the block."""
+    from wizwalker import ClientHandler
+
     handler = ClientHandler()
     clients = handler.get_new_clients()
     if not clients:

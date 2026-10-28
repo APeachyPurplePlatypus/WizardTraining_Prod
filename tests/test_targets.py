@@ -1,5 +1,6 @@
 import math
 import unittest
+from types import SimpleNamespace
 
 from wizardtraining.routes import ENEMY_KEEP_OUT
 from wizardtraining.targets import (AFTER_BATTLE_GRACE_SECONDS, ENEMY_CLEARANCE, WISP_DETOUR, WISP_REACH,
@@ -8,6 +9,11 @@ from wizardtraining.targets import (AFTER_BATTLE_GRACE_SECONDS, ENEMY_CLEARANCE,
                                     measured, named_enemies_not_in_a_duel,
                                     next_area_to_explore, others, quest_targets, area_in_zone, close_enough, is_reagent, zones_to_search_for, found_in, looks_like_a_reagent, worth_a_detour, is_essence, essence_enemy, fought_in,
                                     refill_reach, safe_wisps, threat_centre, too_close)
+
+
+def xyz(x: float, y: float, z: float) -> SimpleNamespace:
+    """A position as the game gives it (x, y, z), without WizWalker."""
+    return SimpleNamespace(x=x, y=y, z=z)
 
 
 def enemy(id_, name, x, y):
@@ -196,13 +202,12 @@ class LeadsToAnotherZoneTest(unittest.TestCase):
 
 class BountyTargetByCodeTest(unittest.TestCase):
     def test_the_goals_own_enemy_is_a_target_however_far_from_the_arrow(self):
-        from wizwalker import XYZ
         from wizardtraining.targets import quest_targets
         kraken = {"id": 1, "name": "Kraken-WCBoss-L03", "display_code": "WizardMobs_00000279", "in_a_duel": False,
-                  "position": XYZ(-13428.0, 1348.0, -1994.0)}
+                  "position": xyz(-13428.0, 1348.0, -1994.0)}
         ghost = {"id": 2, "name": "Ghost-Blue-L02", "display_code": "WizardMobs_00000100", "in_a_duel": False,
-                 "position": XYZ(-8245.0, -1521.0, -675.0)}
-        arrow = XYZ(-14340.0, 1339.0, -1994.0)
+                 "position": xyz(-8245.0, -1521.0, -675.0)}
+        arrow = xyz(-14340.0, 1339.0, -1994.0)
         self.assertEqual(quest_targets([kraken, ghost], arrow), [])
         self.assertEqual(quest_targets([kraken, ghost], arrow, "WizardMobs_00000279"), [kraken])
 

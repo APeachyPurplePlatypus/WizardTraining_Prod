@@ -11,8 +11,6 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 
-from wizwalker import HookAlreadyActivated
-
 from .screen import is_friend_request, is_game_notice, or_default, plain_text, visible_named
 from .session import HOOK_TIMEOUT_SECONDS
 
@@ -84,6 +82,8 @@ async def interact_prompt_text(client) -> str:
 
 
 async def enable_clicks(client) -> None:
+    from wizwalker import HookAlreadyActivated
+
     try:
         await client.hook_handler.activate_render_context_hook(wait_for_ready=True, timeout=HOOK_TIMEOUT_SECONDS)
     except HookAlreadyActivated:
