@@ -325,6 +325,15 @@ class HeavyFightTest(unittest.TestCase):
         self.assertFalse(worth_pushing_on(500 / 1164, 3018))
         self.assertFalse(worth_pushing_on(900 / 1164, 6600))
         self.assertFalse(worth_pushing_on(None, 3018))
+        self.assertTrue(worth_pushing_on(677 / 1164, 6800, stalled=True))
+        self.assertFalse(worth_pushing_on(500 / 1164, 6800, stalled=True))
+
+    def test_headway_is_a_thousand_nearer_the_goal_than_at_the_last_refill_trip(self):
+        from wizardtraining.progress import made_headway
+        self.assertFalse(made_headway(6800, 6850))
+        self.assertTrue(made_headway(5650, 6800))
+        self.assertTrue(made_headway(6800, None))
+        self.assertTrue(made_headway(None, 6800))
 
 if __name__ == "__main__":
     unittest.main()

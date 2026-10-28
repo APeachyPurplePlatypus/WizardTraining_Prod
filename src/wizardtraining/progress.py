@@ -295,16 +295,27 @@ def heavy_fight(health_before, health_after, max_health) -> bool:
 
 GOAL_PUSH_DISTANCE = 3500.0
 GOAL_PUSH_HEALTH_FRACTION = 0.5
+GOAL_HEADWAY = 1000.0
+STALLED_TRIPS_TO_PARK = 2
 
 
-def worth_pushing_on(health: float | None, distance_to_goal: float | None) -> bool:
+def made_headway(distance_to_goal: float | None, at_last_trip: float | None) -> bool:
+    """Since the last refill trip for this goal, the wizard came GOAL_HEADWAY nearer it, or there is nothing to
+    compare. The Gravulum Order's bounty lay about 6,800 from the Colossus Boulevard mark, and every Recall there
+    landed in a Snowman fight that sent the wizard back to the Commons from the same spot (15:56 to 16:04)."""
+    return distance_to_goal is None or at_last_trip is None or distance_to_goal <= at_last_trip - GOAL_HEADWAY
+
+
+def worth_pushing_on(health: float | None, distance_to_goal: float | None, *, stalled: bool = False) -> bool:
     """After a heavy fight, the goal is within GOAL_PUSH_DISTANCE and the wizard has GOAL_PUSH_HEALTH_FRACTION of
     its health or more: go on to the goal rather than refill first. On Colossus Boulevard every fight cost more than
     a third of the wizard's health, so each was followed by a Commons trip and a Recall that landed in the next fight
     at the same mark, about 3,000 from the quest object, and the wizard made no headway for half an hour (15:00 to
-    15:34). A defeat on the way costs about what a refill trip does: the wizard wakes in the Commons and Recalls."""
+    15:34). A defeat on the way costs about what a refill trip does: the wizard wakes in the Commons and Recalls.
+    When the last refill trip made no headway (`made_headway`), at any distance: the coordinator, 2026-10-28, of
+    the Gravulum Order's bounty."""
     return (health is not None and distance_to_goal is not None and health >= GOAL_PUSH_HEALTH_FRACTION
-            and distance_to_goal <= GOAL_PUSH_DISTANCE)
+            and (stalled or distance_to_goal <= GOAL_PUSH_DISTANCE))
 
 
 def parked(parked_quests: dict[str, int], title: str | None, level) -> bool:

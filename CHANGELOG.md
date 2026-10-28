@@ -211,6 +211,7 @@ Every change, enhancement or addition is listed with its rationale, so later con
 - **After a heavy fight, a goal close by comes before the refill** (`progress.worth_pushing_on`, `QuestLoop.distance_to_the_goal_here`).
   - **What:** when a fight cost more than a third of the wizard's health and the active goal's arrow is within 3,500 in this zone, the wizard goes on to it if it has half its health or more, instead of refilling first.
   - **Why:** on Colossus Boulevard every Snowman fight was heavy, so each one was followed by a Commons trip and a Recall that landed in the next fight at the same mark, about 3,000 from the "No More Mr. Ice Guy" object; the wizard made no headway from 15:00 to 15:34. A defeat on the way costs about what a refill trip does.
+  - **Later:** refill trips are compared (`progress.made_headway`): when the last one left from no 1,000 nearer the goal, the wizard pushes on at half health or more whatever the distance, and otherwise refills without marking, so it walks back in rather than Recalling to the same spot; after two such trips in a row the quest is parked until the next level. The Gravulum Order's bounty lay about 6,800 from the Colossus Boulevard mark, and each Recall there landed in a Snowman fight (15:56 to 16:04). The coordinator asked for it.
   - **Verified:** offline (`tests/test_progress.py`).
 
 - **The refill after a heavy fight survives a restart** (`RunRecord.refill_after_heavy_fight`, in `knowledge.json`).

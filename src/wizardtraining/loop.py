@@ -52,7 +52,7 @@ from .navigation import load_planner
 from .policy import LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, SpellTypePolicy, biggest_hits
 from .progress import (DUEL_BLOCKS_THE_WAY, DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY, ENEMY_NEAR_PATH, LimitReached, Limits, PATH_THREATS,
                        PlannedRoute, RunRecord, StopRun, check_limits, leaves_world, health_to_travel, mana_for_a_fight, mana_to_travel, still_to_recharge, worth_marking, worth_recalling,
-                       PARK_AFTER_STRATEGIES, HEAVY_ZONE_FIGHTS, RECALL_MANA_NEEDED, RECHARGE_HEALTH_FRACTION, heavy_fight, parked, worth_pushing_on,
+                       PARK_AFTER_STRATEGIES, HEAVY_ZONE_FIGHTS, RECALL_MANA_NEEDED, RECHARGE_HEALTH_FRACTION, heavy_fight, parked, worth_pushing_on, made_headway, GOAL_HEADWAY, STALLED_TRIPS_TO_PARK,
                        nav_did_better, progressed, ready_to_recall, remember_obstacles, safe_to_stand, short_for_a_fight,
                        should_drink_potion, stalled, topped_up, travel_outcome, wanted_wisp,
                        WISP_ANY_DIRECTION_BELOW_FRACTION, world_of)
@@ -182,6 +182,8 @@ class QuestLoop:
         self._trip_stat: str | None = None
         self._trip_started = 0.0
         self._mark_position = None
+        self._trip_distances: dict[str, float] = {}
+        self._stalled_trips: dict[str, int] = {}
         self._level_table: dict[int, int] | None = None
         self._experience: tuple[int, int] | None = None
         self._run_start_experience: tuple[int, int] | None = None
@@ -334,21 +336,37 @@ class QuestLoop:
             return None
         if in_dungeon(zone, self.record.entered_with_x) and not self.travel_allowed_in(zone):
             return None
-        if (distance := await self.distance_to_the_goal_here(zone)) is not None and worth_pushing_on(fraction, distance):
+        distance = await self.distance_to_the_goal_here(zone)
+        title = " ".join(((self.record.quest or {}).get("title") or "").split())
+        stalled = not made_headway(distance, self._trip_distances.get(title))
+        if distance is not None and worth_pushing_on(fraction, distance, stalled=stalled):
             self.record.refill_after_heavy_fight = False
+            why = "the last refill trip left from no nearer it" if stalled else "it is in this zone"
             self.events.emit("health", f"{state['health']} of {state['max_health']} health after a heavy fight, and the "
-                                       f"goal is {distance:.0f} away in this zone: going on to it before refilling")
+                                       f"goal is {distance:.0f} away and {why}: going on to it before refilling")
             return None
         if await self.safe_here():
             return await self.keep_looking_turn("health", state, await self.planner())
         if ((heavy_zone or low_among_enemies) and self.use_travel_buttons and self._marked_in is None
                 and self.travel_allowed_in(zone)):
-            trip = await self.commons_trip_turn("health", state)
+            self._stalled_trips[title] = self._stalled_trips.get(title, 0) + 1 if stalled else 0
+            if self._stalled_trips[title] >= STALLED_TRIPS_TO_PARK and self.record.clearing_world:
+                self._stalled_trips.pop(title, None)
+                self._trip_distances.pop(title, None)
+                return await self.park_the_active_quest(f"{STALLED_TRIPS_TO_PARK} refill trips from {zone} in a row "
+                                                        f"left from no {GOAL_HEADWAY:.0f} nearer its goal")
+            if distance is not None:
+                self._trip_distances[title] = distance
+            if stalled:
+                self.forget_the_mark_in(zone)
+            trip = await self.commons_trip_turn("health", state, mark=not stalled)
             if trip is not None:
                 why = (f"{self.record.heavy_fights.get(zone, 0)} heavy fights in {zone}" if heavy_zone else
                        f"{state['health']} of {state['max_health']} health in {zone}, among enemies")
-                self.events.emit("health", f"{why}: refilling in the Commons, then Recall back, rather than looking "
-                                           "for wisps among its enemies")
+                back = ("then walk back in, since the last trip left from no nearer the goal" if stalled
+                        else "then Recall back")
+                self.events.emit("health", f"{why}: refilling in the Commons, {back}, rather than looking for wisps "
+                                           "among its enemies")
                 return trip
         return await self.refill_turn("health", state)
 
@@ -1730,6 +1748,12 @@ class QuestLoop:
         if must_come_back and self._marked_in != zone:
             return None
         return await self.go_home_for(stat, state)
+
+    def forget_the_mark_in(self, zone: str) -> None:
+        """No Recall back to `zone`'s mark: the wizard walks in, and marks again on arriving in the goal's zone."""
+        if self.record.marked_in == zone:
+            self.record.marked_in, self.record.mark_tip = None, None
+            self._mark_position = None
 
     async def distance_to_the_goal_here(self, zone: str) -> float | None:
         """How far the active quest's arrow is, when it points into this zone; None otherwise."""
