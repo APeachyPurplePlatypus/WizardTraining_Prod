@@ -730,7 +730,7 @@ class QuestLoop:
                                            f"{gate.template} at ({gate.x:.0f}, {gate.y:.0f})")
                 return XYZ(gate.x, gate.y, gate.z)
             return None
-        objects = objects_for_goal(planner.placed_objects, goal.get("tags") or [], me=(me.x, me.y),
+        objects = objects_for_goal(planner.objects_with_tags(goal.get("tags") or []), goal.get("tags") or [], me=(me.x, me.y),
                                    visited=self.record.visited_objects)
         if objects:
             self._object_in_use = objects[0]
@@ -778,7 +778,7 @@ class QuestLoop:
         planner = await self.planner()
         explored = self.record.explored.setdefault(f"{zone}|{code}", [])
         me = await self.client.body.position()
-        quest_objects = [thing for other in goals for thing in objects_for_goal(planner.placed_objects,
+        quest_objects = [thing for other in goals for thing in objects_for_goal(planner.objects_with_tags(other.get("tags") or []),
                                                                                  other.get("tags") or [], me=(me.x, me.y))]
         prefer = {planner.piece_of(thing.point) for thing in quest_objects} - {None} if planner.piece_of else set()
         area = next_area_to_explore(planner.exploration_points, me=(me.x, me.y), explored=explored, prefer=prefer)

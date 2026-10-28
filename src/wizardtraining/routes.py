@@ -29,6 +29,7 @@ from typing import Callable
 
 from .geometry import Point, distance_to_segment, path_beyond, xy
 from .motion import WALK_UNITS_PER_SECOND
+from .placed import PlacedObject, parse_named_objects
 from .teleports import TeleportVolume, choose_crossing, known_chain, known_crossing
 
 COLLISION, NAV, STRAIGHT = "collision", "nav", "straight"
@@ -349,6 +350,7 @@ class RoutePlanner:
         self.piece_gap: Callable[[int, int], tuple[Point, Point, float]] | None = None
         self.teleports: list[tuple[TeleportVolume, int | None]] = []
         self.placed_objects: list = []
+        self.zone_data: bytes | None = None
         self.exploration_points: list[tuple[Point, int]] = []
         self.patrols = None
         self.streets = None
@@ -489,6 +491,15 @@ class RoutePlanner:
         if self.nav_graph is not None and self.nav_graph.vertices:
             usable.insert(0 if self.nav_first else len(usable), NAV)
         return usable + [STRAIGHT]
+
+    def objects_with_tags(self, tags: list[str]) -> list[PlacedObject]:
+        """The placed objects, and the objects the zone data stores under a goal's tag that no placed object is named
+        for (`placed.parse_named_objects`)."""
+        known = {thing.template for thing in self.placed_objects}
+        missing = [tag for tag in tags if tag not in known]
+        if not missing or not self.zone_data:
+            return self.placed_objects
+        return [*self.placed_objects, *parse_named_objects(self.zone_data, missing)]
 
     def has_mapped_route(self, start, goal, hazards: Hazards) -> bool:
         """The walk data (collision or nav graph) gives a way from `start` to `goal` that keeps clear of `hazards`.

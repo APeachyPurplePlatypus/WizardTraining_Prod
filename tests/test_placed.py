@@ -1,7 +1,8 @@
 import struct
 import unittest
 
-from wizardtraining.placed import PlacedObject, gate_toward, objects_for_goal, parse_placed_objects, words
+from wizardtraining.placed import (PlacedObject, gate_toward, objects_for_goal, parse_named_objects, parse_placed_objects,
+                                  words)
 
 
 def placed_bytes(name: str, x: float, y: float, z: float) -> bytes:
@@ -34,6 +35,22 @@ class ParseTest(unittest.TestCase):
         good = placed_bytes("WC_TA_Cog instance", 1, 2, 3)
         broken = good.replace(struct.pack("<H", 18), struct.pack("<H", 5))
         self.assertEqual(parse_placed_objects(broken), [])
+
+
+class NamedObjectsTest(unittest.TestCase):
+    def test_reads_objects_stored_under_a_goal_tag_without_the_instance_suffix(self):
+        data = (placed_bytes("WC_PetDirtMound-Cyclops1", -8829.7, 6869.2, 86.2)
+                + placed_bytes("WC_PetDirtMound-Cyclops2", -7006.5, 17048.0, 33.5)
+                + placed_bytes("WC_TA_Cog instance", 1, 2, 3))
+        self.assertEqual(parse_placed_objects(data), [PlacedObject("WC_TA_Cog", 1.0, 2.0, 3.0)])
+        found = parse_named_objects(data, ["WC_PetDirtMound-Cyclops2"])
+        self.assertEqual([thing.template for thing in found], ["WC_PetDirtMound-Cyclops2"])
+        self.assertAlmostEqual(found[0].x, -7006.5, places=1)
+        self.assertAlmostEqual(found[0].y, 17048.0, places=1)
+
+    def test_a_name_inside_a_longer_one_is_not_that_object(self):
+        data = placed_bytes("WC_PetDirtMound-Cyclops22", 1, 2, 3)
+        self.assertEqual(parse_named_objects(data, ["WC_PetDirtMound-Cyclops2"]), [])
 
 
 class GoalObjectsTest(unittest.TestCase):

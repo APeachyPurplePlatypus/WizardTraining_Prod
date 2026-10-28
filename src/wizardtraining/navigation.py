@@ -47,13 +47,14 @@ async def load_planner(zone: str, deimos_root: Path | None) -> RoutePlanner:
     walk_grid, free, collision_status = await _collision_grid(wad, zone, deimos_root)
     nav_graph, nav_status = await _nav_graph(wad)
     volumes, teleport_status = await _teleport_volumes(wad)
-    placed, placed_status = await _placed_objects(wad)
+    placed, zone_data, placed_status = await _placed_objects(wad)
     patrols, patrol_status = await _patrols(wad)
     planner = RoutePlanner(zone, walk_grid=walk_grid, grid_line_walkable=free.contains_line if free else None,
                            nav_graph=nav_graph,
                            status={"collision": collision_status, "nav": nav_status, "teleports": teleport_status,
                                    "placed objects": placed_status, "patrols": patrol_status})
     planner.placed_objects = placed
+    planner.zone_data = zone_data
     planner.patrols = patrols
     if free is not None:
         planner.piece_of = free.piece_of
@@ -242,10 +243,11 @@ async def _patrols(wad):
 
 async def _placed_objects(wad):
     try:
-        placed = parse_placed_objects(await wad.get_file("gamedata.bin"))
+        data = await wad.get_file("gamedata.bin")
+        placed = parse_placed_objects(data)
     except Exception as exc:
-        return [], f"unavailable: {type(exc).__name__}"
-    return placed, f"{len(placed)} placed objects"
+        return [], None, f"unavailable: {type(exc).__name__}"
+    return placed, data, f"{len(placed)} placed objects"
 
 
 async def _teleport_volumes(wad):

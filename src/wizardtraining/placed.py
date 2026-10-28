@@ -59,6 +59,28 @@ def parse_placed_objects(data: bytes) -> list[PlacedObject]:
     return placed
 
 
+def parse_named_objects(data: bytes, names: list[str]) -> list[PlacedObject]:
+    """Objects stored under exactly these names, which are not "<template> instance": "You Can Dig It" names its
+    Dirt Mounds by tag ("WC_PetDirtMound-Cyclops2"), and Cyclops Lane's gamedata.bin holds "WC_PetDirtMound-Cyclops1",
+    "-Cyclops2" and "-Cyclops3" in the layout of the other objects: the name after a 2-byte length, its x, y and z
+    54, 50 and 46 bytes before. At (-8830, 6869), (-7007, 17048) and (-12045, 11574), each within 600 units of the
+    zone's walkable ground."""
+    placed, seen = [], set()
+    for name in names:
+        encoded = name.encode("ascii", errors="ignore")
+        for match in re.finditer(re.escape(encoded), data):
+            start = match.start()
+            if not encoded or start < X_BEFORE_NAME or struct.unpack_from("<H", data, start - 2)[0] != len(encoded):
+                continue
+            x, y, z = (struct.unpack_from("<f", data, start - offset)[0]
+                       for offset in (X_BEFORE_NAME, Y_BEFORE_NAME, Z_BEFORE_NAME))
+            if (all(math.isfinite(value) for value in (x, y, z)) and max(abs(x), abs(y)) < 200_000 and abs(z) < 20_000
+                    and (name, round(x), round(y)) not in seen):
+                seen.add((name, round(x), round(y)))
+                placed.append(PlacedObject(name, x, y, z))
+    return placed
+
+
 def _named_records(data: bytes, pattern: re.Pattern) -> list[tuple[int, str, str]]:
     """Where each match of `pattern` starts, the name as long as the 2-byte length before it says, and the match.
     A gate's name is the whole of its match or the start of it: "WC_GateCommons_ToRavenWood" is followed by a
