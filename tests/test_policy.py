@@ -2,7 +2,7 @@ import unittest
 
 from wizardtraining.policy import (ACCEPT, DECLINE, GO_BACK, LEAVE_MENU, STOP, UNIVERSAL, Card, Cast, Combatant,
                                    DamageModifier, Enchant, Flee, MainQuestsOnly, Pass, RoundView, SpellTypePolicy,
-                                   TakeAllQuests, problem_with)
+                                   TakeAllQuests, biggest_hits, problem_with)
 
 HEAL = Card("Fairy", "Heal", True)
 BOLT = Card("Fire Cat", "Damage", True)
@@ -63,6 +63,27 @@ class StrategyPolicyTest(unittest.TestCase):
         low = view([beetle, pixie], health=321, max_health=1102, enemies=sentry, pips=1)
         self.assertIsInstance(SpellTypePolicy(COMBAT_STRATEGIES[1]).choose(low), Pass)
 
+    def test_heal_earlier_attacks_at_high_health_when_seen_hits_leave_it_out_of_reach(self):
+        """15:05: at 1091 of 1164, an Evil Snowman holding 6 pips counted as a 960 hit under "heal earlier", and the
+        wizard passed to save pips for Pixie; the Snowmen's hits that day were up to about 281 each."""
+        from wizardtraining.strategies import COMBAT_STRATEGIES
+        pixie = Card("Pixie", "Heal", False, "Life", pips=2)
+        imp = Card("Imp - Starter Wand", "Damage", True, "Life", pips=1, item_card=True)
+        snowmen = (Combatant("Evil Snowman", 103, pips=6), Combatant("Evil Snowman", 310, pips=1))
+        nearly_full = view([pixie, imp], health=1091, max_health=1164, enemies=snowmen, pips=1)
+        seen = {"Evil Snowman": 281}.get
+        self.assertEqual(SpellTypePolicy(COMBAT_STRATEGIES[1], hit_seen=seen).choose(nearly_full).card, 1)
+
+    def test_no_pass_for_a_heal_above_eighty_percent_even_against_an_unknown_big_hitter(self):
+        from wizardtraining.strategies import COMBAT_STRATEGIES
+        pixie = Card("Pixie", "Heal", False, "Life", pips=2)
+        imp = Card("Imp - Starter Wand", "Damage", True, "Life", pips=1, item_card=True)
+        stranger = (Combatant("Unknown Giant", 900, pips=7),)
+        nearly_full = view([pixie, imp], health=1091, max_health=1164, enemies=stranger, pips=1)
+        self.assertEqual(SpellTypePolicy(COMBAT_STRATEGIES[1]).choose(nearly_full).card, 1)
+        lower = view([pixie, imp], health=700, max_health=1164, enemies=stranger, pips=1)
+        self.assertIsInstance(SpellTypePolicy(COMBAT_STRATEGIES[1]).choose(lower), Pass)
+
     def test_save_pips_for_bigger_cards_passes_for_a_two_pip_wait(self):
         from wizardtraining.strategies import COMBAT_STRATEGIES
         beetle = Card("Frost Beetle", "Damage", True, "Ice", pips=1)
@@ -70,6 +91,26 @@ class StrategyPolicyTest(unittest.TestCase):
         round_one = view([beetle, snowman], pips=1)
         self.assertEqual(SpellTypePolicy().choose(round_one), Cast(0, "enemy", 0))
         self.assertIsInstance(SpellTypePolicy(COMBAT_STRATEGIES[3]).choose(round_one), Pass)
+
+
+class BiggestHitsTest(unittest.TestCase):
+    @staticmethod
+    def round_entry(health, enemies, action="cast Imp - Starter Wand (Life) on enemy Evil Snowman"):
+        return {"view": {"health": health, "enemies": [{"name": name, "pips": pips} for name, pips in enemies]},
+                "action": action}
+
+    def test_a_hit_goes_to_the_enemy_that_spent_pips(self):
+        rounds = [self.round_entry(1164, [("Evil Snowman", 3), ("Gobbler Scouter", 1)]),
+                  self.round_entry(904, [("Evil Snowman", 1), ("Gobbler Scouter", 2)])]
+        self.assertEqual(biggest_hits(rounds), {"Evil Snowman": 260})
+
+    def test_a_round_the_wizard_healed_in_or_an_enemy_fell_in_is_skipped(self):
+        healed = [self.round_entry(600, [("Evil Snowman", 3)], action="cast Pixie (Life) on self"),
+                  self.round_entry(500, [("Evil Snowman", 1)])]
+        fell = [self.round_entry(900, [("Evil Snowman", 3), ("Evil Snowman", 3)]),
+                self.round_entry(600, [("Evil Snowman", 1)])]
+        self.assertEqual(biggest_hits(healed), {})
+        self.assertEqual(biggest_hits(fell), {})
 
 
 class QuestFinderMenuTest(unittest.TestCase):

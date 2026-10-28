@@ -207,6 +207,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **The danger estimate uses the hits seen from each kind of enemy, and no heal is saved for above 80% health** (`policy.biggest_hits`, `policy.enemy_reach`, `RunRecord.enemy_hits`).
+  - **What:** after each battle, the biggest hit seen from each kind of enemy is kept in `knowledge.json` (`enemy_hits`): the health lost between two rounds in which the wizard cast nothing on itself, shared among the enemies that spent pips. An enemy's possible next hit is then its pips at the strategy's damage a pip, but no more than its kind's biggest seen hit with a quarter's margin; enemies never seen keep the pip estimate. Above 80% health (`policy.HEAL_FOR_A_BIG_HIT_UP_TO`) a feared big hit no longer brings a heal or a pass to save pips for one.
+  - **Why:** under "heal earlier" (160 a pip), an Evil Snowman holding 6 pips counted as a 960 hit, and the wizard passed at 1091 of 1164 health to save pips for Pixie (15:05), adding rounds to every Snowman fight. Today's logs give Evil Snowman 281, Gobbler Scouter 348, Ice Colossus 167 and Eyus Maximus 537. The coordinator asked for both.
+  - **Verified:** offline (`tests/test_policy.py`, and `biggest_hits` over today's saved battle logs).
+
 - **A refill trip keeps a mark nearer the goal rather than marking over it** (`QuestLoop.kept_mark_in`).
   - **What:** before Go Home for a refill, the wizard keeps the mark the Recall button already names for this zone when that mark, set this run, is nearer the goal's arrow than the wizard is; otherwise it marks where it stands, as before.
   - **Why:** the coordinator asked that a refill trip not mark among enemies, since on Colossus Boulevard a Recall back landed in the next fight (14:45). A first version (d9bf442) skipped the mark with an enemy within 1,500 and kept any earlier mark; but the quest object lies about 6,600 past the fights, each fight a step nearer, and enemies are within 1,500 after nearly every battle there, so the wizard would have walked back from the Commons, or recalled to the entrance, and lost that ground. A Recall into a fight at refilled health is the cheaper way on.

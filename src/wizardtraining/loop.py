@@ -49,7 +49,7 @@ from .knowledge import Knowledge
 from .motion import WALK_UNITS_PER_SECOND, ApproachLog, MotionTracker, closest_approach
 from .movement import LOADING, KeysIgnored, Reroute, face, travel
 from .navigation import load_planner
-from .policy import LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, SpellTypePolicy
+from .policy import LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, SpellTypePolicy, biggest_hits
 from .progress import (DUEL_BLOCKS_THE_WAY, DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY, ENEMY_NEAR_PATH, LimitReached, Limits, PATH_THREATS,
                        PlannedRoute, RunRecord, StopRun, check_limits, leaves_world, health_to_travel, mana_for_a_fight, mana_to_travel, still_to_recharge, worth_marking, worth_recalling,
                        PARK_AFTER_STRATEGIES, HEAVY_ZONE_FIGHTS, RECALL_MANA_NEEDED, RECHARGE_HEALTH_FRACTION, heavy_fight, parked,
@@ -220,6 +220,7 @@ class QuestLoop:
         if isinstance(combat_policy, SpellTypePolicy):
             combat_policy.strategy_for = self.strategy_against
             combat_policy.essence_from = self.essence_enemies
+            combat_policy.hit_seen = lambda enemy: self.record.enemy_hits.get(enemy)
         self.goal_approach = GoalApproach()
         self._gear_checked: tuple | None = None
         self._finishing_since: float | None = None
@@ -805,6 +806,7 @@ class QuestLoop:
                              on_round=lambda entry: self.events.emit("round", describe_round(entry)))
         self.record.battle_log.append(battle)
         self._battle_ended_at = time.monotonic()
+        self.learn_enemy_hits(battle)
         fought_in(self.record.enemy_zones, enemies_at_once(battle.get("rounds", []))[1], before["zone"])
         after = await snapshot(self.client)
         fraction = health_fraction(after)
@@ -835,6 +837,14 @@ class QuestLoop:
         casts = sum(1 for battle_round in battle["rounds"] if battle_round["action"].startswith("cast"))
         return progressed("battle", rounds=len(battle["rounds"]), casts=casts, final_phase=battle["final_phase"],
                           after=battle["after"])
+
+    def learn_enemy_hits(self, battle: dict) -> None:
+        """Keep the biggest hit seen from each kind of enemy (`policy.biggest_hits`), across runs, for the combat
+        policy's estimate of what the enemies could deal next round."""
+        for enemy, hit in biggest_hits(battle.get("rounds", [])).items():
+            if hit > self.record.enemy_hits.get(enemy, 0):
+                self.record.enemy_hits[enemy] = hit
+                self.events.emit("knowledge", f"{enemy} hit for up to {hit} so far")
 
     def park_the_quest_in_a_heavy_zone(self, zone: str, battle: dict) -> None:
         """A fight lost in a zone where HEAVY_ZONE_FIGHTS fights this run cost a third of the wizard's health or more:

@@ -179,10 +179,12 @@ class SpellTypePolicy:
     strategy's heal line: playing "heal earlier" (below 60%) against two Nirini Sentries, the wizard passed for Pixie
     at 49%, healed, fell below 60% again, and passed again, while the last Sentry stood at 220 for eight rounds."""
 
-    def __init__(self, strategy: CombatStrategy = COMBAT_STRATEGIES[0], strategy_for=None, essence_from=None):
+    def __init__(self, strategy: CombatStrategy = COMBAT_STRATEGIES[0], strategy_for=None, essence_from=None,
+                 hit_seen=None):
         self.strategy = strategy
         self.strategy_for = strategy_for
         self.essence_from = essence_from
+        self.hit_seen = hit_seen
         self._strategy_chosen = False
         self._extracted = False
         self._enchant_refused: set[str] = set()
@@ -243,17 +245,18 @@ class SpellTypePolicy:
         attacks = [index for index in attacks if (view.cards[index].name or "") not in self._no_effect] or attacks
         finisher = cheapest_finisher(view, attacks) if view.enemies else None
         per_pip = self.strategy.enemy_damage_per_pip
-        if finisher is not None and ends_the_danger(view, finisher, per_pip):
+        if finisher is not None and ends_the_danger(view, finisher, per_pip, self.hit_seen):
             return finisher
-        big_hit = within_reach_of_a_big_hit(view, per_pip)
+        big_hit = within_reach_of_a_big_hit(view, per_pip, self.hit_seen)
+        healthy = fraction is not None and fraction > HEAL_FOR_A_BIG_HIT_UP_TO
         if (fraction is not None and fraction < self.strategy.heal_below) or big_hit:
             heal = first_castable(view.cards, lambda card: card.spell_type in HEAL_SPELL_TYPES)
-            if heal is not None:
+            if heal is not None and not healthy:
                 return Cast(heal, "self")
             if big_hit and (stun := stun_on_the_most_dangerous(view)) is not None:
                 return stun
             in_danger = big_hit or (fraction is not None and fraction < LOW_HEALTH_FRACTION)
-            if in_danger and (worth_saving_for := heal_worth_saving_for(view)) is not None:
+            if in_danger and not healthy and (worth_saving_for := heal_worth_saving_for(view)) is not None:
                 saving = f"saving pips for {worth_saving_for.name} ({worth_saving_for.pips} pips)"
                 return (stun_on_the_most_dangerous(view) or trap_instead_of_passing(view, self.strategy.target, saving)
                         or Pass(saving))
@@ -497,15 +500,15 @@ def stun_on_the_most_dangerous(view: RoundView) -> Cast | None:
                                                                 view.enemies[index].health or 0)))
 
 
-def ends_the_danger(view: RoundView, finisher: Cast, per_pip: int = ENEMY_DAMAGE_PER_PIP) -> bool:
+def ends_the_danger(view: RoundView, finisher: Cast, per_pip: int = ENEMY_DAMAGE_PER_PIP, hit_seen=None) -> bool:
     """Finishing the enemy `finisher` targets leaves no enemy, or none that could take what health is left: then
     the finishing blow comes before any heal. With 288 health and Alicane Swiftarrow at 16, holding 3 pips, the
     wizard passed to save pips for a heal instead of finishing her with a 1-pip attack, and lost the battle."""
     left = tuple(enemy for index, enemy in enumerate(view.enemies) if index != finisher.enemy)
-    return not left or not within_reach_of_a_big_hit(replace(view, enemies=left), per_pip)
+    return not left or not within_reach_of_a_big_hit(replace(view, enemies=left), per_pip, hit_seen)
 
 
-def within_reach_of_a_big_hit(view: RoundView, per_pip: int = ENEMY_DAMAGE_PER_PIP) -> bool:
+def within_reach_of_a_big_hit(view: RoundView, per_pip: int = ENEMY_DAMAGE_PER_PIP, hit_seen=None) -> bool:
     """The wizard's health is no more than what the enemies could deal next round if each spent all its pips, at
     ENEMY_DAMAGE_PER_PIP. General Akilles, stunned in the first round, saved his pips and took 357 health or more in
     one round, where his hits had been 100 to 140; the wizard had a 245 heal in hand at 45% health and attacked,
@@ -514,8 +517,52 @@ def within_reach_of_a_big_hit(view: RoundView, per_pip: int = ENEMY_DAMAGE_PER_P
     margin."""
     if not isinstance(view.health, int):
         return False
-    reach = sum((enemy.pips or 0) * per_pip for enemy in view.enemies)
+    reach = sum(enemy_reach(enemy, per_pip, hit_seen) for enemy in view.enemies)
     return reach > 0 and view.health <= reach
+
+
+SEEN_HIT_MARGIN = 1.25
+HEAL_FOR_A_BIG_HIT_UP_TO = 0.8
+
+
+def enemy_reach(enemy: Combatant, per_pip: int, hit_seen=None) -> float:
+    """What `enemy` could deal next round: its pips at `per_pip`, but no more than the biggest hit seen from its
+    kind (`hit_seen`, from `biggest_hits`) with SEEN_HIT_MARGIN. Under "heal earlier", at 160 a pip, an Evil Snowman
+    holding 6 pips counted as a 960 hit, and the wizard passed at 1091 of 1164 health to save pips for a heal; the
+    Snowmen's biggest hits that day were about 340 (15:05)."""
+    by_pips = (enemy.pips or 0) * per_pip
+    seen = hit_seen(enemy.name) if hit_seen is not None and enemy.name else None
+    return by_pips if not seen else min(by_pips, seen * SEEN_HIT_MARGIN)
+
+
+def biggest_hits(rounds: list[dict]) -> dict[str, int]:
+    """The biggest hit seen from each kind of enemy in a battle's rounds (`combat.fight` entries): the health the
+    wizard lost between two rounds in which it cast nothing on itself, shared among the enemies that spent pips in
+    between by the pips each spent (an enemy gains one a round). Rounds where an enemy fell or joined are skipped,
+    since enemies are matched by place."""
+    hits: dict[str, int] = {}
+    for now, then in zip(rounds, rounds[1:]):
+        view, after = now.get("view") or {}, then.get("view") or {}
+        enemies, later = view.get("enemies") or [], after.get("enemies") or []
+        if "on self" in (now.get("action") or "") or len(enemies) != len(later):
+            continue
+        if not isinstance(view.get("health"), int) or not isinstance(after.get("health"), int):
+            continue
+        lost = view["health"] - after["health"]
+        spent = [pips_spent(enemy, next_round) for enemy, next_round in zip(enemies, later)]
+        if lost <= 0 or not sum(spent):
+            continue
+        for enemy, pips in zip(enemies, spent):
+            if pips and enemy.get("name"):
+                hits[enemy["name"]] = max(hits.get(enemy["name"], 0), round(lost * pips / sum(spent)))
+    return hits
+
+
+def pips_spent(enemy: dict, next_round: dict) -> int:
+    """The pips an enemy spent in a round: what it held, plus the one a round brings, less what it holds next."""
+    if not isinstance(enemy.get("pips"), int) or not isinstance(next_round.get("pips"), int):
+        return 0
+    return max(0, enemy["pips"] + 1 - next_round["pips"])
 
 
 def out_of_mana(view: RoundView) -> bool:
