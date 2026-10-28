@@ -149,7 +149,7 @@ Every change, enhancement or addition is listed with its rationale, so later con
 ### Fixed
 
 - **An Extract spell enchants only a deck card, and an enchantment that does not take is not tried again on that card** (`policy.extract_essence`, `SpellTypePolicy.enchant_refused`, `combat.play_round`).
-  - **What:** item cards (a wand's, such as "Dark Sprite - Starter Wand") are not enchanted. After an enchantment, the hand is read again; when no card in it is enchanted, that card is refused for the fight and the policy chooses again, up to twice a round; with no card left to try, the round is played without extracting, never passed for it.
+  - **What:** item cards (a wand's, such as "Dark Sprite - Starter Wand") are not enchanted. After an enchantment, the hand is read again; when no card in it is enchanted, that card is refused for the fight and the policy chooses again, up to twice a round; with no card left to try, the round is played without extracting, never passed for it. While every deck attack in hand needs more pips than the wizard has, the round is passed to save one (Snow Serpent needed 2 in a first round with 1). A card named for its item ("Frost Beetle - Starter Wand") counts as an item card even if the game does not say so. No deck edit while recharging or below the travel line of health.
   - **Why:** in the second Lost Soul fight (10:22, Unicorn Way) Extract Undead was in hand ("CollectEssenceUndead"); it was played onto "Dark Sprite - Starter Wand", the cheapest attack, and did not take, so each round passed ("a second enchantment in one round") while the Lost Soul took the wizard from 1071 to 546 health in seven rounds.
   - **Verified:** offline (`tests/test_policy.py`); in the game: the fight's rounds (10:22:33 to 10:24:08).
 
