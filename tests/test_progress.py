@@ -314,7 +314,8 @@ class RecallInTheGoalZoneTest(unittest.TestCase):
 class HeavyFightTest(unittest.TestCase):
     def test_a_fight_costing_a_third_of_the_health_is_heavy(self):
         from wizardtraining.progress import heavy_fight
-        self.assertTrue(heavy_fight(929, 543, 1133))
+        self.assertTrue(heavy_fight(1047, 540, 1133))
+        self.assertFalse(heavy_fight(929, 543, 1133))
         self.assertFalse(heavy_fight(1133, 1033, 1133))
         self.assertFalse(heavy_fight(None, 543, 1133))
 
