@@ -408,6 +408,13 @@ class ExtractTest(unittest.TestCase):
         policy.enchant_refused("Snow Serpent")
         self.assertEqual(policy.choose(view([wand, self.EXTRACT, self.SERPENT], enemies=souls)), Cast(0, "enemy", 0))
 
+    def test_pips_are_saved_while_the_decks_attacks_cost_more_than_the_wizard_has(self):
+        wand = Card("Frost Beetle - Starter Wand", "Damage", True, "Ice", 1)
+        serpent = Card("Snow Serpent", "Damage", False, "Ice", 2)
+        choice = self.policy().choose(view([wand, self.EXTRACT, serpent], pips=1, enemies=(Combatant("Lost Soul", 55),)))
+        self.assertIsInstance(choice, Pass)
+        self.assertIn("Snow Serpent", choice.reason)
+
     def test_low_health_heals_before_extracting(self):
         round_view = view([self.EXTRACT, self.BEETLE, HEAL], health=100, enemies=self.SOULS)
         self.assertEqual(self.policy().choose(round_view), Cast(2, "self"))

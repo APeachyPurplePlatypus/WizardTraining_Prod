@@ -243,15 +243,26 @@ def essence_enemies(view: RoundView, wanted: set[str]) -> list[int]:
     return [index for index, enemy in enumerate(view.enemies) if (enemy.name or "").lower() in names]
 
 
+ITEM_CARD_MARK = " - "
+
+
+def from_an_item(card: Card) -> bool:
+    """An item card: the game says so, or its name is the spell's and the item's ("Frost Beetle - Starter Wand")."""
+    return card.item_card or ITEM_CARD_MARK in (card.name or "")
+
+
 def is_extract(card: Card) -> bool:
     return EXTRACT_EFFECT in card.effects or (card.name or "").lower().startswith("extract ")
 
 
-def extract_essence(view: RoundView, wanted: set[str], refused: set[str] = frozenset()) -> Cast | Enchant | None:
+def extract_essence(view: RoundView, wanted: set[str],
+                    refused: set[str] = frozenset()) -> Cast | Enchant | Pass | None:
     """With an enemy in the fight whose essence a goal needs: hit it with a castable enchanted attack, else enchant
     the cheapest castable single-target attack of the deck with an Extract spell in hand (not an item card, such
     as a wand's, nor one an enchantment was refused onto this fight: onto "Dark Sprite - Starter Wand" none took, and
-    the wizard passed seven rounds against a Lost Soul, 1071 to 546 health, 10:22). Gilda Burke ("Know Thine Enemy"):
+    the wizard passed seven rounds against a Lost Soul, 1071 to 546 health, 10:22); while the deck's attacks in hand
+    need more pips than the wizard has (Snow Serpent, 2, with 1 in the first round), pass to save one, since any
+    attack ends a Lost Soul at 55 health. Gilda Burke ("Know Thine Enemy"):
     Extract spells "enchant damage spells, which can then capture an enemy's very essence"; an enchanted spell that
     deals damage extracts one Animus, a defeating hit one more, and the duel must be won to collect it. None when
     there is no such enemy, or the hand cannot do it this round."""
@@ -265,11 +276,16 @@ def extract_essence(view: RoundView, wanted: set[str], refused: set[str] = froze
     attacks = [index for index, card in enumerate(view.cards)
                if card.castable and not card.enchanted and card.spell_type in SINGLE_TARGET_ATTACKS]
     enchantable = [index for index in attacks
-                   if not view.cards[index].item_card and (view.cards[index].name or "") not in refused]
+                   if not from_an_item(view.cards[index]) and (view.cards[index].name or "") not in refused]
     if extract is not None and enchantable:
         return Enchant(extract, min(enchantable, key=lambda index: view.cards[index].pips or 1))
     if extract is not None and refused:
         return None
+    soon = [card for card in view.cards if card.spell_type in SINGLE_TARGET_ATTACKS and not card.castable
+            and not from_an_item(card) and (card.name or "") not in refused]
+    if extract is not None and soon:
+        cheapest = min(soon, key=lambda card: card.pips or 1)
+        return Pass(f"saving pips to enchant {cheapest.name} ({cheapest.pips} pips) with {view.cards[extract].name}")
     return spare_the_victim(view, victims, attacks)
 
 
