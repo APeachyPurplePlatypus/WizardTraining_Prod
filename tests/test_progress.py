@@ -319,5 +319,12 @@ class HeavyFightTest(unittest.TestCase):
         self.assertFalse(heavy_fight(1133, 1033, 1133))
         self.assertFalse(heavy_fight(None, 543, 1133))
 
+    def test_after_a_heavy_fight_a_near_goal_comes_before_the_refill_at_half_health_or_more(self):
+        from wizardtraining.progress import worth_pushing_on
+        self.assertTrue(worth_pushing_on(629 / 1164, 3018))
+        self.assertFalse(worth_pushing_on(500 / 1164, 3018))
+        self.assertFalse(worth_pushing_on(900 / 1164, 6600))
+        self.assertFalse(worth_pushing_on(None, 3018))
+
 if __name__ == "__main__":
     unittest.main()

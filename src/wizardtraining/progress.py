@@ -293,6 +293,20 @@ def heavy_fight(health_before, health_after, max_health) -> bool:
             and health_before - health_after >= HEAVY_FIGHT_FRACTION * max_health)
 
 
+GOAL_PUSH_DISTANCE = 3500.0
+GOAL_PUSH_HEALTH_FRACTION = 0.5
+
+
+def worth_pushing_on(health: float | None, distance_to_goal: float | None) -> bool:
+    """After a heavy fight, the goal is within GOAL_PUSH_DISTANCE and the wizard has GOAL_PUSH_HEALTH_FRACTION of
+    its health or more: go on to the goal rather than refill first. On Colossus Boulevard every fight cost more than
+    a third of the wizard's health, so each was followed by a Commons trip and a Recall that landed in the next fight
+    at the same mark, about 3,000 from the quest object, and the wizard made no headway for half an hour (15:00 to
+    15:34). A defeat on the way costs about what a refill trip does: the wizard wakes in the Commons and Recalls."""
+    return (health is not None and distance_to_goal is not None and health >= GOAL_PUSH_HEALTH_FRACTION
+            and distance_to_goal <= GOAL_PUSH_DISTANCE)
+
+
 def parked(parked_quests: dict[str, int], title: str | None, level) -> bool:
     """A quest parked while clearing a world (its fight lost with PARK_AFTER_STRATEGIES strategies) stays parked
     until the wizard is past the level it was parked at."""

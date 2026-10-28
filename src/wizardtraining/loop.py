@@ -52,7 +52,7 @@ from .navigation import load_planner
 from .policy import LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, SpellTypePolicy, biggest_hits
 from .progress import (DUEL_BLOCKS_THE_WAY, DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY, ENEMY_NEAR_PATH, LimitReached, Limits, PATH_THREATS,
                        PlannedRoute, RunRecord, StopRun, check_limits, leaves_world, health_to_travel, mana_for_a_fight, mana_to_travel, still_to_recharge, worth_marking, worth_recalling,
-                       PARK_AFTER_STRATEGIES, HEAVY_ZONE_FIGHTS, RECALL_MANA_NEEDED, RECHARGE_HEALTH_FRACTION, heavy_fight, parked,
+                       PARK_AFTER_STRATEGIES, HEAVY_ZONE_FIGHTS, RECALL_MANA_NEEDED, RECHARGE_HEALTH_FRACTION, heavy_fight, parked, worth_pushing_on,
                        nav_did_better, progressed, ready_to_recall, remember_obstacles, safe_to_stand, short_for_a_fight,
                        should_drink_potion, stalled, topped_up, travel_outcome, wanted_wisp,
                        WISP_ANY_DIRECTION_BELOW_FRACTION, world_of)
@@ -333,6 +333,11 @@ class QuestLoop:
             self.record.refill_after_heavy_fight = False
             return None
         if in_dungeon(zone, self.record.entered_with_x) and not self.travel_allowed_in(zone):
+            return None
+        if (distance := await self.distance_to_the_goal_here(zone)) is not None and worth_pushing_on(fraction, distance):
+            self.record.refill_after_heavy_fight = False
+            self.events.emit("health", f"{state['health']} of {state['max_health']} health after a heavy fight, and the "
+                                       f"goal is {distance:.0f} away in this zone: going on to it before refilling")
             return None
         if await self.safe_here():
             return await self.keep_looking_turn("health", state, await self.planner())
@@ -1725,6 +1730,14 @@ class QuestLoop:
         if must_come_back and self._marked_in != zone:
             return None
         return await self.go_home_for(stat, state)
+
+    async def distance_to_the_goal_here(self, zone: str) -> float | None:
+        """How far the active quest's arrow is, when it points into this zone; None otherwise."""
+        quest = self.record.quest or {}
+        arrow = quest.get("arrow")
+        if not arrow or quest.get("goal_zone") != zone:
+            return None
+        return flat_distance(await self.client.body.position(), XYZ(arrow["x"], arrow["y"], 0.0))
 
     async def kept_mark_in(self, zone: str) -> bool:
         """The Recall button still names the mark recorded for `zone`, set this run nearer the goal's arrow than the
