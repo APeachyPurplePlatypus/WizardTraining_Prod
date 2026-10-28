@@ -77,6 +77,13 @@ def is_game_notice(title: str, buttons: list[str]) -> bool:
     return title.strip().lower() == GAME_NOTICE_TITLE and buttons == GAME_NOTICE_BUTTONS
 
 
+def prompt_for_a_talk(in_range, prompt: str, *, talk_only: bool) -> bool:
+    """The interact prompt shows and, for a talk, reads "to Talk". By Private Emerson in Cyclops Lane another prompt
+    showed (one that teleports), X was pressed for the talk three times, and each took the wizard 17,000 units to the
+    top of the lane (2026-10-28, 08:14 to 08:22)."""
+    return in_range is True and (not talk_only or prompt_offers_talk(prompt))
+
+
 def prompt_offers_talk(prompt: str) -> bool:
     """The interact prompt is a person's: it reads "Press X to Talk" (the game's NPCInteractText). A door's reads
     "to Enter" or "to Teleport", a chest's "to Open", an object's "to Use"."""

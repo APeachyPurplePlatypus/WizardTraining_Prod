@@ -1,7 +1,7 @@
 import asyncio
 import unittest
 
-from wizardtraining.screen import (is_friend_request, is_game_notice, plain_text, prompt_action, prompt_offers_talk, visible_named,
+from wizardtraining.screen import (is_friend_request, is_game_notice, prompt_for_a_talk, plain_text, prompt_action, prompt_offers_talk, visible_named,
                                    visible_names_under, window_saying)
 
 
@@ -67,6 +67,12 @@ class ScreenTest(unittest.TestCase):
         self.assertEqual(caption, "Accept Some Player Level 10 as your friend?")
         self.assertTrue(is_friend_request(title, caption))
         self.assertFalse(is_friend_request("Combat", "Are you sure you want to flee? You will lose all your Mana"))
+
+    def test_a_talk_needs_a_prompt_that_reads_to_talk(self):
+        self.assertTrue(prompt_for_a_talk(True, "Press X or to Talk", talk_only=True))
+        self.assertFalse(prompt_for_a_talk(True, "Press X or to Teleport", talk_only=True))
+        self.assertTrue(prompt_for_a_talk(True, "Press X or to Use", talk_only=False))
+        self.assertFalse(prompt_for_a_talk(False, "Press X or to Talk", talk_only=True))
 
     def test_a_game_notice_is_a_box_titled_info_with_only_an_ok_button(self):
         self.assertTrue(is_game_notice("INFO", ["rightButton"]))

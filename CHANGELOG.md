@@ -116,6 +116,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **A talk presses X only at a prompt that reads "to Talk"** (`screen.prompt_for_a_talk`, `dialog.walk_up_to`).
+  - **What:** while walking up to an NPC to talk, an interact prompt that does not read "to Talk" counts as no prompt, so the wizard steps closer instead of pressing X at it.
+  - **Why:** handing in "Mad Maximus" to Private Emerson in Cyclops Lane, the wizard stood about 500 units from him with another prompt showing; the trusted-prompt rule took it for his, and X, three times (08:14 to 08:22), took the wizard 17,000 units to the top of the lane, by the dungeon, each time ("X pressed but no dialog appeared").
+  - **Verified:** in the game (the positions before and after each X, from the run report); offline (`tests/test_screen.py`).
+
 - **A zone load that lasts over a minute stops the run as a likely lost connection** (`QuestLoop.play_turn`, `LOAD_STUCK_SECONDS`).
   - **What:** when the game has been loading for more than 60 s in a row, the run stops for the operator, naming a likely lost connection to the game's server, instead of waiting turn after turn.
   - **Why:** after about six idle hours (01:32 to 07:41), the walk into the Shopping District began a load that never ended: the game showed only "TransitionWindow" and "WizardPatchingWindow", the zone could not be read, and the run waited for loading every 3 s until it was stopped; the operator restarted the game.
