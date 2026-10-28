@@ -11,11 +11,14 @@ import time
 from wizwalker import Keycode
 
 from .keys import tap
-from .ui import click, enable_clicks, message_box, showing
+from .screen import plain_text
+from .ui import click, enable_clicks, message_box, showing, text_of
 
 VIEWFINDER = ["WorldView", "SelfieCameraWindow"]
 SHUTTER = [*VIEWFINDER, "MainWindow", "TakePictureButton"]
 CLOSE_VIEWFINDER = [*VIEWFINDER, "MainWindow", "CloseSelfieCameraWindow"]
+SUBJECT_IN_FRAME = [*VIEWFINDER, "MainWindow", "SpecialItemWindow", "SpecialItemText"]
+PHOTO_OF = "take photo of"
 PREVIEW = [*VIEWFINDER, "PhotoFrameWindow"]
 KEEP_PICTURE = [*PREVIEW, "KeepPictureButton"]
 # After "Take Picture" the photo shows in a preview with "Keep Picture" and "Trash Picture" (11:44, Golem Court); it
@@ -26,6 +29,7 @@ POLL_SECONDS = 0.3
 SHUTTER_SECONDS = 3.0
 CLOSE_SECONDS = 1.5
 TOOK, NOT_OPENED, BOX_SHOWN = "took a photo", "the Viewfinder did not open", "a message box showed after the photo"
+NOT_IN_FRAME = "the subject is not in the Viewfinder's frame"
 
 
 async def shows_within(client, path: list[str], seconds: float) -> bool:
@@ -52,9 +56,16 @@ async def keep_the_picture(client) -> bool:
     return True
 
 
-async def take_photo(client) -> str:
-    """Open the Viewfinder, take a photo, keep it, close the Viewfinder. A preview left open (an earlier photo) is kept
-    first. A message box after the shutter is left for the operator."""
+def same_subject(shown: str, subject: str) -> bool:
+    """The Viewfinder names the subject in its frame ("Victor Darkwood" in the robe shop, 11:06)."""
+    return " ".join(plain_text(shown).lower().split()) == " ".join(subject.lower().split())
+
+
+async def take_photo(client, subject: str | None = None) -> str:
+    """Open the Viewfinder, take a photo, keep it, close the Viewfinder. With a `subject` ("Take Photo of" Mr.
+    Lincoln), the photo is taken only while the Viewfinder names that subject in its frame; otherwise it is closed
+    and NOT_IN_FRAME returned. A preview left open (an earlier photo) is kept first. A message box after the shutter
+    is left for the operator."""
     await enable_clicks(client)
     if await keep_the_picture(client):
         await close_viewfinder(client)
@@ -63,6 +74,9 @@ async def take_photo(client) -> str:
         await tap(client, Keycode.Z, 0.1, for_photo=True)
     if not await shows_within(client, SHUTTER, OPEN_TIMEOUT_SECONDS):
         return NOT_OPENED
+    if subject is not None and not same_subject(await text_of(client, SUBJECT_IN_FRAME), subject):
+        await close_viewfinder(client)
+        return NOT_IN_FRAME
     await click(client, SHUTTER)
     await asyncio.sleep(SHUTTER_SECONDS)
     if await message_box(client) is not None:

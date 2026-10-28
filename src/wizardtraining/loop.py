@@ -34,8 +34,8 @@ from .decks import (ADD, EXTRACT, KEEP, NO_CAPACITY_KNOWN, REMOVE, DeckChange, D
 from .deckpage import (REFUSED, DeckEditStopped, add_copy, close_book, open_deck_page, read_deck_page,
                        take_out_copy)
 from .doors import CHANGE_START_SECONDS, change_begins, push_through
-from .photomancy import BOX_SHOWN, PHOTO_ITEM, TOOK, take_photo
-from .entities import (objects_named, HEALTH_WISP, MANA_WISP, dungeon_entrance_near, nearby_enemies, nearest_npc, step_away,
+from .photomancy import BOX_SHOWN, NOT_IN_FRAME, PHOTO_ITEM, PHOTO_OF, TOOK, take_photo
+from .entities import (display_code, objects_named, HEALTH_WISP, MANA_WISP, dungeon_entrance_near, nearby_enemies, nearest_npc, step_away,
                        surroundings, wisps)
 from .equipment import count_items, equip, read_experience, read_items, read_wizard
 from .experience import progress_text, xp_gained, xp_to_reach
@@ -132,6 +132,8 @@ GATHER_SETTLE_SECONDS = 3.0
 REAGENT_ZONES_PER_TRY = 3
 DECK_RETRY_SECONDS = 60.0
 PHOTO_TRIES = 2
+PHOTO_DISTANCE = 600.0
+PHOTO_SUBJECT_TRIES = 4
 DECK_EDIT_CLEARANCE = 3000.0
 GATHERED_FORGET_SECONDS = 120.0
 BOX_CLOSE_WAIT_SECONDS = 10.0
@@ -1909,6 +1911,8 @@ class QuestLoop:
         reagent = await self.reagent_name(goal)
         if reagent == PHOTO_ITEM:
             return await self.photo_turn(goal, state)
+        if (await game_language().text(goal.get("name_key")) or "").strip().lower() == PHOTO_OF:
+            return await self.photo_of_turn(reagent, goal, state)
         if is_essence(reagent) and self.edit_deck:
             return await self.essence_turn(reagent, state)
         if is_essence(reagent):
@@ -1979,6 +1983,78 @@ class QuestLoop:
         if result == TOOK and not await self.goal_still_open(goal):
             return progressed("took a photo for the quest")
         return stalled("photo", result=result)
+
+    async def photo_of_turn(self, subject: str, goal: dict, state: dict) -> dict:
+        """A "Take Photo of" goal ("Ready, Aim, Shoot!": Mr. Lincoln in Ravenwood, Hilda Brewer in the Commons,
+        Sergeant Muldoon in Olde Town): walk to the goal's zone, find the subject among the loaded entities by the name
+        the game shows, walk within PHOTO_DISTANCE, face it, and take the photo while the Viewfinder names it in its
+        frame (`photomancy.take_photo`). With the subject not in sight, the zone is searched for it."""
+        zone, target = state["zone"], goal.get("destination_zone") or state["zone"]
+        planner = await self.planner()
+        if zone != target:
+            way = way_toward_zone(zone, target, [volume.name for volume, _ in planner.teleports])
+            door = None if way is None else self.door_on_the_way(way, planner)
+            if door is None:
+                return await self.park_the_active_quest(f"no way is known to {target}, where {subject} is to be "
+                                                        "photographed")
+            self.say_once("photo", f"a photo of {subject} in {target}: going there")
+            return await self.walk_to_door_turn(f"walk toward {target} for a photo of {subject}", *door)
+        where = await self.named_entity(subject)
+        me = await self.client.body.position()
+        if where is None:
+            explored = self.record.explored.setdefault(f"{zone}|photo {subject}", [])
+            area = self.area_to_search(planner, zone, me, explored)
+            if area is None:
+                return await self.park_the_active_quest(f"{subject} was not found in {zone} for the photo")
+            (x, y), _ = area
+
+            async def subject_in_sight():
+                return f"{subject} in sight" if await self.named_entity(subject) is not None else None
+
+            self.say_once("photo", f"{subject} not in sight in {zone}; looking at ({x:.0f}, {y:.0f})")
+            turn = await self.travel_turn(f"look for {subject}", XYZ(x, y, 0.0), arrive_radius=WAYPOINT_ARRIVE_RADIUS * 3,
+                                          also=subject_in_sight, avoid=await nearby_enemies(self.client))
+            if turn.get("trip", {}).get("reason") in (None, f"{subject} in sight", "every route method failed"):
+                explored.append((round(x), round(y)))
+            return turn
+        if flat_distance(me, where) > PHOTO_DISTANCE:
+            return await self.travel_turn(f"walk toward {subject} for a photo", where, arrive_radius=PHOTO_DISTANCE / 2,
+                                          avoid=await nearby_enemies(self.client))
+        if self._photos_taken >= PHOTO_SUBJECT_TRIES:
+            return await self.park_the_active_quest(f"{PHOTO_SUBJECT_TRIES} tries at a photo of {subject} left the "
+                                                    "goal open")
+        if not await self.safe_here() and not await self.no_enemy_within(DECK_EDIT_CLEARANCE):
+            return stalled(f"waiting for a safe moment for a photo of {subject}")
+        self._photos_taken += 1
+        await face(self.client, where)
+        result = await take_photo(self.client, subject)
+        self.events.emit("photo", f"{result} ({subject}, {flat_distance(me, where):.0f} away) in {zone}")
+        if result == BOX_SHOWN:
+            raise StopRun("a message box showed after the photo; left for the operator")
+        if result == NOT_IN_FRAME:
+            return await self.travel_turn(f"step closer to {subject}", where, arrive_radius=PHOTO_DISTANCE / 4)
+        if result == TOOK and not await self.goal_still_open(goal):
+            self._photos_taken = 0
+            return progressed(f"took a photo of {subject}")
+        return stalled("photo", result=result)
+
+    async def named_entity(self, name: str):
+        """The position of the nearest loaded entity the game shows by `name` (an NPC's display name), or None."""
+        me = await self.client.body.position()
+        found = []
+        for entity in await or_default(self.client.get_base_entity_list(), []):
+            try:
+                code = await display_code(entity)
+                if code and (await self.text_of_code(code)).strip().lower() == name.strip().lower():
+                    found.append(await entity.location())
+            except Exception:
+                continue
+        return min(found, key=lambda where: flat_distance(me, where), default=None)
+
+    async def text_of_code(self, code: str) -> str:
+        if code not in self._enemy_names:
+            self._enemy_names[code] = await game_language().text(code) or ""
+        return self._enemy_names[code]
 
     def essence_enemies(self) -> set[str]:
         """The enemies whose essence an open quest goal needs, for the combat policy (`policy.extract_essence`)."""
