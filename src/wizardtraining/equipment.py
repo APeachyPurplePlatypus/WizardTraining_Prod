@@ -128,7 +128,10 @@ async def count_items(client) -> int | None:
 
 async def read_experience(client) -> tuple[int, int] | None:
     """(level, experience within it), read from memory with no clicks; None when unreadable."""
-    behavior = await attempt(client.client_object.search_behavior_by_name(MAGIC_SCHOOL_BEHAVIOR))
+    try:
+        behavior = await client.client_object.search_behavior_by_name(MAGIC_SCHOOL_BEHAVIOR)
+    except Exception:
+        return None
     if behavior is None:
         return None
     level = await attempt(behavior.read_value_from_offset(LEVEL, Primitive.int32))
