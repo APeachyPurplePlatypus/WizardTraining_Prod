@@ -27,6 +27,8 @@ WISP_ANY_DIRECTION_BELOW_FRACTION = 0.35
 POTION_BELOW_FRACTION = 0.4
 MANA_BELOW_FRACTION = 0.2
 HEALTH_TO_TRAVEL_FRACTION = 0.4
+RECHARGE_HEALTH_FRACTION = 0.9
+RECHARGE_MANA_FRACTION = 0.8
 ENGAGE_MANA_FRACTION = 0.4
 ENGAGE_HEALTH_FRACTION = 0.6
 TOP_UP_MANA_FRACTION = 0.9
@@ -218,6 +220,18 @@ def health_to_travel(health: float | None) -> bool:
     woke in the Krokotopia hub with 1 health and walked straight back toward them at 55 of 1102 to talk to the
     assistant behind them."""
     return health is None or health >= HEALTH_TO_TRAVEL_FRACTION
+
+
+def still_to_recharge(health: float | None, mana: float | None) -> str | None:
+    """After a defeat, or with health below HEALTH_TO_TRAVEL_FRACTION: "health" or "mana", whichever is still below
+    RECHARGE_HEALTH_FRACTION or RECHARGE_MANA_FRACTION of its pool, health first; None when both are there or
+    unknown. The operator: "seek out blue and red wisps in safe areas to recharge after death". Woken in the
+    Krokotopia hub with 1 health, the wizard walked back to the Pyramid at 55 of 1102 and lost again."""
+    if health is not None and health < RECHARGE_HEALTH_FRACTION:
+        return "health"
+    if mana is not None and mana < RECHARGE_MANA_FRACTION:
+        return "mana"
+    return None
 
 
 def ready_to_recall(mana: float | None, health: float | None) -> bool:

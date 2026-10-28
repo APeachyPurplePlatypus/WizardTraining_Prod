@@ -45,7 +45,7 @@ from .movement import LOADING, KeysIgnored, Reroute, face, travel
 from .navigation import load_planner
 from .policy import LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, SpellTypePolicy
 from .progress import (DUEL_BLOCKS_THE_WAY, DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY, ENEMY_NEAR_PATH, LimitReached, Limits, PATH_THREATS,
-                       PlannedRoute, RunRecord, StopRun, check_limits, leaves_world, health_to_travel, mana_for_a_fight, mana_to_travel,
+                       PlannedRoute, RunRecord, StopRun, check_limits, leaves_world, health_to_travel, mana_for_a_fight, mana_to_travel, still_to_recharge,
                        nav_did_better, progressed, ready_to_recall, remember_obstacles, safe_to_stand, short_for_a_fight,
                        should_drink_potion, stalled, topped_up, travel_outcome, wanted_wisp,
                        WISP_ANY_DIRECTION_BELOW_FRACTION, world_of)
@@ -141,6 +141,7 @@ class QuestLoop:
         self._marked_in: str | None = None
         self._dungeons_give_nothing_back = False
         self._refill_fully = False
+        self._recharging = False
         self._fight_situation: str | None = None
         if isinstance(combat_policy, SpellTypePolicy):
             combat_policy.strategy_for = self.strategy_against
@@ -616,6 +617,7 @@ class QuestLoop:
         battle["after"] = {key: after[key] for key in ("zone", "level", "health", "max_health", "mana", "gold")}
         if defeated:
             self.record.defeats += 1
+            self._recharging = True
             if self.limits.max_defeats is not None and self.record.defeats > self.limits.max_defeats:
                 raise StopRun("defeated in battle; stopping for the operator")
             self.change_combat_strategy(battle)
@@ -831,8 +833,11 @@ class QuestLoop:
             health = health_fraction(state)
             refill = ("health" if health is not None and health < FULL_HEALTH_FRACTION
                       else "mana" if not topped_up(mana_fraction(state)) else None)
-        if refill is None and not inside_a_dungeon and not health_to_travel(health_fraction(state)):
-            refill = "health"
+        if not inside_a_dungeon and not health_to_travel(health_fraction(state)):
+            self._recharging = True
+        if refill is None and self._recharging and not inside_a_dungeon:
+            refill = still_to_recharge(health_fraction(state), mana_fraction(state))
+            self._recharging = refill is not None
         if refill is None and (self._topping_up_in == state["zone"] or not mana_to_travel(mana_fraction(state))):
             refill = "mana"
         if refill is not None:
@@ -1086,11 +1091,17 @@ class QuestLoop:
 
     async def safe_zone_refill_turn(self, stat: str, state: dict, planner: RoutePlanner) -> dict | None:
         """In a zone where no enemy has been met. Health alone is not waited for (the operator: resting "is not time
-        efficient"), so None and the wizard walks on. Mana is: the operator allowed waiting in Olde Town for it, or
-        looking for wisps. The zone is searched once for mana wisps, safe here, then the wizard stands still while
-        mana comes back (`wait_for_mana_turn`) until `progress.topped_up`; health comes back meanwhile."""
+        efficient"), so None and the wizard walks on, except while recharging after a defeat (`progress.
+        still_to_recharge`; the operator: "seek out blue and red wisps in safe areas to recharge after death"): the
+        zone is searched once for health wisps, then the wizard stands while health comes back, about 2.4 a second.
+        Mana is waited for: the operator allowed waiting in Olde Town for it, or looking for wisps. The zone is
+        searched once for mana wisps, safe here, then the wizard stands still while mana comes back
+        (`wait_for_mana_turn`) until `progress.topped_up`; health comes back meanwhile."""
         if stat == "health" and mana_for_a_fight(mana_fraction(state)):
-            return None
+            if not self._recharging:
+                return None
+            turn = await self.explore_for_wisps_turn("health", state, planner, reach=refill_reach(True), again=False)
+            return turn if turn is not None else await self.wait_for_mana_turn(state, waiting_for="health")
         self.top_up_in(state["zone"])
         turn = await self.explore_for_wisps_turn("mana", state, planner, reach=refill_reach(True), again=False)
         return turn if turn is not None else await self.wait_for_mana_turn(state)
@@ -1103,7 +1114,7 @@ class QuestLoop:
             self._topping_up_in = zone
             self.record.explored.pop(f"{zone}|{MANA_WISP}s", None)
 
-    async def wait_for_mana_turn(self, state: dict) -> dict:
+    async def wait_for_mana_turn(self, state: dict, waiting_for: str = "mana") -> dict:
         """Stand still for up to MANA_WAIT_SECONDS, so the loop keeps checking for battles, popups and the STOP file
         between waits. Mana comes back in a zone without enemies, about 2 a minute (0 to 30 within 17 minutes in the
         Commons); health about 2.4 a second. In Cyclops Lane neither came back."""
@@ -1114,11 +1125,11 @@ class QuestLoop:
             now = await snapshot(self.client)
             if battle_showing(now) or not free_to_move(now) or now["zone"] != state["zone"]:
                 break
-        self.events.emit("mana", f"waited in {state['zone']} for mana: {state['mana']} -> {now['mana']} of "
+        self.events.emit("mana", f"waited in {state['zone']} for {waiting_for}: {state['mana']} -> {now['mana']} of "
                                  f"{now['max_mana']}, health {state['health']} -> {now['health']}")
         gained = any(isinstance(now[stat], int) and isinstance(state[stat], int) and now[stat] > state[stat]
                      for stat in ("mana", "health"))
-        return (progressed if gained else stalled)("waited for mana", before=state["mana"], after=now["mana"])
+        return (progressed if gained else stalled)(f"waited for {waiting_for}", before=state["mana"], after=now["mana"])
 
     async def commons_trip_turn(self, stat: str, state: dict, mark: bool = True) -> dict | None:
         """Short of mana in a street with no wisp to fetch, or of health in a zone too small to look for wisps in
