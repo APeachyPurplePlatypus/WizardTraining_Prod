@@ -988,6 +988,8 @@ class QuestLoop:
         if ready_to_recall(mana_fraction(state), health_fraction(state)):
             return await self.recall_turn(state)
         if not ready_to_recall(mana_fraction(state), None):
+            if (fetched := await self.wisp_turn("mana", state, reach=refill_reach(True))) is not None:
+                return fetched
             return await self.safe_zone_refill_turn("mana", state, await self.planner())
         return await self.wait_for_mana_turn(state)
 
