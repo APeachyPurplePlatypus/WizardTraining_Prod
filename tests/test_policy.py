@@ -1,8 +1,8 @@
 import unittest
 
 from wizardtraining.policy import (ACCEPT, DECLINE, GO_BACK, LEAVE_MENU, STOP, UNIVERSAL, Card, Cast, Combatant,
-                                   DamageModifier, Flee, MainQuestsOnly, Pass, RoundView, SpellTypePolicy, TakeAllQuests,
-                                   problem_with)
+                                   DamageModifier, Enchant, Flee, MainQuestsOnly, Pass, RoundView, SpellTypePolicy,
+                                   TakeAllQuests, problem_with)
 
 HEAL = Card("Fairy", "Heal", True)
 BOLT = Card("Fire Cat", "Damage", True)
@@ -365,6 +365,42 @@ class ServicesMenuTest(unittest.TestCase):
         self.choose(policy)
         self.assertEqual(policy.decide(["I am offering you a side quest."], can_go_back=True), DECLINE)
 
+
+class ExtractTest(unittest.TestCase):
+    """Gilda Burke ("Know Thine Enemy"): an Extract spell enchants a damage spell, whose hit takes the essence."""
+    EXTRACT = Card("Extract Undead", "Enchantment", True, "Myth", 0)
+    BEETLE = Card("Frost Beetle", "Damage", True, "Ice", 1)
+    SERPENT = Card("Snow Serpent", "Damage", True, "Ice", 2)
+    SOULS = (Combatant("Ghoul", 300), Combatant("Lost Soul", 200))
+
+    def policy(self, wanted=("Lost Soul",)):
+        return SpellTypePolicy(essence_from=lambda: set(wanted))
+
+    def test_the_cheapest_attack_is_enchanted_while_an_essence_is_needed(self):
+        round_view = view([self.SERPENT, self.EXTRACT, self.BEETLE], enemies=self.SOULS)
+        self.assertEqual(self.policy().choose(round_view), Enchant(1, 2))
+
+    def test_the_enchanted_attack_hits_the_enemy_whose_essence_is_needed_once_a_fight(self):
+        enchanted = Card("Frost Beetle", "Damage", True, "Ice", 1, enchanted=True)
+        policy = self.policy()
+        self.assertEqual(policy.choose(view([self.SERPENT, enchanted], enemies=self.SOULS)), Cast(1, "enemy", 1))
+        self.assertEqual(policy.choose(view([self.SERPENT, self.EXTRACT, self.BEETLE], enemies=self.SOULS)),
+                         Cast(0, "enemy", 1))
+
+    def test_no_essence_needed_or_no_such_enemy_plays_as_usual(self):
+        round_view = view([self.EXTRACT, self.BEETLE], enemies=(Combatant("Ghoul", 300),))
+        self.assertEqual(self.policy().choose(round_view), Cast(1, "enemy", 0))
+        self.assertEqual(self.policy(wanted=()).choose(view([self.EXTRACT, self.BEETLE], enemies=self.SOULS)),
+                         Cast(1, "enemy", 1))
+
+    def test_low_health_heals_before_extracting(self):
+        round_view = view([self.EXTRACT, self.BEETLE, HEAL], health=100, enemies=self.SOULS)
+        self.assertEqual(self.policy().choose(round_view), Cast(2, "self"))
+
+    def test_an_enchantment_onto_itself_or_an_uncastable_card_is_refused(self):
+        round_view = view([self.EXTRACT, TOO_DEAR])
+        self.assertIsNotNone(problem_with(Enchant(0, 1), round_view))
+        self.assertIsNotNone(problem_with(Enchant(0, 0), round_view))
 
 if __name__ == "__main__":
     unittest.main()

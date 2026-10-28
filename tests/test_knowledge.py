@@ -130,6 +130,9 @@ class KnowledgeTest(unittest.TestCase):
         run.reagent_zones = {"Mist Wood": ["WizardCity/WC_Streets/WC_Unicorn"]}
         run.reagent_searched = {"Mist Wood": ["WizardCity/WC_Hub"]}
         run.wanted_reagents = {"Mist Wood": "Wizards in the Mist"}
+        run.deck_capacity = {"Starter Deck": 14}
+        run.enemy_zones = {"Lost Soul": ["WizardCity/WC_Streets/WC_Unicorn"]}
+        run.essence_quests = {"Know Thine Enemy": "Lost Soul Essence"}
         knowledge.learn_from(run)
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "knowledge.json"
@@ -150,6 +153,9 @@ class KnowledgeTest(unittest.TestCase):
         self.assertEqual(later.reagent_zones, {"Mist Wood": ["WizardCity/WC_Streets/WC_Unicorn"]})
         self.assertEqual(later.reagent_searched, {"Mist Wood": ["WizardCity/WC_Hub"]})
         self.assertEqual(later.wanted_reagents, {"Mist Wood": "Wizards in the Mist"})
+        self.assertEqual(later.deck_capacity, {"Starter Deck": 14})
+        self.assertEqual(later.enemy_zones, {"Lost Soul": ["WizardCity/WC_Streets/WC_Unicorn"]})
+        self.assertEqual(later.essence_quests, {"Know Thine Enemy": "Lost Soul Essence"})
 
     def test_a_new_run_starts_with_it(self):
         run = RunRecord(limits=Limits())

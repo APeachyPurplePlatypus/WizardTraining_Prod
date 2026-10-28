@@ -162,6 +162,19 @@ def is_essence(item: str) -> bool:
     return item.split()[-1].lower() == ESSENCE_WORD if item.split() else False
 
 
+def essence_enemy(item: str) -> str:
+    """The enemy an essence is taken from: "Lost Soul Essence" from a Lost Soul."""
+    words = item.split()
+    return " ".join(words[:-1]) if is_essence(item) else item
+
+
+def fought_in(enemy_zones: dict[str, list[str]], names, zone: str) -> None:
+    """Note that each enemy named was fought in `zone`."""
+    for name in names:
+        if name and zone not in enemy_zones.setdefault(name, []):
+            enemy_zones[name].append(zone)
+
+
 REAGENT_DETOUR = 3000.0
 REAGENT_SAFE_CLEARANCE = 800.0
 

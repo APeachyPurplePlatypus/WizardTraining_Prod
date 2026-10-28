@@ -54,6 +54,10 @@ def main(argv=None) -> int:
                       help="finish a world's quests first, as its zone paths name it (WizardCity): the quests the "
                            "quest page lists there, then each giver the journal's Quest Finder points to, then back to "
                            "the quest paused for it (the operator, 2026-10-28)")
+    play.add_argument("--edit-deck", action="store_true",
+                      help="put spell cards into the equipped deck and take them out by the deck rules (decks.py), "
+                           "each with its reason in deck-changes.jsonl, only out of battle where no enemy is near "
+                           "(the operator, 2026-10-28: \"Yes, bot can edit decks.\")")
     play.add_argument("--wear-gear", action="store_true",
                       help="wear the best gear in the backpack, checked after each level-up or new loot, only in "
                            "zones without enemies; nothing is bought, sold or thrown away")
@@ -79,7 +83,8 @@ def main(argv=None) -> int:
     offers = (TakeAllQuests if args.side_quests else MainQuestsOnly)(approved_titles=args.approve_quest)
     report, path = asyncio.run(play_quests(settings, limits, offer_policy=offers, use_potions=args.use_potions,
                                             wear_gear=args.wear_gear, use_travel_buttons=args.use_travel_buttons,
-                                            clear_world=args.clear_world, leave_dungeons=args.leave_dungeons))
+                                            clear_world=args.clear_world, leave_dungeons=args.leave_dungeons,
+                                            edit_deck=args.edit_deck))
     print(f"stopped: {report['stopped']}\nreport: {path}")
     return 0
 

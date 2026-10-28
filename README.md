@@ -62,6 +62,7 @@ python -m wizardtraining play --level 7 --minutes 25 --battles 20
 - `--use-travel-buttons` lets a mana refill in a street use the game's own buttons: Mark Location before leaving, Go to The Commons (the world's hub, where mana comes back), and Recall Location back to the mark once mana is up. Each costs a few mana (Mark and Recall about 5), nothing is moved by the framework, and a button that is cooling down is not pressed.
 - `--use-potions` lets it drink health potions it already has when health is low out of battle. It never buys any.
 - `--wear-gear` lets it wear the best gear in its backpack. It checks after each level-up or new loot, and only with no enemy nearby, because the spellbook stays open a few seconds per item. What counts as best is `gear.py`: max health first, then max mana, then resistance to every school, then the wizard's own school's damage and accuracy. It equips only hats, robes, shoes, athames, amulets and rings; wands, decks, pets and mounts are left alone. It never sells, recycles or throws anything away.
+- `--edit-deck` lets it put spell cards into the equipped deck and take them out by the deck rules (`decks.py`): an Extract spell while a quest needs an essence, then heals, the strongest hits, and stuns, up to each card's copy limit and the deck's capacity, which it learns from the Deck page. Only out of battle with no enemy nearby; every card moved is logged with its reason in `runtime/deck-changes.jsonl`.
 
 To stop a run, run this from a second terminal:
 

@@ -29,6 +29,10 @@ from .config import Settings
 from .dialog import (DIALOG_FINISHED, FOLLOW_UP_WAIT_SECONDS, NPC_ARRIVE_DISTANCE, OBJECT_USE_DISTANCE, OFFER_LEFT_FOR_OPERATOR,
                      TALK_KEY_SECONDS, choose_service, close_enough, dialog_open, leave_services, near_npc, read_conversation, service_options,
                      services_open, talk, use_object, wait_for_dialog)
+from .decks import (ADD, EXTRACT, KEEP, NO_CAPACITY_KNOWN, REMOVE, DeckChange, DeckLog, change_text, deck_spell,
+                    first_missing, plan_changes, role_of, wanted_deck)
+from .deckpage import (REFUSED, DeckEditStopped, add_copy, close_book, open_deck_page, read_deck_page,
+                       take_out_copy)
 from .doors import CHANGE_START_SECONDS, change_begins, push_through
 from .entities import (objects_named, HEALTH_WISP, MANA_WISP, dungeon_entrance_near, nearby_enemies, nearest_npc, step_away,
                        surroundings, wisps)
@@ -70,7 +74,7 @@ from .spells import KNOWN_AT_FIRST_CHECK, LEARNED, SpellLog, learned_text, newly
 from .session import NoClient, attached, hooks_ready
 from .state import attempt, battle_showing, free_to_move, health_fraction, mana_fraction, snapshot
 from .placed import gate_toward, objects_for_goal
-from .targets import (area_in_zone, found_in, is_essence, is_reagent, looks_like_a_reagent, worth_a_detour, zones_to_search_for, bystanders, enemies_to_route_around, in_grace_after_battle, keeps_blocking,
+from .targets import (area_in_zone, essence_enemy, fought_in, found_in, is_essence, is_reagent, looks_like_a_reagent, worth_a_detour, zones_to_search_for, bystanders, enemies_to_route_around, in_grace_after_battle, keeps_blocking,
                       leads_to_another_zone, named_enemies_not_in_a_duel, next_area_to_explore, others, quest_targets,
                       refill_reach, safe_wisps,
                       summary, too_close, WISP_REACH)
@@ -153,9 +157,13 @@ class QuestLoop:
     def __init__(self, client, settings: Settings, record: RunRecord, *,
                  combat_policy: CombatPolicy, offer_policy: OfferPolicy, events: EventLog | None = None,
                  use_potions: bool = False, wear_gear: bool = False, use_travel_buttons: bool = False,
-                 leave_dungeons: bool = False):
+                 leave_dungeons: bool = False, edit_deck: bool = False):
         self.client = client
         self.leave_dungeons = leave_dungeons
+        self.edit_deck = edit_deck
+        self.deck_log = DeckLog(settings.runtime_folder)
+        self._deck_checked: tuple | None = None
+        self._enemy_names: dict[str, str] = {}
         self.use_potions = use_potions
         self.wear_gear = wear_gear
         self.use_travel_buttons = use_travel_buttons
@@ -187,6 +195,7 @@ class QuestLoop:
         self._fight_situation: str | None = None
         if isinstance(combat_policy, SpellTypePolicy):
             combat_policy.strategy_for = self.strategy_against
+            combat_policy.essence_from = self.essence_enemies
         self.goal_approach = GoalApproach()
         self._gear_checked: tuple | None = None
         self._finishing_since: float | None = None
@@ -451,6 +460,8 @@ class QuestLoop:
                            windows=await visible_children(self.client, ["WorldView"]))
         if self.wear_gear and (turn := await self.gear_turn()) is not None:
             return turn
+        if self.edit_deck and (turn := await self.deck_turn(state)) is not None:
+            return turn
         if self._finishing_since is not None and (turn := await self.leave_for_safety_turn(state)) is not None:
             return turn
         if self._finishing_since is None and (turn := await self.training_turn(state)) is not None:
@@ -667,6 +678,7 @@ class QuestLoop:
                              on_round=lambda entry: self.events.emit("round", describe_round(entry)))
         self.record.battle_log.append(battle)
         self._battle_ended_at = time.monotonic()
+        fought_in(self.record.enemy_zones, enemies_at_once(battle.get("rounds", []))[1], before["zone"])
         after = await snapshot(self.client)
         fraction = health_fraction(after)
         fled = bool(battle["rounds"]) and fled_in(battle["rounds"][-1])
@@ -884,6 +896,7 @@ class QuestLoop:
             if (switched := await self.switch_quest_turn()) is not None:
                 return switched
         goals = open_goals(quest)
+        await self.forget_a_finished_essence(quest, goals)
         goal = goals[0] if goals else {"type": "persona", "destination_zone": ""}
         arrow = await read_quest_arrow(self.client)
         goal_world, here_world = world_of(goal.get("destination_zone")), world_of(state["zone"])
@@ -1811,6 +1824,8 @@ class QuestLoop:
         the world not yet searched for it. Cyclops Lane, not on Mist Wood's list, was searched point by point for ten
         minutes among its Cyclops, each fight sending the wizard back to the same point (08:43 to 08:56)."""
         reagent = await self.reagent_name(goal)
+        if is_essence(reagent) and self.edit_deck:
+            return await self.essence_turn(reagent, state)
         if is_essence(reagent):
             return await self.park_the_active_quest(f"{reagent} is collected with an Extract spell cast on an enemy in "
                                                     "battle, which the bot does not do yet")
@@ -1853,6 +1868,203 @@ class QuestLoop:
                 explored.append((round(x), round(y)))
             return turn
         return await self.next_zone_for_reagent_turn(reagent, zone, planner)
+
+    def essence_enemies(self) -> set[str]:
+        """The enemies whose essence an open quest goal needs, for the combat policy (`policy.extract_essence`)."""
+        return {essence_enemy(item) for item in self.record.essence_quests.values()}
+
+    async def forget_a_finished_essence(self, quest: dict, goals: list[dict]) -> None:
+        """The active quest needed an essence and no open goal of it does now: the Extract spell can leave the deck."""
+        title = " ".join((quest.get("title") or "").split())
+        if title not in self.record.essence_quests:
+            return
+        items = [await game_language().text(goal["item_code"]) or "" for goal in goals
+                 if goal.get("type") == "scavenge" and goal.get("item_code")]
+        if not any(is_essence(item) for item in items):
+            item = self.record.essence_quests.pop(title)
+            self.events.emit("deck", f"{title} needs no {item} any more; the deck is planned again without it")
+
+    async def essence_turn(self, essence: str, state: dict) -> dict:
+        """A scavenge goal for an essence ("Lost Soul Essence"), taken in battle. With `--edit-deck` the quest is kept as
+        one needing it (`Knowledge.essence_quests`), so an Extract spell goes into the deck (`deck_turn`) and the combat
+        policy enchants a damage spell with it and hits the enemy the essence is named for (`policy.extract_essence`).
+        The wizard goes to a zone that enemy was fought in (`Knowledge.enemy_zones`), door by door, and walks into one
+        (`combat.approach`); with none in sight it searches the zone. Gilda Burke: "Start with the Lost Souls on
+        Unicorn Way. Extract one Lost Soul Animus"."""
+        title = " ".join(((self.record.quest or {}).get("title") or "").split())
+        enemy, zone = essence_enemy(essence), state["zone"]
+        if title and self.record.essence_quests.get(title) != essence:
+            self.record.essence_quests[title] = essence
+            self.events.emit("deck", f"{title} needs {essence}, taken from a {enemy} in battle with an Extract spell; "
+                                     "the deck is planned again with it")
+            return progressed("noted a quest that needs an essence", quest=title)
+        if not await self.deck_holds_an_extract():
+            if self._deck_checked is not None and self._deck_checked[1] == tuple(sorted(self.record.essence_quests)):
+                return await self.park_the_active_quest(f"{essence} needs an Extract spell in the deck, and the deck "
+                                                        "edit did not put one in")
+            self.say_once("deck", f"{essence} needs an Extract spell in the deck; the deck is edited at the first safe "
+                                  "place on the way")
+        zones = self.record.enemy_zones.get(enemy, [])
+        planner = await self.planner()
+        if zone not in zones:
+            for other in sorted(zones, key=lambda other: zone_hops(self.record.zone_links, zone, other) or 99):
+                way = way_toward_zone(zone, other, [volume.name for volume, _ in planner.teleports])
+                door = None if way is None else self.door_on_the_way(way, planner)
+                if door is not None:
+                    self.say_once("gather", f"{essence}: going to {other}, where {enemy}s were fought")
+                    return await self.walk_to_door_turn(f"walk toward {other} for a {enemy}", *door)
+            return await self.park_the_active_quest(f"no way is known to a zone where a {enemy} was fought, for "
+                                                    f"{essence}")
+        enemies = await nearby_enemies(self.client)
+        targets = [found for found in enemies if not found["in_a_duel"] and await self.enemy_name(found) == enemy]
+        in_reach = [target for target in targets if target["distance"] <= TARGET_REACH]
+        if in_reach:
+            result = await approach(self.client, in_reach[0])
+            did = f"approached a {enemy} for {essence}"
+            return progressed(did) if result["ok"] else stalled(did, reason=result.get("reason"))
+        if targets:
+            return await self.travel_turn(f"walk toward a {enemy}", targets[0]["position"],
+                                          arrive_radius=TARGET_REACH / 2, avoid=bystanders(enemies, targets),
+                                          ignore=targets)
+        me = await self.client.body.position()
+        explored = self.record.explored.setdefault(f"{zone}|{enemy}", [])
+        area = self.area_to_search(planner, zone, me, explored)
+        if area is None:
+            explored.clear()
+            area = self.area_to_search(planner, zone, me, explored)
+        if area is None:
+            return stalled(f"no part of {zone} to look for a {enemy} in")
+        (x, y), _ = area
+
+        async def enemy_in_sight():
+            for found in await nearby_enemies(self.client):
+                if not found["in_a_duel"] and await self.enemy_name(found) == enemy:
+                    return f"{enemy} in sight"
+            return None
+
+        self.say_once("gather", f"no {enemy} in sight in {zone}; looking at ({x:.0f}, {y:.0f})")
+        turn = await self.travel_turn(f"look for a {enemy}", XYZ(x, y, 0.0), arrive_radius=WAYPOINT_ARRIVE_RADIUS * 3,
+                                      also=enemy_in_sight, avoid=enemies)
+        if turn.get("trip", {}).get("reason") in (None, f"{enemy} in sight", "every route method failed"):
+            explored.append((round(x), round(y)))
+        return turn
+
+    async def enemy_name(self, enemy: dict) -> str:
+        """An enemy's name as the game shows it ("Lost Soul"), from its display code, kept once read."""
+        code = enemy.get("display_code")
+        if not code:
+            return ""
+        if code not in self._enemy_names:
+            self._enemy_names[code] = await game_language().text(code) or ""
+        return self._enemy_names[code]
+
+    def spell_catalog(self) -> SpellCatalog:
+        if self._spell_catalog is None:
+            self._spell_catalog = SpellCatalog(game_language())
+        return self._spell_catalog
+
+    async def deck_holds_an_extract(self) -> bool:
+        deck = await or_default(deck_spells(self.client), {})
+        for template_id in deck:
+            if role_of((await self.spell_catalog().describe(template_id)).effects) == EXTRACT:
+                return True
+        return False
+
+    async def deck_turn(self, state: dict) -> dict | None:
+        """With `--edit-deck` (the operator, 2026-10-28, 13:45 UTC: "Yes, bot can edit decks."): when the spells known
+        or the quests needing an essence have changed, and only where it is safe (`safe_here`; never in a dungeon or
+        tower), open the Deck page and make the deck what `decks.wanted_deck` wants, a card at a time, each click
+        checked (`deckpage`) and each card logged with its reason and the deck's size before and after
+        (`decks.DeckLog`), then close the book. The deck's capacity comes from the game: until it is known for this
+        deck, the first card wanted is put in, and the add the page refuses gives it (`learn_capacity`). None when
+        there is nothing to do here."""
+        key = (tuple(sorted(self.record.known_spells)), tuple(sorted(self.record.essence_quests)))
+        if key == self._deck_checked or in_dungeon(state["zone"], self.record.entered_with_x):
+            return None
+        if not await self.safe_here():
+            return None
+        self._deck_checked = key
+        essence_needed = bool(self.record.essence_quests)
+        try:
+            await open_deck_page(self.client)
+            view = before = await read_deck_page(self.client)
+            capacity = self.record.deck_capacity.get(view.name)
+            if capacity is None:
+                view, capacity = await self.learn_capacity(view, essence_needed, state)
+            spells, names = await self.deck_spells_of(view)
+            ids = {name: template_id for template_id, name in names.items()}
+            for change in plan_changes(spells, wanted_deck(spells, capacity, essence_needed=essence_needed)):
+                view = await self.carry_out(change, ids[change.name], view, state)
+        except DeckEditStopped as stopped:
+            self.events.emit("deck", f"the deck edit stopped: {stopped}")
+            return stalled("deck edit stopped", reason=str(stopped))
+        finally:
+            await close_book(self.client)
+        _, names = await self.deck_spells_of(view)
+        if view.cards == before.cards:
+            self.events.emit("deck", f"{view.name}, {view.size} cards, is as wanted: {self.deck_text(view, names)}")
+            return None
+        self.events.emit("deck", f"{view.name}: {before.size} cards before ({self.deck_text(before, names)}), "
+                                 f"{view.size} after ({self.deck_text(view, names)})")
+        return progressed("edited the deck", before=before.size, after=view.size)
+
+    async def learn_capacity(self, view, essence_needed: bool, state: dict):
+        """Put in, one at a time, the first card wanted that is missing, until the Deck page refuses one: the deck
+        holds as many cards as it has then, kept for this deck (`Knowledge.deck_capacity`). When nothing more is
+        wanted, the capacity stays unknown and the plan has room for everything."""
+        while True:
+            spells, names = await self.deck_spells_of(view)
+            wanted = wanted_deck(spells, NO_CAPACITY_KNOWN, essence_needed=essence_needed)
+            missing = first_missing(spells, wanted)
+            if missing is None:
+                return view, NO_CAPACITY_KNOWN
+            template_id = next(template_id for template_id, name in names.items() if name == missing)
+            if await add_copy(self.client, template_id) == REFUSED:
+                self.record.deck_capacity[view.name] = view.size
+                self.events.emit("deck", f"{view.name} holds {view.size} cards: the Deck page refused {missing} at "
+                                         f"{view.size}")
+                return view, view.size
+            after = await read_deck_page(self.client)
+            reason = next(want.reason for want in wanted if want.name == missing)
+            self.note_deck_change(DeckChange(ADD, missing, 1, f"{reason} (put in while the deck's capacity was not "
+                                                              "known)"), view, after, state)
+            view = after
+
+    async def carry_out(self, change: DeckChange, template_id: int, view, state: dict):
+        if change.action == KEEP:
+            self.note_deck_change(change, view, view, state)
+            return view
+        if change.action == REMOVE:
+            await take_out_copy(self.client, template_id)
+        elif await add_copy(self.client, template_id) == REFUSED:
+            self.record.deck_capacity[view.name] = view.size
+            raise DeckEditStopped(f"the Deck page refused {change.name} at {view.size} cards; {view.name} holds "
+                                  f"{view.size}, kept for the next plan")
+        after = await read_deck_page(self.client)
+        self.note_deck_change(change, view, after, state)
+        return after
+
+    def note_deck_change(self, change: DeckChange, before, after, state: dict) -> None:
+        self.deck_log.add(change, deck_before=before.size, deck_after=after.size, level=state["level"], zone=state["zone"])
+        self.events.emit("deck", f"{change_text(change)} ({before.size} -> {after.size} cards)")
+
+    async def deck_spells_of(self, view) -> tuple[list, dict[int, str]]:
+        """The Deck page's spells as `decks.DeckSpell`s, named and described from the game's files, and their names by
+        template ID."""
+        spells, names = [], {}
+        for entry in view.spells:
+            spell = await self.spell_catalog().describe(entry.template_id)
+            names[entry.template_id] = spell.name or f"spell {entry.template_id}"
+            spells.append(deck_spell(names[entry.template_id], view.copies_of(entry.template_id), entry.limit,
+                                     spell.effects, spell.pips))
+        return spells, names
+
+    @staticmethod
+    def deck_text(view, names: dict[int, str]) -> str:
+        counts = {}
+        for card in view.cards:
+            counts[names.get(card, f"spell {card}")] = counts.get(names.get(card, f"spell {card}"), 0) + 1
+        return ", ".join(f"{name} x{count}" for name, count in counts.items())
 
     async def park_for_the_reagent(self, reagent: str, searched: list[str]) -> dict:
         """While clearing a world, a scavenge quest whose reagent was not found in REAGENT_ZONES_PER_TRY zones is
@@ -2482,7 +2694,7 @@ def reroute_text(attempt: dict) -> str:
 async def play(settings: Settings, limits: Limits, *, combat_policy: CombatPolicy | None = None,
                offer_policy: OfferPolicy | None = None, loop_class: type[QuestLoop] = QuestLoop,
                use_potions: bool = False, wear_gear: bool = False, use_travel_buttons: bool = False,
-               clear_world: str | None = None, leave_dungeons: bool = False):
+               clear_world: str | None = None, leave_dungeons: bool = False, edit_deck: bool = False):
     """Attach to the game, play, remove the hooks, and always save the report, even when interrupted.
     Returns the report and the path it was saved to. `clear_world` starts clearing that world of its quests
     (`QuestLoop.clear_world_turn`); a clearing begun by an earlier run goes on without it."""
@@ -2503,7 +2715,7 @@ async def play(settings: Settings, limits: Limits, *, combat_policy: CombatPolic
                               combat_policy=combat_policy or SpellTypePolicy(),
                               offer_policy=offer_policy or MainQuestsOnly(), events=events,
                               use_potions=use_potions, wear_gear=wear_gear, use_travel_buttons=use_travel_buttons,
-                              leave_dungeons=leave_dungeons)
+                              leave_dungeons=leave_dungeons, edit_deck=edit_deck)
             await loop.play()
     except NoClient as exc:
         record.stopped = str(exc)

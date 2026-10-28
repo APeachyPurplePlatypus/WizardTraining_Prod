@@ -20,6 +20,8 @@ MOST_PIPS_TO_SAVE_FOR = 7
 FLEE_BELOW_MANA = 2
 SURE_DAMAGE_PER_PIP = 60
 STUN = "stun"
+EXTRACT_EFFECT = "collect_essence"
+SINGLE_TARGET_ATTACKS = ("Damage", "Steal")
 ENEMY_DAMAGE_PER_PIP = 125
 SIDE_QUEST_OFFER_PHRASE = "offering you a side quest"
 ACCEPT, DECLINE, GO_BACK, STOP = "accept", "decline", "go back", "stop"
@@ -40,6 +42,7 @@ class Card:
     pips: int | None = None
     accuracy: int | None = None
     effects: tuple[str, ...] = ()
+    enchanted: bool = False
 
     def hit_chance(self) -> float:
         """The card's accuracy as a fraction; 1 when it could not be read."""
@@ -118,11 +121,23 @@ class Cast:
     enemy: int = 0
 
 
+@dataclass(frozen=True)
+class Enchant:
+    """Play `cards[card]`, an enchantment, onto `cards[onto]`, another card in hand; the round's cast comes after,
+    chosen again from the hand as it is then."""
+    card: int
+    onto: int
+
+
 TARGETS = ("self", "enemy", "all enemies")
 
 
-def problem_with(choice: Cast, view: RoundView) -> str | None:
+def problem_with(choice: Cast | Enchant, view: RoundView) -> str | None:
     """Why the battle code must not act on `choice`, or None if it can."""
+    if isinstance(choice, Enchant):
+        if not all(0 <= index < len(view.cards) and view.cards[index].castable for index in (choice.card, choice.onto)):
+            return "the policy chose an enchantment or a card to enchant that is not castable"
+        return None if choice.card != choice.onto else "the policy chose to enchant a card with itself"
     if not 0 <= choice.card < len(view.cards) or not view.cards[choice.card].castable:
         return "the policy chose a card that is not castable"
     if choice.target not in TARGETS:
@@ -157,26 +172,36 @@ class SpellTypePolicy:
     strategy's heal line: playing "heal earlier" (below 60%) against two Nirini Sentries, the wizard passed for Pixie
     at 49%, healed, fell below 60% again, and passed again, while the last Sentry stood at 220 for eight rounds."""
 
-    def __init__(self, strategy: CombatStrategy = COMBAT_STRATEGIES[0], strategy_for=None):
+    def __init__(self, strategy: CombatStrategy = COMBAT_STRATEGIES[0], strategy_for=None, essence_from=None):
         self.strategy = strategy
         self.strategy_for = strategy_for
+        self.essence_from = essence_from
         self._strategy_chosen = False
+        self._extracted = False
 
     def new_fight(self) -> None:
         self._strategy_chosen = False
+        self._extracted = False
 
-    def choose(self, view: RoundView) -> Cast | Pass | Flee | None:
+    def choose(self, view: RoundView) -> Cast | Enchant | Pass | Flee | None:
         if self.strategy_for is not None and not self._strategy_chosen and view.enemies:
             self.strategy = self.strategy_for(fight_situation([enemy.name for enemy in view.enemies]))
             self._strategy_chosen = True
         if out_of_mana(view) and view.can_flee:
             return Flee(f"out of mana ({view.mana} left)")
+        fraction = view.health_fraction()
+        wanted = self.essence_from() if self.essence_from is not None and not self._extracted else set()
+        if wanted and (fraction is None or fraction >= LOW_HEALTH_FRACTION):
+            extraction = extract_essence(view, wanted)
+            if isinstance(extraction, Cast):
+                self._extracted = True
+            if extraction is not None:
+                return extraction
         attacks = [index for index, card in enumerate(view.cards) if card.castable and card.spell_type in ATTACK_TARGETS]
         finisher = cheapest_finisher(view, attacks) if view.enemies else None
         per_pip = self.strategy.enemy_damage_per_pip
         if finisher is not None and ends_the_danger(view, finisher, per_pip):
             return finisher
-        fraction = view.health_fraction()
         big_hit = within_reach_of_a_big_hit(view, per_pip)
         if (fraction is not None and fraction < self.strategy.heal_below) or big_hit:
             heal = first_castable(view.cards, lambda card: card.spell_type in HEAL_SPELL_TYPES)
@@ -202,6 +227,36 @@ class SpellTypePolicy:
         enemy = most_dangerous(view.enemies) if self.strategy.target == MOST_DANGEROUS else weakest(view.enemies)
         attack = max(attacks, key=lambda index: expected_damage(view.cards[index], view.enemies[enemy]))
         return Cast(attack, ATTACK_TARGETS[view.cards[attack].spell_type], enemy)
+
+
+def essence_enemies(view: RoundView, wanted: set[str]) -> list[int]:
+    """The enemies whose essence a quest goal needs, by name ("Lost Soul" for "Lost Soul Essence")."""
+    names = {name.lower() for name in wanted}
+    return [index for index, enemy in enumerate(view.enemies) if (enemy.name or "").lower() in names]
+
+
+def is_extract(card: Card) -> bool:
+    return EXTRACT_EFFECT in card.effects or (card.name or "").lower().startswith("extract ")
+
+
+def extract_essence(view: RoundView, wanted: set[str]) -> Cast | Enchant | None:
+    """With an enemy in the fight whose essence a goal needs: hit it with a castable enchanted attack, else enchant
+    the cheapest castable single-target attack with an Extract spell in hand. Gilda Burke ("Know Thine Enemy"):
+    Extract spells "enchant damage spells, which can then capture an enemy's very essence"; an enchanted spell that
+    deals damage extracts one Animus, a defeating hit one more, and the duel must be won to collect it. None when
+    there is no such enemy, or the hand cannot do it this round."""
+    victims = essence_enemies(view, wanted)
+    if not victims:
+        return None
+    enchanted = first_castable(view.cards, lambda card: card.enchanted and card.spell_type in SINGLE_TARGET_ATTACKS)
+    if enchanted is not None:
+        return Cast(enchanted, "enemy", victims[0])
+    extract = first_castable(view.cards, is_extract)
+    attacks = [index for index, card in enumerate(view.cards)
+               if card.castable and not card.enchanted and card.spell_type in SINGLE_TARGET_ATTACKS]
+    if extract is None or not attacks:
+        return None
+    return Enchant(extract, min(attacks, key=lambda index: view.cards[index].pips or 1))
 
 
 def weakest(enemies: tuple[Combatant, ...]) -> int:
