@@ -6,6 +6,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Added
 
+- **A new quest an NPC's menu offers is taken once, and a world's name is not taken as a quest** (`policy.TakeAllQuests.choose_service`, `policy.names_a_quest`).
+  - **What:** with side quests on, when the active quest is not in an NPC's menu, the first quest the menu names that was not taken from a menu before in this run is chosen, once; with the Quest Finder active, the first quest it names, as before. An option named for a world ("Grizzleheim") opens that world's quests and is passed over.
+  - **Why:** the Headmistress offered "Colossal Trouble" and "Grizzleheim" while "Hey, Penny" was active, and the menu was left (10:38). The operator says Colossus Boulevard likely needs another quest done first ("The Gravulum Order" waits on it), and the coordinator asked to take "Colossal Trouble" as part of clearing Wizard City and to leave Grizzleheim, another world, for now.
+  - **Verified:** offline (`tests/test_policy.py`).
+
 - **Extract spells fill to their copy limit while an essence is needed, and the enemy it comes from is spared until one is in hand** (`decks.wanted_deck`, `policy.spare_the_victim`, `QuestLoop.no_enemy_within`).
   - **What:** while a quest needs an essence, the Extract spell goes in up to its copy limit (3 for Extract Undead), before heals and hits; once the essence is collected the deck is planned again without it, and the cards come back, each logged. In a fight with the enemy whose essence is needed and no Extract in hand, the policy hits another enemy, else stuns that enemy (a card played, so one is drawn the next round), else plays as usual. The deck may be edited in a zone with enemies when none is loaded within 3,000 units.
   - **Why:** with one copy in 14 cards, Extract Undead was not in the opening hand of the first Lost Soul fight, and one Frost Beetle ended it at 55 health (10:21, Unicorn Way); three copies are in about nine opening hands of ten. A pass would not draw the card: the hand stays full, and discarding is not an allowed click. Suggested by the coordinator (14:22 UTC), within the operator's deck approval.

@@ -312,7 +312,10 @@ class TakeAllQuestsTest(unittest.TestCase):
         options = ["A Good Day to Cyclops", "Putting Out the Fire!"]
         self.assertEqual(policy.choose_service(options, active_quest=None, business_here=False), 1)
         self.assertEqual(TakeAllQuests().choose_service(options, active_quest=None, business_here=False), 0)
-        self.assertEqual(TakeAllQuests().choose_service(options, active_quest="Other", business_here=False), LEAVE_MENU)
+        other = TakeAllQuests()
+        self.assertEqual(other.choose_service(options, active_quest="Other", business_here=False), 0)
+        self.assertEqual(other.choose_service(options, active_quest="Other", business_here=False), 1)
+        self.assertEqual(other.choose_service(options, active_quest="Other", business_here=False), LEAVE_MENU)
 
 
 class MainQuestsOnlyTest(unittest.TestCase):
@@ -364,6 +367,22 @@ class ServicesMenuTest(unittest.TestCase):
         policy = MainQuestsOnly(approved_titles=["A Good Day to Cyclops"])
         self.choose(policy)
         self.assertEqual(policy.decide(["I am offering you a side quest."], can_go_back=True), DECLINE)
+
+
+class MenuQuestTest(unittest.TestCase):
+    def test_a_world_is_not_a_quest_of_this_world(self):
+        from wizardtraining.policy import names_a_quest
+        self.assertTrue(names_a_quest("Colossal Trouble"))
+        self.assertFalse(names_a_quest("Grizzleheim"))
+        self.assertFalse(names_a_quest("Housing Shop"))
+
+    def test_a_new_quest_in_a_menu_is_taken_once_while_another_quest_is_active(self):
+        policy = TakeAllQuests()
+        options = ["Colossal Trouble", "Grizzleheim"]
+        self.assertEqual(policy.choose_service(options, active_quest="Hey, Penny", business_here=False), 0)
+        self.assertEqual(policy.choose_service(options, active_quest="Hey, Penny", business_here=False), LEAVE_MENU)
+        self.assertEqual(policy.choose_service(["Grizzleheim"], active_quest="Quest Finder", business_here=True),
+                         LEAVE_MENU)
 
 
 class ExtractTest(unittest.TestCase):

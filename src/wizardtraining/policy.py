@@ -27,6 +27,11 @@ SIDE_QUEST_OFFER_PHRASE = "offering you a side quest"
 ACCEPT, DECLINE, GO_BACK, STOP = "accept", "decline", "go back", "stop"
 LEAVE_MENU = "leave menu"
 SERVICE_WORDS = ("shop", "trading", "trade", "rematch", "vendor", "bazaar", "sell", "buy", "train")
+WORLD_NAMES = ("wizard city", "krokotopia", "grizzleheim", "marleybone", "mooshu", "dragonspyre", "celestia",
+               "zafaria", "wysteria", "avalon", "azteca", "khrysalis", "polaris", "mirage", "empyrea", "karamelle",
+               "lemuria", "novus", "wallaru", "selenopolis")
+# A menu option named for a world opens that world's quests: the Headmistress offered ['Colossal Trouble',
+# 'Grizzleheim'] (10:38), and the clearing stays in its own world.
 UNIVERSAL = "Universal"
 
 
@@ -447,8 +452,13 @@ def first_quest_option(options: list[str]) -> int | str:
     """The first option of an NPC's menu that names a quest rather than a service, else LEAVE_MENU. The giver the
     journal's Quest Finder pointed to in Olde Town offered ['Wizards in the Mist', 'Recipe Shop', 'Rematch Trading'],
     and the menu was left, since no option was named for the active quest, the Quest Finder itself."""
-    return next((index for index, option in enumerate(options)
-                 if not any(word in option.lower() for word in SERVICE_WORDS)), LEAVE_MENU)
+    return next((index for index, option in enumerate(options) if names_a_quest(option)), LEAVE_MENU)
+
+
+def names_a_quest(option: str) -> bool:
+    """A menu option that names a quest of this world: not a service, not a world, not blank."""
+    label = option.strip().lower()
+    return bool(label) and not any(word in label for word in SERVICE_WORDS) and label not in WORLD_NAMES
 
 
 def index_of(options: list[str], title: str) -> int | None:
@@ -502,13 +512,31 @@ class TakeAllQuests(MainQuestsOnly):
 
     side_quests = True
 
+    def __init__(self, approved_titles=()):
+        super().__init__(approved_titles)
+        self._taken_from_menus: set[str] = set()
+
     def decide(self, pages: list[str], *, can_go_back: bool) -> str:
         return ACCEPT
 
     def choose_service(self, options: list[str], *, active_quest: str | None, business_here: bool) -> int | str | None:
+        """As the main-quest policy, and also: with the journal's Quest Finder active, the first quest the menu names;
+        with another quest active that the menu does not list, the first quest it names that was not taken from a
+        menu before in this run, once (the Headmistress offered "Colossal Trouble" while "Hey, Penny" was active, and
+        the menu was left, 10:38). A world's name is not a quest of this world (`names_a_quest`)."""
         if active_quest is not None and same_title(active_quest, QUEST_FINDER):
-            return first_quest_option(options)
+            return self.take(options, first_quest_option(options))
+        if active_quest is not None and index_of(options, active_quest) is None:
+            new = next((index for index, option in enumerate(options)
+                        if names_a_quest(option) and " ".join(option.split()) not in self._taken_from_menus), None)
+            if new is not None:
+                return self.take(options, new)
         choice = super().choose_service(options, active_quest=active_quest, business_here=business_here)
         if choice is None and active_quest is None and options:
             return 0
+        return choice
+
+    def take(self, options: list[str], choice: int | str) -> int | str:
+        if isinstance(choice, int):
+            self._taken_from_menus.add(" ".join(options[choice].split()))
         return choice
