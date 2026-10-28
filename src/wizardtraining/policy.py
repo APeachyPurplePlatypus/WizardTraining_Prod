@@ -269,7 +269,8 @@ class SpellTypePolicy:
         if not attacks:
             return None
         enemy = most_dangerous(view.enemies) if self.strategy.target == MOST_DANGEROUS else weakest(view.enemies)
-        attack = max(attacks, key=lambda index: expected_damage(view.cards[index], view.enemies[enemy]))
+        attack = max(unresisted(view, attacks, enemy) or attacks,
+                     key=lambda index: expected_damage(view.cards[index], view.enemies[enemy]))
         return Cast(attack, ATTACK_TARGETS[view.cards[attack].spell_type], enemy)
 
 
@@ -348,6 +349,15 @@ def spare_the_victim(view: RoundView, victims: list[int], attacks: list[int]) ->
     return None
 
 
+def unresisted(view: RoundView, attacks: list[int], enemy: int) -> list[int]:
+    """The attacks whose school the target takes in full or more (`Combatant.damage_factor` of 1 or over: no
+    resistance, a weakness, or a trap that outweighs them; a shield against the school counts against it). The
+    operator, 2026-10-28: "Ideally since you have wand cards, you should use those since they aren't subject to ice
+    resistance against ice enemies". Colossus Boulevard's Evil Snowmen resist Ice by 20% and are weak to Fire, until
+    they shield against it; the pip-weighted estimate still sent a resisted 3-pip Evil Snowman before a wand."""
+    return [index for index in attacks if view.enemies[enemy].damage_factor(view.cards[index].school) >= 1.0]
+
+
 def weakest(enemies: tuple[Combatant, ...]) -> int:
     """The enemy with the least health, the first on a tie. Every enemy down is one hitting the wizard no more:
     General Akilles (470) and his Cyclops Legionnaire (235) took 100 to 200 health a round between them, and every
@@ -399,7 +409,7 @@ def trap_before_a_big_hit(view: RoundView, attacks: list[int], target_rule: str)
         return None
     have = (view.pips or 0) + (view.power_pips or 0)
     big = [card for card in view.cards if card.spell_type in ATTACK_TARGETS and (card.pips or 0) >= 2
-           and (card.pips or 0) <= have + 2 and not is_trap(card)]
+           and (card.pips or 0) <= have + 2 and not is_trap(card) and card.school == view.cards[trap].school]
     if not big:
         return None
     enemy = most_dangerous(view.enemies) if target_rule == MOST_DANGEROUS else weakest(view.enemies)

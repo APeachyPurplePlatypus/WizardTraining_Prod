@@ -6,6 +6,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Added
 
+- **Attacks the target does not resist come first: the wand cards before resisted Ice hits** (`policy.unresisted`).
+  - **What:** among the castable attacks, those whose school the target takes in full or more (no resistance, a weakness, or a trap that outweighs it; a shield against the school counts against it) are chosen from first, by expected damage; only with none of them is a resisted attack played. A trap is set only before a big hit of its own school.
+  - **Why:** the operator, 2026-10-28, 17:48 UTC: "Ideally since you have wand cards, you should use those since they aren't subject to ice resistance against ice enemies". Colossus Boulevard's Evil Snowmen resist Ice by 20% and are weak to Fire until they shield against it; the pip-weighted estimate (pips times what gets through) still put a resisted 3-pip Evil Snowman before a wand.
+  - **Verified:** offline (`tests/test_policy.py`, the Snowman fights' resistances and shields); in the game: next fight.
+
 - **Traps: in the deck after the hits, and set on the target before a hit of 2 pips or more** (`decks.role_of`, `decks.TRAP_COPIES`, `policy.trap_before_a_big_hit`).
   - **What:** a spell whose effect raises incoming damage ("modify_incoming_damage 40") is a trap, not a shield: the deck takes up to two copies, after the attacks and before the stuns. In a fight with no finishing blow this round and nothing to heal, when an attack of 2 pips or more is in hand (or within two pips), the policy sets a castable trap on the enemy that attack will go to, unless one of its school is on it already.
   - **Why:** the wizard learned Ice Trap (0 pips, +40% to the next Ice hit) from the Ice school's quests (13:25); the deck plan had counted it a shield, never cast. Colossus Boulevard's Evil Snowmen resist Ice by 20%, and one fight there was lost. The coordinator had asked for blades and traps before big hits.

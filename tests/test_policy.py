@@ -388,6 +388,34 @@ class TrapTest(unittest.TestCase):
                                                           enemies=(Combatant("Ghost", 300),))).card, 1)
 
 
+class ResistanceTest(unittest.TestCase):
+    """Colossus Boulevard's Evil Snowmen (2026-10-28): resist Ice 20%, weak to Fire 20%, later shielded against Fire."""
+    SNOWMAN_CARD = Card("Evil Snowman", "Damage", True, "Ice", 3)
+    FIRE_CAT = Card("Fire Cat - Starter Wand", "Damage", True, "Fire", 1, item_card=True)
+    THUNDER_SNAKE = Card("Thunder Snake - Starter Wand", "Damage", True, "Storm", 1, item_card=True)
+    RESISTS = {"Ice": 0.2, "Fire": -0.2}
+
+    def test_a_wand_of_another_school_before_a_resisted_ice_hit(self):
+        snowman = (Combatant("Evil Snowman", 310, resistances=self.RESISTS),)
+        self.assertEqual(SpellTypePolicy().choose(view([self.SNOWMAN_CARD, self.FIRE_CAT], enemies=snowman)),
+                         Cast(1, "enemy", 0))
+
+    def test_a_shield_against_the_weakness_sends_another_school(self):
+        shielded = (Combatant("Evil Snowman", 310, resistances=self.RESISTS, incoming=(DamageModifier("Fire", -80),)),)
+        hand = [self.SNOWMAN_CARD, self.FIRE_CAT, self.THUNDER_SNAKE]
+        self.assertEqual(SpellTypePolicy().choose(view(hand, enemies=shielded)), Cast(2, "enemy", 0))
+
+    def test_a_trapped_target_takes_the_big_ice_hit(self):
+        trapped = (Combatant("Evil Snowman", 310, resistances=self.RESISTS, incoming=(DamageModifier("Ice", 40),)),)
+        self.assertEqual(SpellTypePolicy().choose(view([self.SNOWMAN_CARD, self.FIRE_CAT], enemies=trapped)),
+                         Cast(0, "enemy", 0))
+
+    def test_with_every_attack_resisted_the_best_of_them_is_played(self):
+        resists_all = (Combatant("Gobbler Scouter", 235, resistances={"Ice": 0.2, "Fire": 0.2}),)
+        self.assertEqual(SpellTypePolicy().choose(view([self.FIRE_CAT, self.SNOWMAN_CARD], enemies=resists_all)),
+                         Cast(1, "enemy", 0))
+
+
 class NoEffectTest(unittest.TestCase):
     SNAKE = Card("Thunder Snake - Starter Wand", "Damage", True, "Storm", 1, accuracy=70)
     CAT = Card("Fire Cat - Starter Wand", "Damage", True, "Fire", 1, accuracy=75)
