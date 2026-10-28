@@ -638,10 +638,11 @@ class QuestLoop:
         (`destination_zone`) and a way is known to. "Find the Smiths" has a "Go To" goal per hidden Smith, one in
         Firecat Alley, one in Colossus Boulevard and so on; the arrow shows nothing outside the goal's zone, and the run
         stopped in the Dark Cave (10:58). None when a goal is here, or no goal's zone can be walked to."""
-        zones = {goal.get("destination_zone") for goal in goals} - {None, ""}
+        planner = await self.planner()
+        zones = {goal.get("destination_zone") for goal in goals if not self.left_for_this_run(goal, planner, here)}
+        zones -= {None, ""}
         if here in zones:
             return None
-        planner = await self.planner()
         names = [volume.name for volume, _ in planner.teleports]
         reachable = []
         for zone in zones:
@@ -1774,6 +1775,15 @@ class QuestLoop:
         if must_come_back and self._marked_in != zone:
             return None
         return await self.go_home_for(stat, state)
+
+    def left_for_this_run(self, goal: dict, planner: RoutePlanner, here: str) -> bool:
+        """A goal in this zone whose Explore spot could not be walked to (`note_a_failed_explore_walk`): it does not
+        keep the wizard here. Back in the Commons with only its unreachable Smith open here, the walk to the other
+        Smiths' zones was never tried and the quest was parked (17:11)."""
+        if goal.get("destination_zone") != here:
+            return False
+        spot = explore_spot(planner.placed_objects, goal)
+        return spot is not None and self._explore_failures.get(f"{spot.x:.0f},{spot.y:.0f}", 0) >= EXPLORE_FAILED_WALKS_TO_SKIP
 
     def note_a_failed_explore_walk(self, spot) -> None:
         """A walk to an Explore spot that failed every route method; after EXPLORE_FAILED_WALKS_TO_SKIP of them the
