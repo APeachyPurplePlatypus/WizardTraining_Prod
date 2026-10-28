@@ -78,6 +78,13 @@ class WayTest(unittest.TestCase):
                          Way(VOLUME, "TeleportVol_Teleport location (to IceSchool)"))
         self.assertEqual(way_to_school(ICE.interior, ICE, []), Way(TRAINER, "Lydia Greyrose"))
 
+    def test_from_ravenwood_the_way_to_the_commons_is_its_to_commons_volume(self):
+        ravenwood = ["TeleportVol_Teleport location (to MythSchool)", "TeleportVol_Teleport location (to IceSchool)",
+                     "TeleportVol_Teleport location (to Commons)", "TeleportVol_Teleport location (to StormSchool)",
+                     "TeleportVol_Teleport location (to FireSchool)"]
+        way = way_toward_zone("WizardCity/WC_Ravenwood", "WizardCity/WC_Hub", ravenwood)
+        self.assertEqual(way.name, "TeleportVol_Teleport location (to Commons)")
+
     def test_from_the_dark_cave_the_way_out_is_toward_cyclops_lane(self):
         cave = ["TeleportVol_Teleport location (Cavern to Street3)", "TeleportVol_Teleport location (Cavern to Street5)",
                 "TeleportVol_Teleport location"]

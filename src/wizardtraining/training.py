@@ -29,7 +29,7 @@ from dataclasses import dataclass
 COMMONS = "WizardCity/WC_Hub"
 RAVENWOOD = "WizardCity/WC_Ravenwood"
 TOWER_OR_DUNGEON_NAME = re.compile(r"/Interiors/[^/]*_T\d+$|/WC_Golem_Tower/WC_Golem_Tower_\d+$")
-HUB_WORD, EXIT_WORD, ENTRANCE_WORD, TOWER_WORD = "hub", "exit", "entrance", "tower"
+HUB_WORD, EXIT_WORD, ENTRANCE_WORD, TOWER_WORD, COMMONS_WORD = "hub", "exit", "entrance", "tower", "commons"
 TRAINER, VOLUME, GATE = "trainer", "volume", "gate"
 
 
@@ -103,11 +103,11 @@ def travel_buttons_allowed(zone: str | None, entered_with_x: list[str], leaving_
 
 
 def way_out_toward_the_commons(volume_names: list[str]) -> str | None:
-    """The volume that leads back toward the Commons: one named for the hub ("Street1 Hub Exit", "WC_Shop Hub"),
-    else one named as an exit and not an entrance ("Street4 Street2 Exit"), else the zone's only volume ("Cavern to
-    Street4" in the Haunted Cave)."""
+    """The volume that leads back toward the Commons: one named for the hub ("Street1 Hub Exit", "WC_Shop Hub") or
+    the Commons itself (Ravenwood's "Teleport location (to Commons)"), else one named as an exit and not an entrance
+    ("Street4 Street2 Exit"), else the zone's only volume ("Cavern to Street4" in the Haunted Cave)."""
     lowered = [(name, name.lower()) for name in volume_names]
-    for wanted in (lambda name: HUB_WORD in name and ENTRANCE_WORD not in name,
+    for wanted in (lambda name: (HUB_WORD in name or COMMONS_WORD in name) and ENTRANCE_WORD not in name,
                    lambda name: EXIT_WORD in name and ENTRANCE_WORD not in name):
         if found := [name for name, low in lowered if wanted(low)]:
             return found[0]

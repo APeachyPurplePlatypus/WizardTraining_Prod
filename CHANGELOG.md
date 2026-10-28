@@ -178,6 +178,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **Ravenwood's way back to the Commons is its "to Commons" volume** (`training.way_out_toward_the_commons`).
+  - **What:** a volume named for the Commons counts as the way back toward it, as one named for the hub does.
+  - **Why:** "Ready, Aim, Shoot!" photographed Mr. Lincoln in Ravenwood (12:20, the Viewfinder naming him at 150 units), then was parked: "no way is known to WizardCity/WC_Hub, where Hilda Brewer is to be photographed". Ravenwood's volumes are named "to Commons" and "to ...School", none for the hub or as an exit.
+  - **Verified:** offline (`tests/test_training.py`); in the game: the photo of Mr. Lincoln and the park (12:20).
+
 - **A photo is kept: "Keep Picture" in the preview, then the Viewfinder is closed** (`photomancy.keep_the_picture`, `photomancy.take_photo`; docs/safety.md).
   - **What:** after "Take Picture", the photo's preview ("Keep Picture", "Trash Picture") is answered with "Keep Picture", then the Viewfinder is closed with its own button; a preview left open by an earlier photo is kept first.
   - **Why:** in Golem Court (11:44) the preview waited for an answer; the step expected the Viewfinder's close button, took a second shot, and parked "Say Cheese!" with the goal open, and while the preview showed, the spellbook's Quest tab could not be opened, so the run stopped after turns without progress. The operator, 2026-10-28, 16:08 UTC: "Approve and keep picture".
