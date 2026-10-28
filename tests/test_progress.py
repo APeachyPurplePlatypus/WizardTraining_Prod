@@ -378,6 +378,19 @@ class HeavyFightTest(unittest.TestCase):
         self.assertTrue(made_headway(None, 6800))
 
 
+class OnARefillTripTest(unittest.TestCase):
+    def test_a_trip_is_over_once_the_wizard_is_in_a_dungeon_or_among_enemies(self):
+        from wizardtraining.progress import on_a_refill_trip
+        underwater = "WizardCity/WC_Streets/WC_Triton_Underwater/WC_Triton_Underwater"
+        self.assertTrue(on_a_refill_trip("WizardCity/WC_Hub", underwater, dungeon_here=False, enemies_here=False))
+        self.assertFalse(on_a_refill_trip("Interiors/WC_Triton_Underwater_T1", underwater, dungeon_here=True,
+                                          enemies_here=False))
+        self.assertFalse(on_a_refill_trip("WizardCity/WC_Streets/WC_Triton", underwater, dungeon_here=False,
+                                          enemies_here=True))
+        self.assertFalse(on_a_refill_trip(underwater, underwater, dungeon_here=False, enemies_here=True))
+        self.assertFalse(on_a_refill_trip("WizardCity/WC_Hub", None, dungeon_here=False, enemies_here=False))
+
+
 class RefillTripsAreNoDoorLoopTest(unittest.TestCase):
     def test_a_travel_button_starts_the_count_of_zone_changes_again(self):
         run = RunRecord(limits=Limits(max_zone_changes_without_quest_change=2))

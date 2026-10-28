@@ -405,6 +405,14 @@ def parked(parked_quests: dict[str, int], title: str | None, level, held: dict[s
     return parked_at is not None and (not isinstance(level, int) or level <= parked_at)
 
 
+def on_a_refill_trip(here: str | None, marked_in: str | None, *, dungeon_here: bool, enemies_here: bool) -> bool:
+    """The wizard is still out on a refill trip from the mark in `marked_in`: elsewhere, and somewhere to refill, not a
+    dungeon nor a zone with enemies. Back in Curfew!'s instance by another Recall, with the trip's mark still set, the
+    wizard searched the instance for mana wisps it does not have and stood there for mana that does not come back
+    (19:40)."""
+    return marked_in is not None and here != marked_in and not dungeon_here and not enemies_here
+
+
 def ready_to_recall(mana: float | None, health: float | None) -> bool:
     """After a trip to the Commons for a refill: mana at least RECALL_MANA_FRACTION and health at least
     RECALL_HEALTH_FRACTION of their pools, or unknown. Recall costs about 5 mana, and the fights it returns to

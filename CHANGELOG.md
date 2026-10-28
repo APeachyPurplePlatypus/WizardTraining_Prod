@@ -18,6 +18,16 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **A quest NPC behind a door at its arrow is gone in to** (`QuestLoop.door_behind_the_arrow_turn`, `QuestLoop.entrance_at_the_arrow`, `dialog.NPC_OUT_OF_REACH`).
+  - **What:** when the talk at a quest NPC's arrow cannot get close to anyone and a tower or dungeon entrance stands within 300 of the arrow, the wizard walks into that entrance (X at its prompt, refilled first when it opens on an instance) instead of trying to talk again.
+  - **Why:** "Who is the Keymaster?"'s talk named no zone, and its arrow stood on WC_Triton_Underwater_T1's entrance semicircle while the NPC (the one Curfew! was handed in to) was inside; the wizard tried to talk at the door for 90 s (19:38 to 19:39).
+  - **Verified:** offline (the suite); in the game: the next NPC behind a door.
+
+- **A refill trip ends when the wizard is in a dungeon or among enemies** (`progress.on_a_refill_trip`, `QuestLoop.back_from_the_commons_turn`, `QuestLoop.recall_toward_the_goal_turn`).
+  - **What:** the "back from the Commons" refill runs only where a refill trip refills (not a dungeon, not a zone with enemies); elsewhere the trip's mark is let go. A Recall toward the goal also ends the trip.
+  - **Why:** a stall strategy marked the underwater zone and went to the Commons, then came back by the Recall toward the goal, which left the trip's mark set; in Curfew!'s instance, the wizard then searched for mana wisps it does not have and stood for mana that does not come back there (19:40).
+  - **Verified:** offline (`tests/test_progress.py`); in the game: the next refill trip.
+
 - **A refill trip starts the door-loop count again** (`RunRecord.note_place`).
   - **What:** a travel button (Go Home, Recall, the dungeon's return button) starts the count of zone changes without the quest changing again.
   - **Why:** the walk from the Commons to Curfew!'s door, five zones on, with three refill trips on the way, passed the limit of 10 and stopped the run at the door (19:28).

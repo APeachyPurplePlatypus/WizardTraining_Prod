@@ -26,7 +26,7 @@ from wizwalker import XYZ, Keycode
 
 from .combat import approach, fight, fled_in
 from .config import Settings
-from .dialog import (DIALOG_FINISHED, FOLLOW_UP_WAIT_SECONDS, NPC_ARRIVE_DISTANCE, OBJECT_USE_DISTANCE, OFFER_LEFT_FOR_OPERATOR,
+from .dialog import (DIALOG_FINISHED, FOLLOW_UP_WAIT_SECONDS, NPC_ARRIVE_DISTANCE, NPC_OUT_OF_REACH, OBJECT_USE_DISTANCE, OFFER_LEFT_FOR_OPERATOR,
                      TALK_KEY_SECONDS, choose_service, close_enough, dialog_open, leave_services, near_npc, read_conversation, service_options,
                      services_open, talk, use_object, wait_for_dialog)
 from .decks import (ADD, EXTRACT, KEEP, NO_CAPACITY_KNOWN, REMOVE, DeckChange, DeckLog, change_text, deck_spell,
@@ -52,7 +52,7 @@ from .movement import LOADING, KeysIgnored, Reroute, face, travel
 from .navigation import load_planner
 from .policy import LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, SpellTypePolicy, biggest_hits
 from .progress import (DUEL_BLOCKS_THE_WAY, DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY, ENEMY_NEAR_PATH, LimitReached, Limits, PATH_THREATS,
-                       PlannedRoute, RunRecord, StopRun, check_limits, leaves_world, health_to_travel, mana_for_a_fight, mana_to_travel, still_to_recharge, trapped_by, worth_marking, worth_recalling, dungeon_held, resume_in_time, RESUME_TRIP_SECONDS,
+                       PlannedRoute, RunRecord, StopRun, check_limits, leaves_world, health_to_travel, mana_for_a_fight, mana_to_travel, still_to_recharge, trapped_by, worth_marking, worth_recalling, dungeon_held, resume_in_time, RESUME_TRIP_SECONDS, on_a_refill_trip,
                        PARK_AFTER_STRATEGIES, HEAVY_ZONE_FIGHTS, RECALL_MANA_NEEDED, RECHARGE_HEALTH_FRACTION, heavy_fight, parked, worth_pushing_on, short_before_entering, made_headway, GOAL_HEADWAY, STALLED_TRIPS_TO_PARK, forget_obstacles_near, OBSTACLE_FORGET_RADIUS,
                        nav_did_better, progressed, ready_to_recall, remember_obstacles, safe_to_stand, short_for_a_fight,
                        should_drink_potion, stalled, topped_up, travel_outcome, wanted_wisp,
@@ -103,6 +103,7 @@ PROMPT_DOOR_REACH = 2500.0
 NPC_PROMPT_RANGE = 400.0
 NOT_A_DOOR_RADIUS = 600.0
 ENTRANCE_ARRIVE_RADIUS = 80.0
+ENTRANCE_AT_ARROW_RADIUS = 300.0
 INTERACT_PROMPT = "interact prompt"
 LOADING_WAIT_SECONDS = 3.0
 DOOR_WAIT_SECONDS = 15.0
@@ -2196,6 +2197,7 @@ class QuestLoop:
             self.forget_a_mark_out_of_reach(problem)
             return None
         self._teleport_pressed = (RECALL, started)
+        self._marked_in = None
         self.events.emit("travel", f"recalled from {state['zone']} to the mark in {marked_in}, the goal's zone, with "
                                    f"{state['mana']} mana")
         self.record.last_place = None
@@ -2207,7 +2209,10 @@ class QuestLoop:
         back ends the refill after a heavy fight: left set, it sent the wizard to the Commons again after the next
         fight, which cost 244 of 1164 and left 889 (16:07).
         None when no spot is marked or the wizard is where it was marked."""
-        if self._marked_in is None or state["zone"] == self._marked_in:
+        zone = state["zone"]
+        if not on_a_refill_trip(zone, self._marked_in,
+                                dungeon_here=in_dungeon(zone, self.record.entered_with_x, self.record.dungeon_zones),
+                                enemies_here=zone in self.record.zones_with_enemies):
             self._marked_in = None
             return None
         if self.ready_to_go_back(state):
@@ -2356,6 +2361,8 @@ class QuestLoop:
             self.note_dialog(record, result)
             if result == OFFER_LEFT_FOR_OPERATOR:
                 raise StopRun(result)
+            if result == NPC_OUT_OF_REACH and (door := await self.entrance_at_the_arrow(arrow)) is not None:
+                return await self.door_behind_the_arrow_turn(door)
             if result != DIALOG_FINISHED:
                 return stalled("talk", result=result)
             if await self.goal_still_open(goal):
@@ -2366,6 +2373,29 @@ class QuestLoop:
             return progressed("talk", result=result)
         return await self.travel_turn("travel to quest NPC", arrow, arrive_radius=NPC_ARRIVE_DISTANCE / 2,
                                       also=self.arrival_check(arrow), avoid=await nearby_enemies(self.client))
+
+    async def entrance_at_the_arrow(self, arrow):
+        """A tower or dungeon entrance within ENTRANCE_AT_ARROW_RADIUS of a quest NPC's arrow, else None."""
+        return await or_default(dungeon_entrance_near(self.client, arrow, ENTRANCE_AT_ARROW_RADIUS), None)
+
+    async def door_behind_the_arrow_turn(self, door) -> dict:
+        """No quest NPC could be reached at the arrow, and an entrance stands there: the NPC is behind it. "Who is the
+        Keymaster?"'s talk named no zone and its arrow stood on WC_Triton_Underwater_T1's entrance semicircle, while
+        the NPC was inside; the wizard tried to talk there for 90 s (19:38 to 19:39). Walk in as at a waypoint's
+        entrance, by X at its prompt, refilled first when it opens on an instance (`enter_with_x_turn`)."""
+        if await self.door_prompt_near(door):
+            return await self.enter_with_x_turn()
+        if flat_distance(await self.client.body.position(), door) <= ENTRANCE_ARRIVE_RADIUS:
+            return await self.zone_door_turn(door)
+
+        async def prompt_shows():
+            return INTERACT_PROMPT if await self.door_prompt_near(door) else None
+
+        self.events.emit("door", f"no quest NPC to talk to at its arrow, and an entrance stands there at ({door.x:.0f}, "
+                                 f"{door.y:.0f}): the NPC is behind it, going in")
+        return await self.travel_turn("walk to the entrance at the quest NPC's arrow", door,
+                                      arrive_radius=ENTRANCE_ARRIVE_RADIUS, also=prompt_shows,
+                                      avoid=await nearby_enemies(self.client))
 
     async def recharge_first_turn(self, state: dict) -> dict | None:
         """For a goal handled before the usual refills (a scavenge goal): recharge after a defeat or below

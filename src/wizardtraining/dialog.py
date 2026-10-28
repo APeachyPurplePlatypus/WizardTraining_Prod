@@ -35,6 +35,7 @@ SERVICES_OPTIONS = ["WorldView", "NPCServicesWin", "ControlSprite", "optionsLayo
 SERVICES_OPTION_BUTTON = "OptionButton"
 SERVICES_EXIT = ["WorldView", "NPCServicesWin", "wndDialogMain", "Exit"]
 DIALOG_FINISHED = "dialog finished"
+NPC_OUT_OF_REACH = "could not get close enough to the quest NPC to talk"
 OFFER_LEFT_FOR_OPERATOR = "a quest offer the offer policy would not handle; left for the operator"
 TALK_KEY_SECONDS = 0.1
 DIALOG_OPEN_TIMEOUT_SECONDS = 6.0
@@ -185,7 +186,7 @@ async def talk(client, npc_position, record: dict, offers: OfferPolicy, *, trust
     if not await dialog_open(client):
         record["nudges"] = nudges = await walk_up_to(client, npc_position, trust_prompt=trust_prompt, wants=TALK)
         if not close_enough(nudges):
-            return "could not get close enough to the quest NPC to talk"
+            return NPC_OUT_OF_REACH
         await tap(client, Keycode.X, TALK_KEY_SECONDS)
         if not await wait_for_dialog(client, DIALOG_OPEN_TIMEOUT_SECONDS):
             return "X pressed but no dialog appeared"
