@@ -1,6 +1,7 @@
 """Load a zone's walk data from the installed game files into a `RoutePlanner`.
 
-- zone.nav: read with WizWalker's `pharse_nav_data` (the library's own spelling).
+- zone.nav: read by `routes.parse_nav_file`, which keeps the waypoints up to the first whose number is out of place,
+  where WizWalker's `pharse_nav_data` gives up on the whole file.
 - collision.bcd: Deimos builds a walk grid from it (src/collision.py, ISC; src/collision_math.py,
   GPL-3.0, which also needs numpy and shapely). Deimos is not an installable package, so its checkout
   is named in WIZARDTRAINING_DEIMOS. Without it the "collision" method is skipped and routes use the
@@ -21,13 +22,14 @@ from collections import deque
 from pathlib import Path
 
 from wizwalker import Wad
-from wizwalker.utils import pharse_nav_data
 
 from .config import DEIMOS_VARIABLE
-from .routes import NavGraph, RoutePlanner
+from .routes import NavGraph, RoutePlanner, parse_nav_file
 from .patrols import PatrolMap, parse_nodes, parse_paths
 from .placed import parse_placed_objects
-from .teleports import parse_teleport_volumes
+from .training import DOWN_VOLUMES
+from .untracked import WALK_IN_RADIUS, parse_trigger_volumes, walk_in_teleports
+from .teleports import TeleportVolume, parse_teleport_volumes
 
 WALL_CLEARANCE = 45.0
 BODY_HEIGHT = 180.0
@@ -47,17 +49,25 @@ async def load_planner(zone: str, deimos_root: Path | None) -> RoutePlanner:
     walk_grid, free, collision_status = await _collision_grid(wad, zone, deimos_root)
     nav_graph, nav_status = await _nav_graph(wad)
     volumes, teleport_status = await _teleport_volumes(wad)
-    placed, placed_status = await _placed_objects(wad)
+    placed, zone_data, placed_status = await _placed_objects(wad)
     patrols, patrol_status = await _patrols(wad)
     planner = RoutePlanner(zone, walk_grid=walk_grid, grid_line_walkable=free.contains_line if free else None,
                            nav_graph=nav_graph,
                            status={"collision": collision_status, "nav": nav_status, "teleports": teleport_status,
                                    "placed objects": placed_status, "patrols": patrol_status})
     planner.placed_objects = placed
+    planner.trigger_volumes = await _trigger_volumes(wad)
+    door_hints = [hint.lower() for (here, _), hint in DOWN_VOLUMES.items() if here == zone]
+    doors = [volume for volume in planner.trigger_volumes if not volume.name.startswith("TeleportVol_")
+             and any(hint in volume.name.lower() for hint in door_hints)]
+    volumes = volumes + [TeleportVolume(volume.name, volume.x, volume.y, volume.z, WALK_IN_RADIUS)
+                         for volume in walk_in_teleports(planner.trigger_volumes) + doors]
+    planner.zone_data = zone_data
     planner.patrols = patrols
     if free is not None:
         planner.piece_of = free.piece_of
         planner.piece_reaches = free.reaches
+        planner.piece_gap = free.gap
         planner.teleports = [(volume, free.piece_of(volume.point, volume.radius + PIECE_REACH)) for volume in volumes]
         planner.exploration_points = free.exploration_points(EXPLORE_SPACING)
     return planner
@@ -129,6 +139,12 @@ class FreeArea:
     def reaches(self, index: int, point, reach: float) -> bool:
         """Whether piece `index` comes within `reach` of `point`."""
         return self._pieces[index].distance(self._point(*point)) <= reach
+
+    def gap(self, first: int, second: int) -> tuple[tuple[float, float], tuple[float, float], float]:
+        """The nearest points of two pieces, on the edge of each, and the distance between them."""
+        from shapely.ops import nearest_points
+        near_first, near_second = nearest_points(self._pieces[first], self._pieces[second])
+        return (near_first.x, near_first.y), (near_second.x, near_second.y), near_first.distance(near_second)
 
     def contains_point(self, x: float, y: float) -> bool:
         return bool(self._contains_xy(self._area, x, y))
@@ -235,10 +251,11 @@ async def _patrols(wad):
 
 async def _placed_objects(wad):
     try:
-        placed = parse_placed_objects(await wad.get_file("gamedata.bin"))
+        data = await wad.get_file("gamedata.bin")
+        placed = parse_placed_objects(data)
     except Exception as exc:
-        return [], f"unavailable: {type(exc).__name__}"
-    return placed, f"{len(placed)} placed objects"
+        return [], None, f"unavailable: {type(exc).__name__}"
+    return placed, data, f"{len(placed)} placed objects"
 
 
 async def _teleport_volumes(wad):
@@ -249,9 +266,16 @@ async def _teleport_volumes(wad):
     return volumes, f"{len(volumes)} teleport volumes"
 
 
+async def _trigger_volumes(wad):
+    try:
+        return parse_trigger_volumes(await wad.get_file("volumes.xml"))
+    except Exception:
+        return []
+
+
 async def _nav_graph(wad):
     try:
-        vertices, edges = pharse_nav_data(await wad.get_file("zone.nav"))
+        vertices, edges = parse_nav_file(await wad.get_file("zone.nav"))
     except Exception as exc:
         return None, f"unavailable: {type(exc).__name__}"
     return NavGraph.from_edges(vertices, edges), f"{len(vertices)} waypoints"

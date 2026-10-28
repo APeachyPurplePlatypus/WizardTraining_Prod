@@ -1,7 +1,7 @@
 """Command line.
 
     python -m wizardtraining probe
-    python -m wizardtraining play --level 7 --minutes 25 --battles 20 [--approve-quest TITLE ...] [--use-potions] [--wear-gear]
+    python -m wizardtraining play --level 7 --minutes 25 --battles 20 [--max-defeats N] [--approve-quest TITLE ...] [--use-potions] [--use-travel-buttons] [--wear-gear] [--clear-world WORLD]
     python -m wizardtraining stop
 
 Start the game and log in yourself first. Stop a running `play` with `stop` from a second terminal,
@@ -29,6 +29,10 @@ def main(argv=None) -> int:
     play.add_argument("--level", type=int, default=Limits.target_level, help="stop on reaching this level")
     play.add_argument("--minutes", type=float, default=Limits.minutes, help="stop after this long")
     play.add_argument("--battles", type=int, default=Limits.max_battles, help="stop after this many battles")
+    play.add_argument("--max-defeats", type=int, default=Limits.max_defeats,
+                      help="stop at the defeat after this many; by default there is no cap, and each fight lost "
+                           "again in the same situation is fought with another strategy (strategies.py) until "
+                           "every one has been tried there")
     play.add_argument("--approve-quest", action="append", default=[], metavar="TITLE",
                       help="a quest title an NPC's menu may offer that you have checked is a main quest; repeatable, "
                            "earlier titles are preferred")
@@ -40,6 +44,17 @@ def main(argv=None) -> int:
     play.add_argument("--use-potions", action="store_true",
                       help="drink health potions the wizard already has when health is low out of battle; "
                            "potions are never bought")
+    play.add_argument("--use-travel-buttons", action="store_true",
+                      help="refill mana by the game's own travel buttons: Mark Location, Go to The Commons, then "
+                           "Recall Location back (operator's decision of 2026-10-28; nothing is moved by the framework)")
+    play.add_argument("--clear-world", metavar="WORLD",
+                      help="finish a world's quests first, as its zone paths name it (WizardCity): the quests the "
+                           "quest page lists there, then each giver the journal's Quest Finder points to, then back to "
+                           "the quest paused for it (the operator, 2026-10-28)")
+    play.add_argument("--edit-deck", action="store_true",
+                      help="put spell cards into the equipped deck and take them out by the deck rules (decks.py), "
+                           "each with its reason in deck-changes.jsonl, only out of battle where no enemy is near "
+                           "(the operator, 2026-10-28: \"Yes, bot can edit decks.\")")
     play.add_argument("--wear-gear", action="store_true",
                       help="wear the best gear in the backpack, checked after each level-up or new loot, only in "
                            "zones without enemies; nothing is bought, sold or thrown away")
@@ -60,10 +75,12 @@ def main(argv=None) -> int:
 
     from .loop import play as play_quests
     limits = Limits(target_level=args.level, minutes=args.minutes, max_battles=args.battles,
+                    max_defeats=args.max_defeats,
                     stay_in_world=not args.leave_world)
     offers = (TakeAllQuests if args.side_quests else MainQuestsOnly)(approved_titles=args.approve_quest)
     report, path = asyncio.run(play_quests(settings, limits, offer_policy=offers, use_potions=args.use_potions,
-                                            wear_gear=args.wear_gear))
+                                            wear_gear=args.wear_gear, use_travel_buttons=args.use_travel_buttons,
+                                            clear_world=args.clear_world, edit_deck=args.edit_deck))
     print(f"stopped: {report['stopped']}\nreport: {path}")
     return 0
 

@@ -9,7 +9,7 @@ It comes out of one character's unattended run from level 1 to level 5 in Wizard
 ## What it does
 
 - **Reads state:** zone, level, health, mana, position, battle/dialog/loading flags, the quest journal (main quests told apart from side quests), the active goal and the quest arrow, and nearby enemies, friendly NPCs and other players' duels.
-- **Moves like a player:** turns with A/D and walks with W, steering on the move under a 20 Hz watcher. No teleport, no speed changes, no writes to position or facing.
+- **Moves like a player:** turns with A/D and walks with W, steering on the move under a 20 Hz watcher. No teleport by the framework, no speed changes, no writes to position or facing.
 - **Plans routes** over the zone's walk data: Deimos's collision walk grid, then the zone.nav waypoint graph, then a straight line. Routes cost more near enemies and never cross another player's duel circle.
 - **Plays main quests:** goal types bounty, persona (talk), waypoint (including doors to other zones) and usage (use an object). Follow-up dialogs hand out the next main quest.
 - **Fights** with a replaceable combat policy. The default heals when low, saving pips for a heal it cannot afford yet; otherwise it casts the affordable attack whose school the target's shields, wards, traps and resistances let through best.
@@ -17,7 +17,7 @@ It comes out of one character's unattended run from level 1 to level 5 in Wizard
 
 ## Status
 
-Version 0.2.0. Played on Windows 11 with one character from level 5 to 10 in Wizard City (the Commons, Olde Town, Unicorn Way, Triton Avenue, Cyclops Lane, Firecat Alley and their houses and towers) on 2026-10-26 and 27, with WizWalker 1.8.2 as vendored in Deimos at commit `d7ef56eb`. The game updates often, and memory layouts and window paths can change with it. See [CHANGELOG.md](CHANGELOG.md) for what each release changed and why.
+Version 0.3.0. Played on Windows 11 with one character from level 5 to 15 in Wizard City (the Commons, Olde Town, Unicorn Way, Triton Avenue and its underwater zone, Cyclops Lane, Firecat Alley, Colossus Boulevard, Golem Court and their houses, towers and instances) and in Krokotopia's Pyramid on 2026-10-26 to 28, with WizWalker 1.8.2 as vendored in Deimos at commit `d7ef56eb`. The game updates often, and memory layouts and window paths can change with it. See [CHANGELOG.md](CHANGELOG.md) for what each release changed and why.
 
 ## Setup
 
@@ -56,10 +56,13 @@ python -m wizardtraining play --level 7 --minutes 25 --battles 20
 ```
 
 - `probe` reads once without sending keys. Run it first.
-- `play` plays main quests until the level, the time or the battle limit is reached, or until something needs you. At a level, time or battle limit it plays on, for up to 15 minutes, until no enemy is nearby, so the wizard is not left idle where a passing enemy can pull it into a fight. The STOP file stops it at once. With `--side-quests` it accepts every quest offer, side quests included, and plays whichever quest is active. It also stops before the main quest leads to another world, because the current world's side quests come first; `--leave-world` follows the main quest anyway.
+- `play` plays main quests until the level, the time or the battle limit is reached, or until something needs you. At a level, time or battle limit it plays on, for up to 15 minutes, until no enemy is nearby, so the wizard is not left idle where a passing enemy can pull it into a fight. The STOP file stops it at once. With `--side-quests` it accepts every quest offer, side quests included, and plays whichever quest is active. When the main quest would lead to another world, it first switches to the current world's side quests through the spellbook's quest page, the one ready to hand in first, and stops when none is left, because the current world's side quests come first; `--leave-world` follows the main quest instead.
+- Defeats and stuck walks do not stop a run by a count: each time something fails again in the same situation, the next strategy not yet tried there is used (`strategies.py`: for a lost fight, heal earlier, the most dangerous enemy first, or saving pips for bigger cards, each starting with full health and mana; for a stuck walk, the nav graph or the collision data first, forgetting recorded obstacles, waiting for the way to clear, or the Commons and back). The run stops for you only when every strategy has failed there. `--max-defeats N` puts a cap back on defeats.
 - `--approve-quest "<title>"` lets it accept a quest an NPC's menu offers by title, once you have checked it is a main quest.
+- `--use-travel-buttons` lets a mana refill in a street use the game's own buttons: Mark Location before leaving, Go to The Commons (the world's hub, where mana comes back), and Recall Location back to the mark once mana is up. Each costs a few mana (Mark and Recall about 5), nothing is moved by the framework, and a button that is cooling down is not pressed.
 - `--use-potions` lets it drink health potions it already has when health is low out of battle. It never buys any.
 - `--wear-gear` lets it wear the best gear in its backpack. It checks after each level-up or new loot, and only with no enemy nearby, because the spellbook stays open a few seconds per item. What counts as best is `gear.py`: max health first, then max mana, then resistance to every school, then the wizard's own school's damage and accuracy. It equips only hats, robes, shoes, athames, amulets and rings; wands, decks, pets and mounts are left alone. It never sells, recycles or throws anything away.
+- `--edit-deck` lets it put spell cards into the equipped deck and take them out by the deck rules (`decks.py`): an Extract spell while a quest needs an essence, then heals, the strongest hits, and stuns, up to each card's copy limit and the deck's capacity, which it learns from the Deck page. Only out of battle with no enemy nearby; every card moved is logged with its reason in `runtime/deck-changes.jsonl`.
 
 To stop a run, run this from a second terminal:
 
@@ -80,7 +83,7 @@ Read [docs/architecture.md](docs/architecture.md) for how a turn works, [docs/sa
 Keep these in anything you build on it:
 
 - **The operator logs in.** Never handle passwords or account details. Stop at any login, CAPTCHA or access challenge.
-- **Move like a player.** Send only the keys in `keys.ALLOWED_KEYS`. No teleport, no speed changes, no writes to game values, and no Deimos feature that teleports. Check its source before enabling one.
+- **Move like a player.** Send only the keys in `keys.ALLOWED_KEYS`. No teleport by the framework, no speed changes, no writes to game values, and no Deimos feature that teleports. Check its source before enabling one. The game's own travel buttons are another matter (see [docs/safety.md](docs/safety.md)): with `--use-travel-buttons`, a mana refill may press Mark Location, Go to The Commons and Recall Location.
 - **No detection evasion.** Nothing that tries to look human or hide automation.
 - **Main quests by default.** Leave other players alone: never enter a duel circle, never chat, trade or buy.
 - **Stop instead of guessing.** Raise `progress.StopRun` with a clear reason.

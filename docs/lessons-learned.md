@@ -1,6 +1,6 @@
 # Lessons learned
 
-These come from one character's first unattended play, level 1 to level 5 in Wizard City, on 2026-10-26. The code was a set of prototype scripts at the time; this framework is those scripts restructured. Each lesson gives what happened, what it taught, and where the fix lives now.
+These come from one character's first unattended play, level 1 to level 5 in Wizard City, on 2026-10-26, and from later runs; each run's findings are also summed up in [retros](retros/), the latest [level 10 to 15](retros/level-10-to-15.md). The code was a set of prototype scripts at the time; this framework is those scripts restructured. Each lesson gives what happened, what it taught, and where the fix lives now.
 
 ## Reading the game
 
@@ -47,9 +47,24 @@ These come from one character's first unattended play, level 1 to level 5 in Wiz
 - **A window's visible flag is its own.** `is_visible()` does not look at parents: hidden battle windows still say visible outside battle. WizWalker's `WindowFlags.disabled` (bit 31) is set on the action buttons while they cannot be used.
 - **Results:** after the spell-type fix, every automated battle (about 12) was won, most in 1 or 2 rounds, with starter cards against Skeletal Pirates, Lost Souls and Dark Fairies.
 
+## Goals without a quest arrow
+
+- **The game files say where an untracked goal's targets are.** Things to collect and hidden spots to visit can show no quest arrow, and no quest finder points at them. The goal still names its zone, and the zone's own files hold the targets: placed objects (`gamedata.bin`) named by the goal's tags, and trigger volumes (`volumes.xml`) named after the quest, which count a visit when the wizard walks in; an "Explore" goal's spot is the zone's one Explore object. With no arrow, the wizard goes to the goal's zone, then to the nearest of those spots it has not tried, in that order of sources (`untracked.py`, `QuestLoop.untried_spots`); a spot that does not move the goal on is not tried again, one that three walks cannot reach is left, and when no spot is left the quest is parked until the wizard404 API can say more. Raised spots are reached by the ramp rule below. Found on 2026-10-28 with Triton Avenue's Cogs (by tag) and the ten Smiths of "Find the Smiths" (by trigger volume); the operator: "Please add a similar framework update regarding quests where we need to pick up items that the quest arrow does not assist with. Like the cogs or smiths".
+
+## The zone graph
+
+- **The client's zone files do not say where street doors lead.** A zone's `gamedata.bin` names some interiors and sub-zones it opens onto (towers, houses, drains), but street-to-street links and some hidden sub-zones are known only from walking them. The hand-kept tree in `training.py` covers the usual streets; zones it lacks are reached by the links the wizard learns walking (`travelplan.link_zones`) and the doors it learns arriving (`RunRecord.zone_doors`, the spot where it came in from a zone is the door back to it): with no way in the tree, the zone walk takes the first zone of the fewest-doors way through the learned links and walks to that door (`travelplan.next_zone_on_the_way`, `QuestLoop.learned_door_toward`). Found on 2026-10-28, when the tree lacked Colossus Boulevard and Triton Avenue's underwater zone.
+
+## Ramps and stairs
+
+- **Some ramps and stairs are missing from a zone's collision data.** A raised terrace or upper street then reads as its own walkable piece with no way onto it, though players walk up. The game's nav graph links the levels, but its waypoints can be far apart, and walking one long leg straight across a busy area gets stuck on whatever is in between. So when the collision data has no route to a destination on another piece and the nav graph has one, the walk goes by the collision data to the nav route's last waypoint on the wizard's own piece (the foot of the ramp), then up the nav legs, which are short where the ground climbs, only as far as the first waypoint on the next piece (the top of the ramp), and plans again from there, so a long nav leg across the new level also goes by the collision data (`ramps.py`, `QuestLoop.ramp_foot`). This applies to every walk, whatever its target. Found on 2026-10-28 with the Commons Smith of "Find the Smiths", on a terrace at height 253 (the operator: "there's no teleport in the Commons or anything so you need to be able to walk to that Smith"); Olde Town's Smith was reached the same way.
+
 ## Health
 
+- **Go into instances refilled.** A "to Enter" door can open on a tower or an instance the wizard does not walk out of partway, and inside it health and mana do not come back; the prompt does not name the zone. So the door's destination is taken from the doors learned walking out of zones: a door known to open on an instance (a zone named "_T<n>", a tower or a dungeon) waits for 90% health and 80% mana, by a trip to the Commons and a Recall back to the door; a door known to open on a shop, house or room asks for nothing; a door not known yet only asks that the wizard not be low (40% health, 20% mana) (`progress.short_before_entering`, `QuestLoop.refill_before_entering`). A quest waypoint under Triton Avenue was an instance's door, entered at 45% health (2026-10-28).
+
 - **Health regenerates outdoors** (about 1.6 HP/s in the Commons) **but not in every interior**, nor on Triton Avenue or Cyclops Lane. Resting in one froze the run. Resting was later dropped altogether as too slow: health comes from potions, wisps, in-battle heals and level-ups.
+- **A dungeon keeps its progress for 30 minutes after the wizard leaves.** Sunken City's entry box says so ("If you log out or leave for more than 30 minutes, you will lose all of the progress you have made in this Dungeon"). The operator, 2026-10-28 20:48 UTC, relayed: after leaving, the game may show an extra teleport button by Go Home and Recall that returns to the dungeon within the timer; the 01:11 Recall back into WC_Cyclops_T1 used Recall instead and failed. Not yet tried: at the next dungeon, read the HUD's buttons (names, tooltips, timers) right after leaving, log them, and test one refill trip with that button, back well inside 30 minutes. Until that works, dungeons are refilled in place.
 
 ## The connection
 

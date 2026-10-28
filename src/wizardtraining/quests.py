@@ -16,6 +16,7 @@ import asyncio
 from wizwalker import Wad
 
 from .language import LanguageFiles
+from .sidequests import QUEST_FINDER
 from .state import attempt
 
 QUEST_ARROW_WAIT_SECONDS = 3.0
@@ -92,6 +93,8 @@ async def _tags(goal) -> list[str]:
 async def _title(name_key) -> str | None:
     if not isinstance(name_key, str):
         return None
+    if name_key == QUEST_FINDER:
+        return QUEST_FINDER
     try:
         return await game_language().text(name_key)
     except Exception:

@@ -1,8 +1,8 @@
 import unittest
 
 from wizardtraining.policy import (ACCEPT, DECLINE, GO_BACK, LEAVE_MENU, STOP, UNIVERSAL, Card, Cast, Combatant,
-                                   DamageModifier, Flee, MainQuestsOnly, Pass, RoundView, SpellTypePolicy, TakeAllQuests,
-                                   problem_with)
+                                   DamageModifier, Enchant, Flee, MainQuestsOnly, Pass, RoundView, SpellTypePolicy,
+                                   TakeAllQuests, biggest_hits, problem_with)
 
 HEAL = Card("Fairy", "Heal", True)
 BOLT = Card("Fire Cat", "Damage", True)
@@ -19,8 +19,115 @@ def view(cards, health=500, max_health=500, enemies=ONE_ENEMY, pips=3, mana=None
                      enemies=enemies, mana=mana)
 
 
+class StrategyPolicyTest(unittest.TestCase):
+    """The same round played by each combat strategy (strategies.py)."""
+
+    def test_heal_earlier_heals_at_half_health(self):
+        from wizardtraining.strategies import COMBAT_STRATEGIES
+        half = view([BOLT, HEAL], health=250)
+        self.assertEqual(SpellTypePolicy().choose(half), Cast(0, "enemy"))
+        self.assertEqual(SpellTypePolicy(COMBAT_STRATEGIES[1]).choose(half), Cast(1, "self"))
+
+    def test_most_dangerous_first_attacks_the_boss_not_the_guard(self):
+        from wizardtraining.strategies import COMBAT_STRATEGIES
+        boss_and_guard = (Combatant("Lord Nightshade", 690, pips=3), Combatant("Field Guard", 395, pips=1))
+        self.assertEqual(SpellTypePolicy().choose(view([BOLT], enemies=boss_and_guard)), Cast(0, "enemy", 1))
+        self.assertEqual(SpellTypePolicy(COMBAT_STRATEGIES[2]).choose(view([BOLT], enemies=boss_and_guard)),
+                         Cast(0, "enemy", 0))
+
+    def test_the_strategy_is_chosen_from_the_enemies_at_each_fights_first_round(self):
+        from wizardtraining.strategies import COMBAT_STRATEGIES
+        asked = []
+
+        def strategy_for(situation):
+            asked.append(situation)
+            return COMBAT_STRATEGIES[1] if situation == "Flame Servant" else COMBAT_STRATEGIES[2]
+
+        policy = SpellTypePolicy(strategy_for=strategy_for)
+        servants = (Combatant("Flame Servant", 310), Combatant("Flame Servant", 310))
+        policy.new_fight()
+        policy.choose(view([BOLT], enemies=servants))
+        policy.choose(view([BOLT], enemies=servants[:1]))
+        self.assertEqual((policy.strategy, asked), (COMBAT_STRATEGIES[1], ["Flame Servant"]))
+        policy.new_fight()
+        policy.choose(view([BOLT], enemies=(Combatant("Nirini Sentry", 285),)))
+        self.assertEqual((policy.strategy, asked), (COMBAT_STRATEGIES[2], ["Flame Servant", "Nirini Sentry"]))
+
+    def test_heal_earlier_attacks_rather_than_passing_for_a_heal_out_of_danger(self):
+        from wizardtraining.strategies import COMBAT_STRATEGIES
+        pixie = Card("Pixie", "Heal", False, "Life", pips=2)
+        beetle = Card("Frost Beetle", "Damage", True, "Ice", pips=1)
+        sentry = (Combatant("Nirini Sentry", 220, pips=1),)
+        half = view([beetle, pixie], health=539, max_health=1102, enemies=sentry, pips=1)
+        self.assertEqual(SpellTypePolicy(COMBAT_STRATEGIES[1]).choose(half), Cast(0, "enemy", 0))
+        low = view([beetle, pixie], health=321, max_health=1102, enemies=sentry, pips=1)
+        self.assertIsInstance(SpellTypePolicy(COMBAT_STRATEGIES[1]).choose(low), Pass)
+
+    def test_heal_earlier_attacks_at_high_health_when_seen_hits_leave_it_out_of_reach(self):
+        """15:05: at 1091 of 1164, an Evil Snowman holding 6 pips counted as a 960 hit under "heal earlier", and the
+        wizard passed to save pips for Pixie; the Snowmen's hits that day were up to about 281 each."""
+        from wizardtraining.strategies import COMBAT_STRATEGIES
+        pixie = Card("Pixie", "Heal", False, "Life", pips=2)
+        imp = Card("Imp - Starter Wand", "Damage", True, "Life", pips=1, item_card=True)
+        snowmen = (Combatant("Evil Snowman", 103, pips=6), Combatant("Evil Snowman", 310, pips=1))
+        nearly_full = view([pixie, imp], health=1091, max_health=1164, enemies=snowmen, pips=1)
+        seen = {"Evil Snowman": 281}.get
+        self.assertEqual(SpellTypePolicy(COMBAT_STRATEGIES[1], hit_seen=seen).choose(nearly_full).card, 1)
+
+    def test_no_pass_for_a_heal_above_eighty_percent_even_against_an_unknown_big_hitter(self):
+        from wizardtraining.strategies import COMBAT_STRATEGIES
+        pixie = Card("Pixie", "Heal", False, "Life", pips=2)
+        imp = Card("Imp - Starter Wand", "Damage", True, "Life", pips=1, item_card=True)
+        stranger = (Combatant("Unknown Giant", 900, pips=7),)
+        nearly_full = view([pixie, imp], health=1091, max_health=1164, enemies=stranger, pips=1)
+        self.assertEqual(SpellTypePolicy(COMBAT_STRATEGIES[1]).choose(nearly_full).card, 1)
+        lower = view([pixie, imp], health=700, max_health=1164, enemies=stranger, pips=1)
+        self.assertIsInstance(SpellTypePolicy(COMBAT_STRATEGIES[1]).choose(lower), Pass)
+
+    def test_save_pips_for_bigger_cards_passes_for_a_two_pip_wait(self):
+        from wizardtraining.strategies import COMBAT_STRATEGIES
+        beetle = Card("Frost Beetle", "Damage", True, "Ice", pips=1)
+        snowman = Card("Evil Snowman", "Damage", False, "Ice", pips=3)
+        round_one = view([beetle, snowman], pips=1)
+        self.assertEqual(SpellTypePolicy().choose(round_one), Cast(0, "enemy", 0))
+        self.assertIsInstance(SpellTypePolicy(COMBAT_STRATEGIES[3]).choose(round_one), Pass)
+
+
+class BiggestHitsTest(unittest.TestCase):
+    @staticmethod
+    def round_entry(health, enemies, action="cast Imp - Starter Wand (Life) on enemy Evil Snowman"):
+        return {"view": {"health": health, "enemies": [{"name": name, "pips": pips} for name, pips in enemies]},
+                "action": action}
+
+    def test_a_hit_goes_to_the_enemy_that_spent_pips(self):
+        rounds = [self.round_entry(1164, [("Evil Snowman", 3), ("Gobbler Scouter", 1)]),
+                  self.round_entry(904, [("Evil Snowman", 1), ("Gobbler Scouter", 2)])]
+        self.assertEqual(biggest_hits(rounds), {"Evil Snowman": 260})
+
+    def test_a_round_the_wizard_healed_in_or_an_enemy_fell_in_is_skipped(self):
+        healed = [self.round_entry(600, [("Evil Snowman", 3)], action="cast Pixie (Life) on self"),
+                  self.round_entry(500, [("Evil Snowman", 1)])]
+        fell = [self.round_entry(900, [("Evil Snowman", 3), ("Evil Snowman", 3)]),
+                self.round_entry(600, [("Evil Snowman", 1)])]
+        self.assertEqual(biggest_hits(healed), {})
+        self.assertEqual(biggest_hits(fell), {})
+
+
+class QuestFinderMenuTest(unittest.TestCase):
+    def test_at_the_quest_finders_giver_the_first_quest_is_taken_not_a_shop(self):
+        policy = TakeAllQuests()
+        menu = ["Wizards in the Mist", "Recipe Shop", "Rematch Trading"]
+        self.assertEqual(policy.choose_service(menu, active_quest="Quest Finder", business_here=False), 0)
+        self.assertEqual(policy.choose_service(["Recipe Shop", "Wizards in the Mist"], active_quest="Quest Finder",
+                                               business_here=False), 1)
+        self.assertEqual(policy.choose_service(["Recipe Shop", "Rematch Trading"], active_quest="Quest Finder",
+                                               business_here=False), LEAVE_MENU)
+        self.assertEqual(policy.choose_service(menu, active_quest="Looking Sharp!", business_here=False), LEAVE_MENU)
+
+
 class SpellTypePolicyTest(unittest.TestCase):
-    policy = SpellTypePolicy()
+    def setUp(self):
+        self.policy = SpellTypePolicy()
 
     def test_attacks_the_first_enemy_with_the_first_affordable_attack(self):
         self.assertEqual(self.policy.choose(view([SHIELD, TOO_DEAR, BOLT])), Cast(2, "enemy"))
@@ -247,7 +354,10 @@ class TakeAllQuestsTest(unittest.TestCase):
         options = ["A Good Day to Cyclops", "Putting Out the Fire!"]
         self.assertEqual(policy.choose_service(options, active_quest=None, business_here=False), 1)
         self.assertEqual(TakeAllQuests().choose_service(options, active_quest=None, business_here=False), 0)
-        self.assertEqual(TakeAllQuests().choose_service(options, active_quest="Other", business_here=False), LEAVE_MENU)
+        other = TakeAllQuests()
+        self.assertEqual(other.choose_service(options, active_quest="Other", business_here=False), 0)
+        self.assertEqual(other.choose_service(options, active_quest="Other", business_here=False), 1)
+        self.assertEqual(other.choose_service(options, active_quest="Other", business_here=False), LEAVE_MENU)
 
 
 class MainQuestsOnlyTest(unittest.TestCase):
@@ -300,6 +410,189 @@ class ServicesMenuTest(unittest.TestCase):
         self.choose(policy)
         self.assertEqual(policy.decide(["I am offering you a side quest."], can_go_back=True), DECLINE)
 
+
+class TrapTest(unittest.TestCase):
+    TRAP = Card("Ice Trap", "Trap", True, "Ice", 0)
+    SNOWMAN = Card("Evil Snowman", "Damage", False, "Ice", 3)
+    BEETLE = Card("Frost Beetle", "Damage", True, "Ice", 1)
+
+    def test_a_trap_goes_on_the_target_before_a_big_hit(self):
+        snowmen = (Combatant("Evil Snowman", 310), Combatant("Evil Snowman", 310))
+        self.assertEqual(SpellTypePolicy().choose(view([self.BEETLE, self.TRAP, self.SNOWMAN], pips=2, enemies=snowmen)),
+                         Cast(1, "enemy", 0))
+
+    COLOSSUS = (Combatant("Ice Colossus", 395, resistances={"Ice": 0.5, "Fire": -0.2}),)
+
+    def test_a_trap_goes_on_a_resisting_enemy_while_the_big_hit_waits_for_pips(self):
+        choice = SpellTypePolicy().choose(view([self.BEETLE, self.TRAP, self.SNOWMAN], pips=2, enemies=self.COLOSSUS))
+        self.assertEqual(choice, Cast(1, "enemy", 0))
+        self.assertIn("waits for pips", choice.reason)
+
+    def test_a_castable_big_hit_goes_before_a_trap_that_leaves_it_resisted(self):
+        castable = Card("Evil Snowman", "Damage", True, "Ice", 3)
+        choice = SpellTypePolicy().choose(view([self.TRAP, castable], pips=3, enemies=self.COLOSSUS))
+        self.assertNotEqual(choice.card, 0)
+
+    def test_a_castable_big_hit_waits_a_round_for_a_trap_that_lifts_it_to_full(self):
+        snowman = (Combatant("Evil Snowman", 310, resistances={"Ice": 0.2, "Fire": -0.2}),)
+        castable = Card("Evil Snowman", "Damage", True, "Ice", 3)
+        choice = SpellTypePolicy().choose(view([self.TRAP, castable], pips=3, enemies=snowman))
+        self.assertEqual(choice, Cast(0, "enemy", 0))
+        self.assertIn("full damage", choice.reason)
+
+    def test_no_trap_on_an_enemy_a_castable_attack_is_expected_to_finish(self):
+        nearly_down = (Combatant("Evil Snowman", 73, resistances={"Ice": 0.2, "Fire": -0.2}),)
+        fire_cat = Card("Fire Cat - Starter Wand", "Damage", True, "Fire", 1, item_card=True)
+        choice = SpellTypePolicy().choose(view([self.TRAP, fire_cat, self.SNOWMAN], pips=1, enemies=nearly_down))
+        self.assertEqual(choice, Cast(1, "enemy", 0))
+
+    def test_a_kept_trap_is_not_spent_on_a_smaller_hit_of_its_school(self):
+        trapped = (Combatant("Evil Snowman", 310, resistances={"Ice": 0.2, "Fire": -0.2},
+                             incoming=(DamageModifier("Ice", 40),)),)
+        imp = Card("Imp - Starter Wand", "Damage", True, "Life", 1, item_card=True)
+        choice = SpellTypePolicy().choose(view([self.BEETLE, imp, self.SNOWMAN], pips=2, enemies=trapped))
+        self.assertEqual(choice, Cast(1, "enemy", 0))
+
+    def test_a_trap_instead_of_a_pass(self):
+        far_off = Card("Blizzard", "Damage", False, "Ice", 6)
+        choice = SpellTypePolicy().choose(view([self.TRAP, far_off], pips=0, enemies=self.COLOSSUS))
+        self.assertEqual(choice, Cast(0, "enemy", 0))
+        self.assertIn("instead of a pass", choice.reason)
+
+    def test_no_second_trap_on_a_trapped_enemy_and_none_without_a_big_hit(self):
+        trapped = (Combatant("Evil Snowman", 310, incoming=(DamageModifier("Ice", 40),)),)
+        self.assertNotEqual(SpellTypePolicy().choose(view([self.BEETLE, self.TRAP, self.SNOWMAN], pips=2,
+                                                          enemies=trapped)).card, 1)
+        self.assertNotEqual(SpellTypePolicy().choose(view([self.BEETLE, self.TRAP], pips=1,
+                                                          enemies=(Combatant("Ghost", 300),))).card, 1)
+
+
+class ResistanceTest(unittest.TestCase):
+    """Colossus Boulevard's Evil Snowmen (2026-10-28): resist Ice 20%, weak to Fire 20%, later shielded against Fire."""
+    SNOWMAN_CARD = Card("Evil Snowman", "Damage", True, "Ice", 3)
+    FIRE_CAT = Card("Fire Cat - Starter Wand", "Damage", True, "Fire", 1, item_card=True)
+    THUNDER_SNAKE = Card("Thunder Snake - Starter Wand", "Damage", True, "Storm", 1, item_card=True)
+    RESISTS = {"Ice": 0.2, "Fire": -0.2}
+
+    def test_a_wand_of_another_school_before_a_resisted_ice_hit(self):
+        snowman = (Combatant("Evil Snowman", 310, resistances=self.RESISTS),)
+        self.assertEqual(SpellTypePolicy().choose(view([self.SNOWMAN_CARD, self.FIRE_CAT], enemies=snowman)),
+                         Cast(1, "enemy", 0))
+
+    def test_a_shield_against_the_weakness_sends_another_school(self):
+        shielded = (Combatant("Evil Snowman", 310, resistances=self.RESISTS, incoming=(DamageModifier("Fire", -80),)),)
+        hand = [self.SNOWMAN_CARD, self.FIRE_CAT, self.THUNDER_SNAKE]
+        self.assertEqual(SpellTypePolicy().choose(view(hand, enemies=shielded)), Cast(2, "enemy", 0))
+
+    def test_a_trapped_target_takes_the_big_ice_hit(self):
+        trapped = (Combatant("Evil Snowman", 310, resistances=self.RESISTS, incoming=(DamageModifier("Ice", 40),)),)
+        self.assertEqual(SpellTypePolicy().choose(view([self.SNOWMAN_CARD, self.FIRE_CAT], enemies=trapped)),
+                         Cast(0, "enemy", 0))
+
+    def test_with_every_attack_resisted_the_best_of_them_is_played(self):
+        resists_all = (Combatant("Gobbler Scouter", 235, resistances={"Ice": 0.2, "Fire": 0.2}),)
+        self.assertEqual(SpellTypePolicy().choose(view([self.FIRE_CAT, self.SNOWMAN_CARD], enemies=resists_all)),
+                         Cast(1, "enemy", 0))
+
+
+class NoEffectTest(unittest.TestCase):
+    SNAKE = Card("Thunder Snake - Starter Wand", "Damage", True, "Storm", 1, accuracy=70)
+    CAT = Card("Fire Cat - Starter Wand", "Damage", True, "Fire", 1, accuracy=75)
+
+    def test_the_most_accurate_of_the_cheapest_finishers(self):
+        guard = (Combatant("Field Guard", 45),)
+        self.assertEqual(SpellTypePolicy().choose(view([self.SNAKE, self.CAT], enemies=guard)), Cast(1, "enemy", 0))
+
+    def test_a_card_that_left_the_target_as_it_was_is_not_played_again_this_fight(self):
+        policy = SpellTypePolicy()
+        guard = (Combatant("Field Guard", 300),)
+        first = policy.choose(view([self.SNAKE, self.CAT], enemies=guard))
+        played = [self.SNAKE, self.CAT][first.card].name
+        second = policy.choose(view([self.SNAKE, self.CAT], enemies=guard))
+        self.assertNotEqual([self.SNAKE, self.CAT][second.card].name, played)
+        policy.new_fight()
+        self.assertEqual(policy.choose(view([self.SNAKE, self.CAT], enemies=guard)), first)
+
+    def test_finishing_one_of_two_alike_enemies_is_an_effect(self):
+        policy = SpellTypePolicy()
+        two = (Combatant("Lost Soul", 55), Combatant("Lost Soul", 55))
+        first = policy.choose(view([self.CAT, self.SNAKE], enemies=two))
+        self.assertEqual(policy.choose(view([self.CAT, self.SNAKE], enemies=two[:1])).card, first.card)
+
+
+class MenuQuestTest(unittest.TestCase):
+    def test_a_world_is_not_a_quest_of_this_world(self):
+        from wizardtraining.policy import names_a_quest
+        self.assertTrue(names_a_quest("Colossal Trouble"))
+        self.assertFalse(names_a_quest("Grizzleheim"))
+        self.assertFalse(names_a_quest("Housing Shop"))
+
+    def test_a_new_quest_in_a_menu_is_taken_once_while_another_quest_is_active(self):
+        policy = TakeAllQuests()
+        options = ["Colossal Trouble", "Grizzleheim"]
+        self.assertEqual(policy.choose_service(options, active_quest="Hey, Penny", business_here=False), 0)
+        self.assertEqual(policy.choose_service(options, active_quest="Hey, Penny", business_here=False), LEAVE_MENU)
+        self.assertEqual(policy.choose_service(["Grizzleheim"], active_quest="Quest Finder", business_here=True),
+                         LEAVE_MENU)
+
+
+class ExtractTest(unittest.TestCase):
+    """Gilda Burke ("Know Thine Enemy"): an Extract spell enchants a damage spell, whose hit takes the essence."""
+    EXTRACT = Card("Extract Undead", "Enchantment", True, "Myth", 0)
+    BEETLE = Card("Frost Beetle", "Damage", True, "Ice", 1)
+    SERPENT = Card("Snow Serpent", "Damage", True, "Ice", 2)
+    SOULS = (Combatant("Ghoul", 300), Combatant("Lost Soul", 200))
+
+    def policy(self, wanted=("Lost Soul",)):
+        return SpellTypePolicy(essence_from=lambda: set(wanted))
+
+    def test_the_cheapest_attack_is_enchanted_while_an_essence_is_needed(self):
+        round_view = view([self.SERPENT, self.EXTRACT, self.BEETLE], enemies=self.SOULS)
+        self.assertEqual(self.policy().choose(round_view), Enchant(1, 2))
+
+    def test_the_enchanted_attack_hits_the_enemy_whose_essence_is_needed_once_a_fight(self):
+        enchanted = Card("Frost Beetle", "Damage", True, "Ice", 1, enchanted=True)
+        policy = self.policy()
+        self.assertEqual(policy.choose(view([self.SERPENT, enchanted], enemies=self.SOULS)), Cast(1, "enemy", 1))
+        self.assertEqual(policy.choose(view([self.SERPENT, self.EXTRACT, self.BEETLE], enemies=self.SOULS)),
+                         Cast(0, "enemy", 1))
+
+    def test_no_essence_needed_or_no_such_enemy_plays_as_usual(self):
+        round_view = view([self.EXTRACT, self.BEETLE], enemies=(Combatant("Ghoul", 300),))
+        self.assertEqual(self.policy().choose(round_view), Cast(1, "enemy", 0))
+        self.assertEqual(self.policy(wanted=()).choose(view([self.EXTRACT, self.BEETLE], enemies=self.SOULS)),
+                         Cast(1, "enemy", 1))
+
+    def test_without_an_extract_another_enemy_is_hit_or_the_victim_stunned(self):
+        freeze = Card("Freeze", "Manipulation", True, "Ice", 0, effects=("stun",))
+        self.assertEqual(self.policy().choose(view([self.BEETLE], enemies=self.SOULS)), Cast(0, "enemy", 0))
+        alone = (Combatant("Lost Soul", 55),)
+        self.assertEqual(self.policy().choose(view([self.BEETLE, freeze], enemies=alone)), Cast(1, "enemy", 0))
+        self.assertEqual(self.policy().choose(view([self.BEETLE], enemies=alone)), Cast(0, "enemy", 0))
+
+    def test_an_item_card_or_a_refused_card_is_not_enchanted(self):
+        wand = Card("Dark Sprite - Starter Wand", "Damage", True, "Death", 1, item_card=True)
+        souls = (Combatant("Lost Soul", 55),)
+        self.assertEqual(self.policy().choose(view([wand, self.EXTRACT, self.SERPENT], enemies=souls)), Enchant(1, 2))
+        policy = self.policy()
+        policy.enchant_refused("Snow Serpent")
+        self.assertEqual(policy.choose(view([wand, self.EXTRACT, self.SERPENT], enemies=souls)), Cast(0, "enemy", 0))
+
+    def test_pips_are_saved_while_the_decks_attacks_cost_more_than_the_wizard_has(self):
+        wand = Card("Frost Beetle - Starter Wand", "Damage", True, "Ice", 1)
+        serpent = Card("Snow Serpent", "Damage", False, "Ice", 2)
+        choice = self.policy().choose(view([wand, self.EXTRACT, serpent], pips=1, enemies=(Combatant("Lost Soul", 55),)))
+        self.assertIsInstance(choice, Pass)
+        self.assertIn("Snow Serpent", choice.reason)
+
+    def test_low_health_heals_before_extracting(self):
+        round_view = view([self.EXTRACT, self.BEETLE, HEAL], health=100, enemies=self.SOULS)
+        self.assertEqual(self.policy().choose(round_view), Cast(2, "self"))
+
+    def test_an_enchantment_onto_itself_or_an_uncastable_card_is_refused(self):
+        round_view = view([self.EXTRACT, TOO_DEAR])
+        self.assertIsNotNone(problem_with(Enchant(0, 1), round_view))
+        self.assertIsNotNone(problem_with(Enchant(0, 0), round_view))
 
 if __name__ == "__main__":
     unittest.main()

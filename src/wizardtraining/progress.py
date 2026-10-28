@@ -8,14 +8,18 @@ as progress once kept a run looping for 200 turns.
 
 from __future__ import annotations
 
+import re
+
 import datetime
 from dataclasses import asdict, dataclass, field
 
 from .routes import COLLISION, NAV
+from .travelplan import spare_mana
 
 ENEMY_NEAR_PATH = "an enemy is near the path ahead"
 DUEL_NEAR_PATH = "a duel is near the path ahead"
 ENEMIES_IN_THE_WAY = "enemies leave no route"
+DUEL_BLOCKS_THE_WAY = "another player's fight leaves no route"
 PATH_THREATS = {ENEMY_NEAR_PATH, DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY}
 STATE_CHANGING_INTERRUPTS = {"battle", "dialog", "loading", "target in reach", "arrived"}
 MEANINGFUL_TRAVEL_DISTANCE = 300.0
@@ -25,9 +29,15 @@ HEALTH_WISP_BELOW_FRACTION = 0.65
 WISP_ANY_DIRECTION_BELOW_FRACTION = 0.35
 POTION_BELOW_FRACTION = 0.4
 MANA_BELOW_FRACTION = 0.2
+HEALTH_TO_TRAVEL_FRACTION = 0.4
+RECHARGE_HEALTH_FRACTION = 0.9
+RECHARGE_MANA_FRACTION = 0.8
+RECALL_MANA_NEEDED = 8
 ENGAGE_MANA_FRACTION = 0.4
 ENGAGE_HEALTH_FRACTION = 0.6
 TOP_UP_MANA_FRACTION = 0.9
+RECALL_MANA_FRACTION = 0.8
+RECALL_HEALTH_FRACTION = 0.9
 
 
 def world_of(zone: str | None) -> str | None:
@@ -57,9 +67,10 @@ class Limits:
     max_battles: int = 20
     max_turns_without_progress: int = 4
     max_step_aways: int = 40
-    max_defeats: int = 0
+    max_defeats: int | None = None
     max_loading_waits_in_a_row: int = 40
     max_immobile_threat_stops_in_a_row: int = 8
+    max_duel_waits_in_a_row: int = 20
     max_obstacles_per_zone: int = 40
     max_zone_changes_without_quest_change: int = 10
     max_menu_choices_without_quest_change: int = 3
@@ -76,6 +87,7 @@ class RunRecord:
     turns_without_progress: int = 0
     loading_waits_in_a_row: int = 0
     immobile_threat_stops_in_a_row: int = 0
+    duel_waits_in_a_row: int = 0
     step_aways: list = field(default_factory=list)
     battle_log: list[dict] = field(default_factory=list)
     dialog_log: list[dict] = field(default_factory=list)
@@ -97,6 +109,39 @@ class RunRecord:
     events_file: str | None = None
     talks_leaving_goal_open: dict[str, int] = field(default_factory=dict)
     teleport_outcomes: dict[str, dict[str, object]] = field(default_factory=dict)
+    failed_gaps: dict[str, list[tuple[int, int]]] = field(default_factory=dict)
+    quests_activated: dict[str, int] = field(default_factory=dict)
+    combat_strategies_tried: dict[str, list[str]] = field(default_factory=dict)
+    recharging: bool = False
+    marked_in: str | None = None
+    mark_tip: str | None = None
+    zone_links: dict[str, list[str]] = field(default_factory=dict)
+    travel_costs: dict[str, float] = field(default_factory=dict)
+    hubs: dict[str, str] = field(default_factory=dict)
+    mark_purpose: str | None = None
+    mark_quest: str | None = None
+    leaving_resets: list[str] = field(default_factory=list)
+    clearing_world: str | None = None
+    paused_quest: str | None = None
+    hidden_doors: dict[str, list[tuple[int, int]]] = field(default_factory=dict)
+    mark_door_for: str | None = None
+    parked_quests: dict[str, int] = field(default_factory=dict)
+    reagent_zones: dict[str, list[str]] = field(default_factory=dict)
+    reagent_searched: dict[str, list[str]] = field(default_factory=dict)
+    wanted_reagents: dict[str, str] = field(default_factory=dict)
+    deck_capacity: dict[str, int] = field(default_factory=dict)
+    enemy_zones: dict[str, list[str]] = field(default_factory=dict)
+    essence_quests: dict[str, str] = field(default_factory=dict)
+    trainers: dict[str, dict] = field(default_factory=dict)
+    heavy_fights: dict[str, int] = field(default_factory=dict)
+    enemy_hits: dict[str, int] = field(default_factory=dict)
+    refill_after_heavy_fight: bool = False
+    dead_search_points: dict[str, list] = field(default_factory=dict)
+    held_quests: dict[str, str] = field(default_factory=dict)
+    trapping_marks: dict[str, list] = field(default_factory=dict)
+    zone_doors: dict[str, dict] = field(default_factory=dict)
+    school_quests_checked: dict[str, int] = field(default_factory=dict)
+    walk_strategies_tried: dict[str, list[str]] = field(default_factory=dict)
     tried_wisps: dict[str, float] = field(default_factory=dict)
     visited_objects: list[str] = field(default_factory=list)
     arrivals: dict[str, dict] = field(default_factory=dict)
@@ -104,6 +149,9 @@ class RunRecord:
     zones_with_enemies: list[str] = field(default_factory=list)
     path_sightings: dict[str, dict[str, int]] = field(default_factory=dict)
     path_views: dict[str, dict[str, int]] = field(default_factory=dict)
+    known_spells: list[int] = field(default_factory=list)
+    entered_with_x: list[str] = field(default_factory=list)
+    trained_at_level: int = 0
 
     def record_turn(self, turn: dict) -> None:
         self.turns.append(turn)
@@ -199,6 +247,134 @@ def mana_to_travel(mana: float | None) -> bool:
     return mana is None or mana >= MANA_BELOW_FRACTION
 
 
+def health_to_travel(health: float | None) -> bool:
+    """At least HEALTH_TO_TRAVEL_FRACTION of max health, or unknown. Below it the wizard refills health before any
+    goal, not only before a fight the quest asks for: defeated by two Flame Servants in the Pyramid's Chamber, it
+    woke in the Krokotopia hub with 1 health and walked straight back toward them at 55 of 1102 to talk to the
+    assistant behind them."""
+    return health is None or health >= HEALTH_TO_TRAVEL_FRACTION
+
+
+def still_to_recharge(health: float | None, mana: float | None) -> str | None:
+    """After a defeat, or with health below HEALTH_TO_TRAVEL_FRACTION: "health" or "mana", whichever is still below
+    RECHARGE_HEALTH_FRACTION or RECHARGE_MANA_FRACTION of its pool, health first; None when both are there or
+    unknown. The operator: "seek out blue and red wisps in safe areas to recharge after death". Woken in the
+    Krokotopia hub with 1 health, the wizard walked back to the Pyramid at 55 of 1102 and lost again."""
+    if health is not None and health < RECHARGE_HEALTH_FRACTION:
+        return "health"
+    if mana is not None and mana < RECHARGE_MANA_FRACTION:
+        return "mana"
+    return None
+
+
+def worth_marking(here: str, goal_zone: str | None, marked_in: str | None, mana, *, enemies_here: bool,
+                  refused: bool) -> bool:
+    """Arrived in the zone the goal is in, where enemies have been met, with no mark there yet and mana for Mark
+    Location (about 5) to spare (`travelplan.spare_mana`): a defeat here wakes the wizard in the world's hub, and a mark brings it back by Recall
+    Location. At 22:55 and 23:11 the wizard woke in the Krokotopia hub with no mark in the Pyramid's Chamber and
+    walked back through the same enemies."""
+    return (goal_zone == here and marked_in != here and enemies_here and not refused
+            and spare_mana(mana))
+
+
+def worth_recalling(here: str, goal_zone: str | None, marked_in: str | None, mana, door_for: str | None = None) -> bool:
+    """The Recall button holds a mark in the zone the goal is in, or at the door of the dungeon the goal is in
+    (`door_for`), the wizard is elsewhere, not in the goal's zone, and it has the mana for Recall Location (about 5).
+    The operator: "you might have forgot to use the teleport to the chamber of fire you created to get back there".
+    In Cyclops Lane, the goal's zone, the wizard recalled to a mark set in the Dark Cave at a "door" for Cyclops Lane
+    (11:39)."""
+    return (marked_in is not None and goal_zone in (marked_in, door_for) and here not in (marked_in, goal_zone)
+            and isinstance(mana, int) and mana >= RECALL_MANA_NEEDED)
+
+
+PARK_AFTER_STRATEGIES = 3
+HEAVY_FIGHT_FRACTION = 0.35
+HEAVY_ZONE_FIGHTS = 2
+
+
+def heavy_fight(health_before, health_after, max_health) -> bool:
+    """A won fight that cost HEAVY_FIGHT_FRACTION of the wizard's health or more: in Colossus Boulevard pairs of Evil
+    Snowmen and Gobbler Scouters cost 400 to 900 of 1,133, and two of three fights went under 25% (12:39 to 12:53)."""
+    return (all(isinstance(value, int) for value in (health_before, health_after, max_health)) and max_health > 0
+            and health_before - health_after >= HEAVY_FIGHT_FRACTION * max_health)
+
+
+GOAL_PUSH_DISTANCE = 3500.0
+GOAL_PUSH_HEALTH_FRACTION = 0.5
+GOAL_HEADWAY = 1000.0
+STALLED_TRIPS_TO_PARK = 2
+
+
+def made_headway(distance_to_goal: float | None, at_last_trip: float | None) -> bool:
+    """Since the last refill trip for this goal, the wizard came GOAL_HEADWAY nearer it, or there is nothing to
+    compare. The Gravulum Order's bounty lay about 6,800 from the Colossus Boulevard mark, and every Recall there
+    landed in a Snowman fight that sent the wizard back to the Commons from the same spot (15:56 to 16:04)."""
+    return distance_to_goal is None or at_last_trip is None or distance_to_goal <= at_last_trip - GOAL_HEADWAY
+
+
+ENTER_ACTION = "enter"
+INSTANCE_NAME = re.compile(r"_T\d+$|tower|dungeon", re.IGNORECASE)
+
+
+def is_an_instance(zone: str | None) -> bool:
+    """A zone named as a tower or instance the wizard does not walk out of partway: "..._T1", "...Tower...",
+    "...Dungeon..." (its last part)."""
+    return bool(zone) and bool(INSTANCE_NAME.search(zone.rsplit("/", 1)[-1]))
+
+
+def short_before_entering(action: str | None, health: float | None, mana: float | None,
+                          destination: str | None = None) -> str | None:
+    """Before pressing X at a "to Enter" door, "health" or "mana" when the wizard should refill first, health first;
+    None otherwise or for other prompts. A door known to open on an instance (`destination`, from the doors learned
+    walking, `is_an_instance`) asks for a full recharge (RECHARGE_HEALTH_FRACTION, RECHARGE_MANA_FRACTION): Triton
+    Avenue's underwater "Odd Tidings" waypoint was the door of WC_Triton_Underwater_T1, entered at 45% health after a
+    costly fight, and health does not come back inside (18:40 to 18:42). A door known to open elsewhere (a shop, a
+    house) asks for nothing; a door not known yet, only that the wizard not be low (HEALTH_TO_TRAVEL_FRACTION,
+    MANA_BELOW_FRACTION), so shops and houses do not cost a trip to the Commons."""
+    if (action or "").strip().lower() != ENTER_ACTION:
+        return None
+    if destination is not None and not is_an_instance(destination):
+        return None
+    health_bar, mana_bar = ((RECHARGE_HEALTH_FRACTION, RECHARGE_MANA_FRACTION) if destination is not None
+                            else (HEALTH_TO_TRAVEL_FRACTION, MANA_BELOW_FRACTION))
+    if health is not None and health < health_bar:
+        return "health"
+    if mana is not None and mana < mana_bar:
+        return "mana"
+    return None
+
+
+def worth_pushing_on(health: float | None, distance_to_goal: float | None, *, stalled: bool = False) -> bool:
+    """After a heavy fight, the goal is within GOAL_PUSH_DISTANCE and the wizard has GOAL_PUSH_HEALTH_FRACTION of
+    its health or more: go on to the goal rather than refill first. On Colossus Boulevard every fight cost more than
+    a third of the wizard's health, so each was followed by a Commons trip and a Recall that landed in the next fight
+    at the same mark, about 3,000 from the quest object, and the wizard made no headway for half an hour (15:00 to
+    15:34). A defeat on the way costs about what a refill trip does: the wizard wakes in the Commons and Recalls.
+    When the last refill trip made no headway (`made_headway`), at any distance: the coordinator, 2026-10-28, of
+    the Gravulum Order's bounty."""
+    return (health is not None and distance_to_goal is not None and health >= GOAL_PUSH_HEALTH_FRACTION
+            and (stalled or distance_to_goal <= GOAL_PUSH_DISTANCE))
+
+
+def parked(parked_quests: dict[str, int], title: str | None, level, held: dict[str, str] | None = None) -> bool:
+    """A quest parked while clearing a world (its fight lost with PARK_AFTER_STRATEGIES strategies) stays parked
+    until the wizard is past the level it was parked at; a held one (`held`, title to reason) stays parked whatever
+    the level. The operator, 2026-10-28 20:21 UTC: "We will continue parked quests after the API from wizard404 is
+    connected"."""
+    name = " ".join(title.split()) if title else None
+    if name and held and name in held:
+        return True
+    parked_at = parked_quests.get(name) if name else None
+    return parked_at is not None and (not isinstance(level, int) or level <= parked_at)
+
+
+def ready_to_recall(mana: float | None, health: float | None) -> bool:
+    """After a trip to the Commons for a refill: mana at least RECALL_MANA_FRACTION and health at least
+    RECALL_HEALTH_FRACTION of their pools, or unknown. Recall costs about 5 mana, and the fights it returns to
+    are the ones that sent the wizard away."""
+    return ((mana is None or mana >= RECALL_MANA_FRACTION) and (health is None or health >= RECALL_HEALTH_FRACTION))
+
+
 def topped_up(mana: float | None) -> bool:
     """Mana is at least TOP_UP_MANA_FRACTION of the pool, or unknown. Waiting for mana goes on until then, not just
     to ENGAGE_MANA_FRACTION: the zones that give mana back are a walk from the fights, and a Warhorn fight took 6
@@ -225,21 +401,32 @@ def should_drink_potion(fraction: float | None, charges) -> bool:
 def travel_outcome(did: str, stop_reason: str | None, moved: float, record: RunRecord, *,
                    new_obstacles: int = 0, **details) -> dict:
     """`stop_reason` is why the walk ended early, or None. Waiting for an enemy to clear the path counts
-    as progress for a few stops in a row, no more. Finding new obstacles is progress, because the next
-    route goes around them; `remember_obstacles` caps how many a zone may collect."""
+    as progress for a few stops in a row, no more; waiting for another player's fight to end, which leaves the
+    only way unwalkable, counts for `max_duel_waits_in_a_row` stops. Finding new obstacles is progress, because
+    the next route goes around them; `remember_obstacles` caps how many a zone may collect."""
     waiting_for_the_path = (stop_reason in PATH_THREATS and record.immobile_threat_stops_in_a_row
                             <= record.limits.max_immobile_threat_stops_in_a_row)
+    waiting_for_a_duel = (stop_reason == DUEL_BLOCKS_THE_WAY
+                          and record.duel_waits_in_a_row <= record.limits.max_duel_waits_in_a_row)
     if (moved >= MEANINGFUL_TRAVEL_DISTANCE or stop_reason in STATE_CHANGING_INTERRUPTS or waiting_for_the_path
-            or new_obstacles > 0):
+            or waiting_for_a_duel or new_obstacles > 0):
         return progressed(did, new_obstacles=new_obstacles, **details)
     return stalled(did, new_obstacles=new_obstacles, **details)
 
 
+TURN_FAILED = "turn failed"
+
+
 def nav_did_better(attempts: list[dict]) -> bool:
     """A trip where the collision route got stuck on the way and the nav route then walked on: the collision
-    data misses something there."""
+    data misses something there. A collision walk that failed because a turn would not settle ("turn failed:
+    facing did not converge") says nothing about the data: in the Commons it made the hub a nav-first zone, and
+    the nav route from the Nightside gate's arrival point began with the gate's own waypoint, so the wizard
+    walked back through it, six times, until the run stopped."""
     results = {attempt["method"]: attempt.get("result") for attempt in attempts}
-    return results.get(COLLISION) == "failed" and results.get(NAV) in ("arrived", "interrupted")
+    collision_reason = next((attempt.get("reason") or "" for attempt in attempts if attempt["method"] == COLLISION), "")
+    return (results.get(COLLISION) == "failed" and results.get(NAV) in ("arrived", "interrupted")
+            and not collision_reason.startswith(TURN_FAILED))
 
 
 def remember_obstacles(record: RunRecord, zone: str, found: list) -> int:
@@ -249,6 +436,19 @@ def remember_obstacles(record: RunRecord, zone: str, found: list) -> int:
     kept = [(round(x), round(y)) for x, y in found[:room]]
     known.extend(kept)
     return len(kept)
+
+
+OBSTACLE_FORGET_RADIUS = 600.0
+
+
+def forget_obstacles_near(record: RunRecord, zone: str, point, radius: float = OBSTACLE_FORGET_RADIUS) -> int:
+    """Drop the obstacles learned this run within `radius` of `point` in the zone; how many were dropped. In the
+    Shopping District, cells learned near the wizard left every route method without a way for two minutes, and a
+    restart, which forgets them, walked on at once (16:54 to 16:58)."""
+    known = record.obstacles.get(zone, [])
+    kept = [cell for cell in known if (cell[0] - point[0]) ** 2 + (cell[1] - point[1]) ** 2 > radius ** 2]
+    record.obstacles[zone] = kept
+    return len(known) - len(kept)
 
 
 class PlannedRoute:

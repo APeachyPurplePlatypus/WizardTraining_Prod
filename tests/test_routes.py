@@ -1,11 +1,13 @@
 import math
+import struct
 import unittest
 
 from wizardtraining.patrols import PatrolMap
-from wizardtraining.routes import (COLLISION, DUEL_CIRCLE_NO_GO, GOAL_PIECE_REACH, LEG_ENEMY_CLEARANCE, NAV,
+from wizardtraining.routes import (COLLISION, DUEL_CIRCLE_NO_GO, GOAL_PIECE_REACH, LEG_ENEMY_CLEARANCE,
+                                   MAX_GAP_STEP, NAV, GapStep,
                                    NAV_CELL_REACH,
                                    OBSTACLE_RADIUS, STRAIGHT, Hazards, NavGraph, RoutePlanner, grid_path,
-                                   no_more_dangerous, string_pull)
+                                   no_more_dangerous, parse_nav_file, string_pull)
 from wizardtraining.motion import Track
 from wizardtraining.teleports import TeleportVolume
 
@@ -243,6 +245,17 @@ class RoutePlannerTest(unittest.TestCase):
         self.assertIsNone(planner.crossing((0, 0), (960, 960), {}))
         self.assertEqual(planner.crossing((0, 0), (960, 5000), {}).name, "to IceSchool")
 
+    def test_a_teleporter_known_to_reach_the_goals_piece_beats_a_nav_graph_link(self):
+        """Triton Avenue: the nav graph links the lower street to the Haunted Cave's level through the teleporter,
+        and walking that link stuck at a wall."""
+        planner = RoutePlanner("zone", nav_graph=square_nav_graph(3))
+        planner.piece_of = lambda point, reach=150: 1 if point[1] > 800 else 0
+        tele_up = TeleportVolume("Tele Up", 900, 0, 0, 177)
+        planner.teleports = [(tele_up, 0)]
+        self.assertEqual(planner.crossing((0, 0), (960, 960), {"Tele Up": 1}), tele_up)
+        self.assertIsNone(planner.crossing((0, 0), (960, 960), {"Tele Up": 0}))
+        self.assertIsNone(planner.crossing((0, 0), (960, 960), {"Tele Up": "left the zone"}))
+
     def test_routes_keep_out_of_teleport_volumes(self):
         planner = RoutePlanner("zone", walk_grid=SquareWalkGrid(20), grid_line_walkable=lambda a, b: True)
         jeweler = TeleportVolume("WC_Shop Jewelry", 1000, 0, 0, 100)
@@ -293,6 +306,223 @@ class RoutePlannerTest(unittest.TestCase):
     def test_unknown_method_is_an_error(self):
         with self.assertRaises(ValueError):
             RoutePlanner("zone").route("teleport", (0, 0), (1, 1))
+
+
+
+class GapStepTest(unittest.TestCase):
+    """Sapphyra's Tower's courtyard is a walkable piece of its own, 175 units from Olde Town's street."""
+
+    def planner(self, gap):
+        planner = RoutePlanner("WizardCity/WC_Streets/WC_OldeTown")
+        planner.piece_of = lambda point, reach=150.0: 1 if point[0] < -10000 else 4
+        planner.piece_gap = lambda first, second: ((-10568.0, -4613.0), (-10658.0, -4763.0), gap)
+        return planner
+
+    def test_steps_across_a_short_gap_to_the_goals_piece(self):
+        step = self.planner(175.0).gap_step((2467, 201), (-11333, -6232))
+        self.assertEqual(step, GapStep((-10568.0, -4613.0), (-10658.0, -4763.0), (4, 1)))
+
+    def test_no_step_within_one_piece_over_a_wide_gap_or_after_one_failed(self):
+        self.assertIsNone(self.planner(175.0).gap_step((2467, 201), (-6107, -3249)))
+        self.assertIsNone(self.planner(MAX_GAP_STEP + 1).gap_step((2467, 201), (-11333, -6232)))
+        self.assertIsNone(self.planner(175.0).gap_step((2467, 201), (-11333, -6232), failed=[(4, 1)]))
+        self.assertIsNone(RoutePlanner("zone").gap_step((0, 0), (1, 1)))
+
+
+class WayAcrossTest(unittest.TestCase):
+    """Triton Avenue: the Haunted Cave's door is on the upper level, 198 units across a gap from the street, and
+    "Tele Up" lands there."""
+
+    def planner(self, tele_up_standing_in=18):
+        planner = RoutePlanner("WizardCity/WC_Streets/WC_Triton")
+        planner.piece_of = lambda point, reach=150.0: 0 if point[1] > 5000 else 18
+        planner.piece_gap = lambda first, second: ((-16100.0, 140.0), (-16300.0, 140.0), 198.0)
+        planner.teleports = [(TeleportVolume("Tele Up", -16336.0, 1176.0, 0.0, 300.0), tele_up_standing_in)]
+        return planner
+
+    cave_door = (-37005.0, 6000.0)
+    street = (-15000.0, 0.0)
+
+    def test_a_teleporter_seen_to_land_in_the_goals_piece_comes_before_a_gap_step(self):
+        way = self.planner().way_across(self.street, self.cave_door, {"Tele Up": 0})
+        self.assertEqual(way.name, "Tele Up")
+
+    def test_a_short_gap_is_stepped_across_when_no_teleporter_is_known_to_lead_there(self):
+        way = self.planner().way_across(self.street, self.cave_door, {})
+        self.assertEqual(way, GapStep((-16100.0, 140.0), (-16300.0, 140.0), (18, 0)))
+
+    def test_after_a_failed_step_an_untried_teleporter_is_chosen(self):
+        way = self.planner().way_across(self.street, self.cave_door, {}, failed_gaps=[(18, 0)])
+        self.assertEqual(way.name, "Tele Up")
+
+    def test_nothing_to_cross_within_one_piece(self):
+        self.assertIsNone(self.planner().way_across(self.street, (-15000.0, 100.0), {"Tele Up": 0}))
+
+
+class BlockedOnlyByDuelsTest(unittest.TestCase):
+    """The Haunted Cave street: one way on, passing 887 units from another player's fight, with 900 kept clear."""
+
+    def corridor_planner(self):
+        vertices = [(480.0 * step, 0.0) for step in range(10)]
+        edges = [(a, a + 1) for a in range(9)] + [(a + 1, a) for a in range(9)]
+        return RoutePlanner("WizardCity/WC_Streets/WC_HauntedCave", nav_graph=NavGraph.from_edges(vertices, edges))
+
+    start, goal = (0.0, 0.0), (4320.0, 0.0)
+
+    def test_a_circle_beside_the_only_way_is_all_that_blocks_it(self):
+        planner = self.corridor_planner()
+        near = Hazards.of(duel_circles=[(2000.0, 887.0)])
+        self.assertTrue(planner.blocked_only_by_duels(self.start, self.goal, near))
+        self.assertTrue(planner.has_mapped_route(self.start, self.goal, Hazards.of(duel_circles=[(2000.0, 2000.0)])))
+
+    def test_a_circle_far_from_the_way_blocks_nothing(self):
+        planner = self.corridor_planner()
+        far = Hazards.of(duel_circles=[(2000.0, 3000.0)])
+        self.assertFalse(planner.blocked_only_by_duels(self.start, self.goal, far))
+        self.assertFalse(planner.blocked_only_by_duels(self.start, self.goal, Hazards()))
+
+    def test_a_goal_no_route_reaches_even_without_the_circles_is_not_blamed_on_them(self):
+        cut_in_two = NavGraph.from_edges([(0.0, 0.0), (480.0, 0.0), (4000.0, 0.0), (4480.0, 0.0)],
+                                         [(0, 1), (1, 0), (2, 3), (3, 2)])
+        planner = RoutePlanner("zone", nav_graph=cut_in_two)
+        hazards = Hazards.of(duel_circles=[(240.0, 800.0)])
+        self.assertFalse(planner.blocked_only_by_duels((0.0, 0.0), (4480.0, 0.0), hazards))
+
+
+class AfterAFailedStepTest(unittest.TestCase):
+    """Coming out of the Haunted Cave gate puts the wizard on Triton Avenue's upper level (piece 0); the Headmistress's
+    house is on the lower street (piece 18), 198 units across a ledge the wizard cannot cross."""
+
+    def planner(self):
+        planner = RoutePlanner("WizardCity/WC_Streets/WC_Triton")
+        planner.piece_of = lambda point, reach=150.0: 0 if point[0] < -16200 else 18
+        planner.piece_reaches = lambda piece, point, reach: piece == 0
+        planner.piece_gap = lambda first, second: ((-16273.0, 110.0), (-16077.0, 140.0), 198.0)
+        planner.teleports = [(TeleportVolume("Tele Up", -16336.0, 1176.0, 0.0, 177.0), 18),
+                             (TeleportVolume("Tele Down", -17514.0, 1145.0, 0.0, 188.0), 0),
+                             (TeleportVolume("To TempestNexus", -17564.0, -4043.0, 0.0, 185.0), 0)]
+        return planner
+
+    start, goal = (-17120.0, 880.0), (-16100.0, 140.0)
+
+    def test_the_wizards_piece_reaching_the_goal_means_walk_there_until_a_step_failed(self):
+        planner = self.planner()
+        self.assertIsNone(planner.crossing(self.start, self.goal, {}))
+        self.assertEqual(planner.crossing(self.start, self.goal, {}, failed_gaps=[(0, 18)]).name, "Tele Down")
+
+    def test_after_the_step_failed_the_untried_volume_nearest_the_goal_is_walked_into(self):
+        way = self.planner().way_across(self.start, self.goal, {}, failed_gaps=[(0, 18)])
+        self.assertEqual(way.name, "Tele Down")
+
+    def test_a_failed_step_for_other_pieces_changes_nothing(self):
+        self.assertIsNone(self.planner().crossing(self.start, self.goal, {}, failed_gaps=[(18, 0)]))
+
+
+class NearbyLandingTest(unittest.TestCase):
+    """Triton Avenue: "Tele Down" is known to land in piece 20, 195 units from the lower street's piece 18, where
+    the east gate is; a house door and the cave's gate on the upper level (piece 0) are untried."""
+
+    def planner(self):
+        planner = RoutePlanner("WizardCity/WC_Streets/WC_Triton")
+        planner.piece_of = lambda point, reach=150.0: 0 if point[0] < -17000 else 18 if point[0] > -1000 else 20
+        planner.piece_reaches = lambda piece, point, reach: False
+        gaps = {(0, 18): 198.0, (20, 18): 195.0, (0, 20): 10465.0}
+        planner.piece_gap = lambda first, second: ((0.0, 0.0), (1.0, 1.0), gaps.get((first, second),
+                                                                                 gaps.get((second, first), 99999.0)))
+        planner.teleports = [(TeleportVolume("Tele Down", -17514.0, 1145.0, 0.0, 188.0), 0),
+                             (TeleportVolume("ThiefHouse", -23913.0, -6182.0, 0.0, 100.0), 0),
+                             (TeleportVolume("Cavern", -37005.0, 3289.0, 0.0, 400.0), 0)]
+        return planner
+
+    start, gate = (-17120.0, 880.0), (6.0, 2477.0)
+    seen = {"Tele Down": 20}
+
+    def test_a_volume_seen_to_land_a_short_step_from_the_goal_comes_before_untried_ones(self):
+        way = self.planner().way_across(self.start, self.gate, self.seen, failed_gaps=[(0, 18)])
+        self.assertEqual(way.name, "Tele Down")
+
+    def test_from_there_the_short_step_is_taken(self):
+        landing = (-16500.0, 500.0)
+        way = self.planner().way_across(landing, self.gate, self.seen, failed_gaps=[(0, 18)])
+        self.assertIsInstance(way, GapStep)
+        self.assertEqual(way.pieces, (20, 18))
+
+    def test_a_landing_whose_step_already_failed_is_not_used(self):
+        way = self.planner().way_across(self.start, self.gate, self.seen, failed_gaps=[(0, 18), (20, 18)])
+        self.assertNotEqual(way.name, "Tele Down")
+
+    def test_without_a_known_landing_an_untried_volume_is_chosen(self):
+        way = self.planner().way_across(self.start, self.gate, {}, failed_gaps=[(0, 18)])
+        self.assertEqual(way.name, "Tele Down")
+
+
+def nav_file(waypoints, links) -> bytes:
+    data = bytearray(b"\x00\x00") + struct.pack("<i", len(waypoints))
+    for (x, y, z), number in waypoints:
+        data += struct.pack("<fffh", x, y, z, number)
+    data += struct.pack("<i", len(links))
+    for a, b in links:
+        data += struct.pack("<hh", a, b)
+    return bytes(data)
+
+
+class NavFileTest(unittest.TestCase):
+    def test_reads_waypoints_and_links(self):
+        data = nav_file([((0, 0, 0), 0), ((480, 0, 0), 1), ((480, 480, 0), 2)], [(0, 1), (1, 0), (1, 2), (2, 1)])
+        waypoints, links = parse_nav_file(data)
+        self.assertEqual(waypoints, [(0.0, 0.0, 0.0), (480.0, 0.0, 0.0), (480.0, 480.0, 0.0)])
+        self.assertEqual(links, [(0, 1), (1, 0), (1, 2), (2, 1)])
+
+    def test_keeps_the_waypoints_before_a_number_out_of_place(self):
+        """Olde Town's file numbers its 352nd waypoint 350 again."""
+        data = nav_file([((0, 0, 0), 0), ((480, 0, 0), 1), ((960, 0, 0), 1), ((7000, 0, 0), 2)],
+                        [(0, 1), (1, 0), (1, 2), (2, 3)])
+        waypoints, links = parse_nav_file(data)
+        self.assertEqual(len(waypoints), 2)
+        self.assertEqual(links, [(0, 1), (1, 0)])
+
+class HiddenDoorTest(unittest.TestCase):
+    def test_a_hidden_door_is_kept_once(self):
+        from wizardtraining.routes import add_hidden_door
+        doors = {}
+        self.assertTrue(add_hidden_door(doors, "WizardCity/WC_Streets/WC_Cyclops", (-50.4, 13620.6)))
+        self.assertFalse(add_hidden_door(doors, "WizardCity/WC_Streets/WC_Cyclops", (0, 13700)))
+        self.assertEqual(doors, {"WizardCity/WC_Streets/WC_Cyclops": [(-50, 13621)]})
+
+    def test_a_hidden_door_lies_past_where_the_wizard_last_stood(self):
+        from wizardtraining.routes import HIDDEN_DOOR_RADIUS, hidden_door_centre, hidden_doors_to_keep_out_of
+        centre = hidden_door_centre((-6, 13506), (-17, 13579))
+        self.assertGreater(centre[1], 13579 + HIDDEN_DOOR_RADIUS * 0.9)
+        circles = hidden_doors_to_keep_out_of([centre], (-6, 13506), (-11101, 16436), 100)
+        self.assertEqual(circles[0][1], HIDDEN_DOOR_RADIUS)
+        self.assertEqual(hidden_door_centre((5, 5), (5, 5)), (5, 5))
+
+    def test_routes_keep_out_of_hidden_doors_but_not_one_at_the_destination(self):
+        from wizardtraining.routes import HIDDEN_DOOR_RADIUS, hidden_doors_to_keep_out_of
+        door = (-50, 13620)
+        circles = hidden_doors_to_keep_out_of([door], (5000, 13000), (-11101, 16436), 100)
+        self.assertEqual(circles, [(door, HIDDEN_DOOR_RADIUS)])
+        self.assertEqual(hidden_doors_to_keep_out_of([door], (5000, 13000), (-60, 13600), 100), [])
+        beside = hidden_doors_to_keep_out_of([door], (-6, 13506), (-11101, 16436), 100)
+        self.assertLess(beside[0][1], HIDDEN_DOOR_RADIUS)
+
+
+
+class WalkAwayFromAnEnemyTest(unittest.TestCase):
+    """Recalled to a spot inside a still enemy's keep-out (the Kraken, 18:09): routes may lead away, not nearer."""
+
+    def test_a_walk_beginning_inside_an_enemys_keep_out_may_only_lead_away(self):
+        from wizardtraining.motion import Track
+        hazards = Hazards.of(tracks=[Track((0.0, 0.0))], start=(300.0, 0.0))
+        self.assertFalse(hazards.forbids((300.0, 0.0)))
+        self.assertFalse(hazards.forbids((700.0, 0.0)))
+        self.assertTrue(hazards.forbids((100.0, 0.0)))
+
+    def test_outside_the_keep_out_it_stays_whole(self):
+        from wizardtraining.motion import Track
+        from wizardtraining.routes import ENEMY_KEEP_OUT
+        hazards = Hazards.of(tracks=[Track((0.0, 0.0))], start=(2000.0, 0.0))
+        self.assertTrue(hazards.forbids((ENEMY_KEEP_OUT - 10.0, 0.0)))
 
 
 if __name__ == "__main__":

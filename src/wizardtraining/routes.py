@@ -22,13 +22,15 @@ from __future__ import annotations
 
 import heapq
 import math
+import struct
 import time
 from dataclasses import dataclass, field, replace
 from typing import Callable
 
 from .geometry import Point, distance_to_segment, path_beyond, xy
 from .motion import WALK_UNITS_PER_SECOND
-from .teleports import TeleportVolume, choose_crossing
+from .placed import PlacedObject, parse_named_objects
+from .teleports import TeleportVolume, choose_crossing, known_chain, known_crossing
 
 COLLISION, NAV, STRAIGHT = "collision", "nav", "straight"
 ENEMY_AVOID_RADIUS = 900.0
@@ -49,8 +51,51 @@ PLANNING_SECONDS = 4.0
 REROUTE_DISTANCE = 2500.0
 REROUTE_SECONDS = 0.25
 GOAL_PIECE_REACH = 600.0
+MAX_GAP_STEP = 300.0
 TELEPORT_CLEARANCE = 60.0
 ENEMY_KEEP_OUT = 520.0
+
+
+HIDDEN_DOOR_RADIUS = 250.0
+HIDDEN_DOOR_SAME = 300.0
+
+
+def hidden_door_centre(walked_from, last_stood) -> tuple[float, float]:
+    """Where a door the zone data does not list most likely is: HIDDEN_DOOR_RADIUS past the spot the wizard last stood
+    on before the zone changed, along the way it was walking. That spot is the edge of the door's trigger, and the
+    wizard arrives back next to it: kept out around that spot itself, the circle was 73 units wide where the wizard
+    stood, and every route walked past it into the Dark Cave's mouth again (00:57 to 00:58)."""
+    dx, dy = last_stood[0] - walked_from[0], last_stood[1] - walked_from[1]
+    length = math.hypot(dx, dy)
+    if length < 1.0:
+        return (last_stood[0], last_stood[1])
+    return (last_stood[0] + dx / length * HIDDEN_DOOR_RADIUS, last_stood[1] + dy / length * HIDDEN_DOOR_RADIUS)
+
+
+def add_hidden_door(doors: dict[str, list], zone: str, point) -> bool:
+    """Keep `point` as a door of `zone` the zone data does not list, unless one is known within HIDDEN_DOOR_SAME.
+    True when it is new."""
+    known = doors.setdefault(zone, [])
+    if any(math.dist(point, door) <= HIDDEN_DOOR_SAME for door in known):
+        return False
+    known.append((round(point[0]), round(point[1])))
+    return True
+
+
+def hidden_doors_to_keep_out_of(doors, start, destination, arrive_radius: float) -> list[tuple[Point, float]]:
+    """Circles of HIDDEN_DOOR_RADIUS around the doors a zone's data does not list, which walking through changes the
+    zone: Cyclops Lane's mouth of the Dark Cave is one, and every route out of the cave toward the lane's quest NPC
+    walked back into it within 110 units (2026-10-28, 00:53 to 00:54). Left out: a door at the destination; a door
+    the wizard stands beside is kept out only as close as it is now."""
+    here, goal = xy(start), xy(destination)
+    circles = []
+    for door in doors:
+        if math.dist(door, goal) <= HIDDEN_DOOR_RADIUS + arrive_radius:
+            continue
+        radius = min(HIDDEN_DOOR_RADIUS, math.dist(door, here) - 1.0)
+        if radius > 0:
+            circles.append(((door[0], door[1]), radius))
+    return circles
 
 
 @dataclass(frozen=True)
@@ -115,7 +160,16 @@ class Hazards:
         return DUEL_CIRCLE_NO_GO if self.start is None else duel_clearance(self.start, circle)
 
     def enemy_will_be_near(self, point: Point, seconds: float) -> bool:
-        return any(math.dist(point, track.at(seconds)) < ENEMY_KEEP_OUT for track in self.tracks)
+        return any(math.dist(point, track.at(seconds)) < self.enemy_keep_out(track) for track in self.tracks)
+
+    def enemy_keep_out(self, track) -> float:
+        """How near a route may come to a tracked enemy: ENEMY_KEEP_OUT, or, when the walk begins nearer, a little
+        less than where it begins, so the wizard can walk away, as from a duel circle (`duel_clearance`). Recalled
+        to a mark set where the Kraken fight ended, the wizard stood within the respawned Kraken's keep-out, which
+        does not move, and every route method found no route (18:09)."""
+        if self.start is None:
+            return ENEMY_KEEP_OUT
+        return min(ENEMY_KEEP_OUT, max(0.0, math.dist(self.start, track.at(0.0)) - DUEL_WALK_AWAY_MARGIN))
 
     def line_is_open(self, a: Point, b: Point, seconds: float = 0.0) -> bool:
         """The line enters no duel circle, obstacle or keep-out circle, and no tracked enemy will be near it as
@@ -147,6 +201,42 @@ def duel_clearance(here: Point, circle: Point) -> float:
     the first time duel circles were seen, the wizard stood 800 units from one, every route from there entered
     that radius, and it stood still until a Fire Elf engaged it."""
     return min(DUEL_CIRCLE_NO_GO, max(0.0, math.dist(xy(here), xy(circle)) - DUEL_WALK_AWAY_MARGIN))
+
+
+NAV_HEADER_BYTES = 2
+NAV_WAYPOINT_BYTES = 14
+
+
+def parse_nav_file(data: bytes) -> tuple[list[tuple[float, float, float]], list[tuple[int, int]]]:
+    """A zone.nav file's waypoints and links: after a 2-byte header, the waypoint count, each waypoint's x, y, z and
+    its number, then the link count and each link's two waypoint numbers. Waypoints are kept up to the first whose
+    number differs from its place, with the links among them. WizWalker's reader (`pharse_nav_data`) gives up on
+    such a file: Olde Town's numbers its 352nd waypoint 350 again, so its nav graph never loaded, and no route
+    reached the gate to Triton Lane, cut off in a walkable piece of its own. The 6 waypoints after the mismatch
+    have links across most of the town under either numbering, so they are left out."""
+    offset = NAV_HEADER_BYTES
+    (count,) = struct.unpack_from("<i", data, offset)
+    offset += 4
+    waypoints = []
+    for place in range(count):
+        x, y, z, number = struct.unpack_from("<fffh", data, offset + NAV_WAYPOINT_BYTES * place)
+        if number != place:
+            break
+        waypoints.append((x, y, z))
+    offset += NAV_WAYPOINT_BYTES * count
+    (link_count,) = struct.unpack_from("<i", data, offset)
+    links = [struct.unpack_from("<hh", data, offset + 4 + 4 * index) for index in range(link_count)]
+    kept = len(waypoints)
+    return waypoints, [(a, b) for a, b in links if 0 <= a < kept and 0 <= b < kept]
+
+
+@dataclass(frozen=True)
+class GapStep:
+    """A short step across a gap between two walkable pieces: walk to `start`, on the edge of the wizard's piece,
+    then straight on to `end`, on the edge of the goal's."""
+    start: Point
+    end: Point
+    pieces: tuple[int, int]
 
 
 @dataclass
@@ -308,14 +398,16 @@ class RoutePlanner:
         self.status = status or {}
         self.piece_of: Callable[..., int | None] | None = None
         self.piece_reaches: Callable[[int, Point, float], bool] | None = None
+        self.piece_gap: Callable[[int, int], tuple[Point, Point, float]] | None = None
         self.teleports: list[tuple[TeleportVolume, int | None]] = []
         self.placed_objects: list = []
+        self.zone_data: bytes | None = None
         self.exploration_points: list[tuple[Point, int]] = []
         self.patrols = None
         self.streets = None
         self.nav_first = False
 
-    def crossing(self, start, goal, outcomes: dict[str, object]) -> TeleportVolume | None:
+    def crossing(self, start, goal, outcomes: dict[str, object], failed_gaps=()) -> TeleportVolume | None:
         """A teleport volume to walk into when `goal` lies in another walkable piece than `start`, or None
         when they are in the same piece, the pieces are unknown, or no volume is left to try.
 
@@ -323,18 +415,91 @@ class RoutePlanner:
         goal belongs to the nearest piece within GOAL_PIECE_REACH. But when the wizard's own piece also comes
         within GOAL_PIECE_REACH of the goal, or the zone's nav graph links the two, it walks there. Ravenwood's
         walkway to the Commons is missing from its collision mesh, so its gate lay in a sliver of walkable
-        ground of its own, and a crossing toward that sliver walked into the school doors instead."""
+        ground of its own, and a crossing toward that sliver walked into the school doors instead.
+
+        A nav graph link gives way to a volume already seen to land in the goal's piece: Triton Avenue's nav graph
+        links the lower street to the upper level, where the Haunted Cave's door is, through the teleporter
+        between them, and walking that link stuck at a wall while "Tele Up" was known to lead there.
+
+        Neither shortcut holds for a pair of pieces in `failed_gaps`: a step across the gap between them has
+        already ended where it began, so the pieces are not one walk apart however near they lie."""
+        pieces = self.pieces_to_cross(start, goal, failed_gaps)
+        if pieces is None:
+            return None
+        start_piece, goal_piece = pieces
+        if pieces not in set(failed_gaps) and self.nav_links(start, goal):
+            return known_crossing(self.teleports, start_piece=start_piece, goal_piece=goal_piece, outcomes=outcomes)
+        return choose_crossing(self.teleports, start_piece=start_piece, goal_piece=goal_piece, outcomes=outcomes,
+                               goal=goal)
+
+    def pieces_to_cross(self, start, goal, failed_gaps=()) -> tuple[int, int] | None:
+        """The walkable pieces of `start` and `goal` when the wizard has to get from one to the other, else None:
+        the pieces are unknown, the same, or the wizard's own piece reaches the goal (unless a step across the gap
+        between the two pieces is among `failed_gaps`: the reach is then a ledge, not a way)."""
         if self.piece_of is None:
             return None
         start_piece, goal_piece = self.piece_of(xy(start)), self.piece_of(xy(goal), GOAL_PIECE_REACH)
         if start_piece is None or goal_piece is None or start_piece == goal_piece:
             return None
+        pieces = start_piece, goal_piece
+        if pieces in set(failed_gaps):
+            return pieces
         if self.piece_reaches is not None and self.piece_reaches(start_piece, xy(goal), GOAL_PIECE_REACH):
             return None
-        if self.nav_links(start, goal):
+        return pieces
+
+    def seen_crossing(self, start, goal, outcomes: dict[str, object], failed_gaps=()) -> TeleportVolume | None:
+        """The first teleport volume of a chain already seen to lead to the goal's walkable piece, else None."""
+        pieces = self.pieces_to_cross(start, goal, failed_gaps)
+        if pieces is None:
             return None
-        return choose_crossing(self.teleports, start_piece=start_piece, goal_piece=goal_piece, outcomes=outcomes,
-                               goal=goal)
+        return known_crossing(self.teleports, start_piece=pieces[0], goal_piece=pieces[1], outcomes=outcomes)
+
+    def crossing_to_a_step_from_the_goal(self, start, goal, outcomes: dict[str, object],
+                                         failed_gaps=()) -> TeleportVolume | None:
+        """The first volume of the shortest chain already seen to land in a piece from which a step across a short
+        gap (no more than MAX_GAP_STEP, not among `failed_gaps`) leads into the goal's piece, else None. Triton
+        Avenue's "Tele Down" lands in a piece 195 units from the lower street, by the pad of "Tele Up": a hole in
+        the walk data, not a ledge. It was known to land there, yet the planner tried the untried volumes (a house
+        door, the cave's gate at the far end) first, and the run stopped."""
+        pieces = self.pieces_to_cross(start, goal, failed_gaps)
+        if pieces is None or self.piece_gap is None:
+            return None
+        start_piece, goal_piece = pieces
+        failed = set(failed_gaps)
+
+        def a_step_from_the_goal(piece: int) -> bool:
+            return (piece, goal_piece) not in failed and self.piece_gap(piece, goal_piece)[2] <= MAX_GAP_STEP
+
+        chain = known_chain(self.teleports, outcomes, start_piece, a_step_from_the_goal)
+        return chain[0] if chain else None
+
+    def way_across(self, start, goal, outcomes: dict[str, object], failed_gaps=()) -> TeleportVolume | GapStep | None:
+        """How to get into the goal's walkable piece, in order: a teleport volume already seen to lead there, a step
+        across a short gap, a volume already seen to land one short step from it, or a volume not tried yet
+        (`crossing`). In Triton Avenue the step across a 198-unit
+        gap to the upper level, where the Haunted Cave's door is, cost two minutes among 13 enemies and ended where
+        it began, while "Tele Up", seen to land there, took 9 seconds."""
+        if (volume := self.seen_crossing(start, goal, outcomes, failed_gaps)) is not None:
+            return volume
+        if (step := self.gap_step(start, goal, failed_gaps)) is not None:
+            return step
+        if (volume := self.crossing_to_a_step_from_the_goal(start, goal, outcomes, failed_gaps)) is not None:
+            return volume
+        return self.crossing(start, goal, outcomes, failed_gaps)
+
+    def gap_step(self, start, goal, failed=()) -> GapStep | None:
+        """A step across the gap when `goal` lies in another walkable piece no more than MAX_GAP_STEP from the
+        wizard's, unless that pair of pieces is among `failed`. The walk data can cut a gate or a flight of steps
+        out of the walkable area: Sapphyra's Tower's courtyard in Olde Town is a piece of its own, 175 units from
+        the street, and looking for a teleporter to it walked the wizard into the Bazaar and out of the zone."""
+        if self.piece_of is None or self.piece_gap is None:
+            return None
+        pieces = self.piece_of(xy(start)), self.piece_of(xy(goal), GOAL_PIECE_REACH)
+        if None in pieces or pieces[0] == pieces[1] or pieces in set(failed):
+            return None
+        edge, other_edge, gap = self.piece_gap(*pieces)
+        return GapStep(xy(edge), xy(other_edge), pieces) if gap <= MAX_GAP_STEP else None
 
     def nav_links(self, start, goal) -> bool:
         """Whether the nav graph has a path from a waypoint within GOAL_PIECE_REACH of `start` to one within it of
@@ -377,6 +542,30 @@ class RoutePlanner:
         if self.nav_graph is not None and self.nav_graph.vertices:
             usable.insert(0 if self.nav_first else len(usable), NAV)
         return usable + [STRAIGHT]
+
+    def objects_with_tags(self, tags: list[str]) -> list[PlacedObject]:
+        """The placed objects, and the objects the zone data stores under a goal's tag that no placed object is named
+        for (`placed.parse_named_objects`)."""
+        known = {thing.template for thing in self.placed_objects}
+        missing = [tag for tag in tags if tag not in known]
+        if not missing or not self.zone_data:
+            return self.placed_objects
+        return [*self.placed_objects, *parse_named_objects(self.zone_data, missing)]
+
+    def has_mapped_route(self, start, goal, hazards: Hazards) -> bool:
+        """The walk data (collision or nav graph) gives a way from `start` to `goal` that keeps clear of `hazards`.
+        A straight line does not count: it knows of no wall."""
+        return any(self.route(method, start, goal, hazards) is not None
+                   for method in self.methods() if method != STRAIGHT)
+
+    def blocked_only_by_duels(self, start, goal, hazards: Hazards) -> bool:
+        """The duel circles in `hazards` are all that leave no route: the walk data gives none with them and one
+        without. In the Haunted Cave street the only way on passes 887 units from a circle, and the margin kept
+        from other players' fights is 900."""
+        if not hazards.duel_circles:
+            return False
+        return (not self.has_mapped_route(start, goal, hazards)
+                and self.has_mapped_route(start, goal, replace(hazards, duel_circles=())))
 
     def straight_line_ok(self, a: Point, b: Point, hazards: Hazards) -> bool:
         """A straight leg has nothing keeping it on the sidewalks, so it must stay clear of enemies, and when walk

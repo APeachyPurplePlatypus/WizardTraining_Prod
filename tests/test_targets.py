@@ -1,11 +1,19 @@
 import math
 import unittest
+from types import SimpleNamespace
 
 from wizardtraining.routes import ENEMY_KEEP_OUT
 from wizardtraining.targets import (AFTER_BATTLE_GRACE_SECONDS, ENEMY_CLEARANCE, WISP_DETOUR, WISP_REACH,
                                     back_away, bystanders, detour, enemies_to_route_around, in_grace_after_battle,
-                                    is_duel_circle, keeps_blocking, measured, next_area_to_explore, others, quest_targets,
+                                    is_duel_circle, is_dungeon_entrance, keeps_blocking, leads_to_another_zone,
+                                    measured, named_enemies_not_in_a_duel,
+                                    next_area_to_explore, others, quest_targets, area_in_zone, close_enough, is_reagent, zones_to_search_for, found_in, looks_like_a_reagent, worth_a_detour, is_essence, essence_enemy, fought_in,
                                     refill_reach, safe_wisps, threat_centre, too_close)
+
+
+def xyz(x: float, y: float, z: float) -> SimpleNamespace:
+    """A position as the game gives it (x, y, z), without WizWalker."""
+    return SimpleNamespace(x=x, y=y, z=z)
 
 
 def enemy(id_, name, x, y):
@@ -26,6 +34,11 @@ class TargetsTest(unittest.TestCase):
         self.assertFalse(is_duel_circle("Ghost-Blue-L02-B"))
         seated = measured([enemy(1, "Ghost", 600, 0)], me=(3000, 3000), duel_circles=[(0, 0)])
         self.assertTrue(seated[0]["in_a_duel"])
+
+    def test_a_tower_or_dungeon_entrance_is_its_semicircle(self):
+        self.assertTrue(is_dungeon_entrance("Teleport Semi Circle 4 Player Generic"))
+        self.assertFalse(is_dungeon_entrance("TeleportVol_Teleport-Foulgaze"))
+        self.assertFalse(is_dungeon_entrance("Duel Circle"))
 
     def test_quest_targets_are_near_the_arrow_and_not_in_a_duel(self):
         self.assertEqual([e["id"] for e in quest_targets(self.enemies, arrow=(900, 0))], [2, 1])
@@ -76,6 +89,64 @@ class TargetsTest(unittest.TestCase):
         self.assertEqual(next_area_to_explore(points, me=(0, 0), explored=[(0, 1000)]), ((0, 3000), 1))
         self.assertIsNone(next_area_to_explore(points, me=(0, 0), explored=[(0, 1000), (0, 3000), (0, 5000)]))
 
+    def test_a_wisp_search_skips_parts_reached_only_through_a_door_out_of_the_zone(self):
+        points = [((0, 1000), 0), ((0, 3000), 1)]
+        explored = []
+        self.assertEqual(area_in_zone(points, me=(0, 0), explored=explored,
+                                      leaves_the_zone=lambda point: point == (0, 1000)), ((0, 3000), 1))
+        self.assertEqual(explored, [(0, 1000)])
+        self.assertIsNone(area_in_zone(points, me=(0, 0), explored=[], leaves_the_zone=lambda point: True))
+
+    def test_a_talk_across_a_desk_is_close_enough_once_the_wizard_can_get_no_closer(self):
+        def nudge(distance, in_range=True):
+            return {"distance": distance, "in_range": in_range, "within": 80.0, "prompt_for_this_one": False}
+        self.assertTrue(close_enough([nudge(206), nudge(205)]))
+        self.assertFalse(close_enough([nudge(320), nudge(205)]))
+        self.assertFalse(close_enough([nudge(206), nudge(205, in_range=False)]))
+        self.assertFalse(close_enough([nudge(301), nudge(300)]))
+        self.assertTrue(close_enough([nudge(60)]))
+
+    def test_a_reagent_is_known_by_its_name_without_spaces_and_a_number(self):
+        self.assertTrue(is_reagent("FrostedFlax_01", "Frosted Flax"))
+        self.assertTrue(is_reagent("MistWood_12", "Mist Wood"))
+        self.assertFalse(is_reagent("MistWood", "Mist Wood"))
+        self.assertFalse(is_reagent("MistWoodBarrel_01", "Mist Wood"))
+        self.assertFalse(is_reagent("WC_WispMana", "Mist Wood"))
+        self.assertFalse(is_reagent("FrostedFlax_01", ""))
+        self.assertTrue(is_reagent("WC_MistWood_03", "Mist Wood"))
+
+    def test_a_wanted_reagent_is_a_detour_when_near_and_no_enemy_is_by_it(self):
+        self.assertTrue(worth_a_detour(1500, [2000, 5000]))
+        self.assertFalse(worth_a_detour(1500, [600]))
+        self.assertFalse(worth_a_detour(4000, []))
+
+    def test_an_essence_is_taken_from_the_enemy_it_is_named_for(self):
+        self.assertEqual(essence_enemy("Lost Soul Essence"), "Lost Soul")
+        zones = {}
+        fought_in(zones, ["Lost Soul", "Lost Soul", None], "WizardCity/WC_Streets/WC_Unicorn")
+        self.assertEqual(zones, {"Lost Soul": ["WizardCity/WC_Streets/WC_Unicorn"]})
+
+    def test_an_essence_is_extracted_in_battle_not_gathered(self):
+        self.assertTrue(is_essence("Lost Soul Essence"))
+        self.assertFalse(is_essence("Mist Wood"))
+        self.assertFalse(is_essence(""))
+
+    def test_reagent_like_names(self):
+        self.assertTrue(looks_like_a_reagent("FrostedFlax_01"))
+        self.assertTrue(looks_like_a_reagent("MistWood_12"))
+        self.assertFalse(looks_like_a_reagent("WC-ST01-NPC01"))
+        self.assertFalse(looks_like_a_reagent("WC_WispHealth"))
+        self.assertFalse(looks_like_a_reagent("Ghost-Blue-L01"))
+
+    def test_zones_a_reagent_grows_in_are_searched_first(self):
+        unicorn, triton, olde = "WizardCity/WC_Streets/WC_Unicorn", "WizardCity/WC_Streets/WC_Triton", "WizardCity/WC_Streets/WC_OldeTown"
+        zones = {"Mist Wood": [unicorn]}
+        self.assertEqual(zones_to_search_for(zones, "Mist Wood", [(1, olde), (3, unicorn), (2, triton)]),
+                         [unicorn, olde, triton])
+        self.assertTrue(found_in(zones, "Mist Wood", triton))
+        self.assertEqual(zones["Mist Wood"], [triton, unicorn])
+        self.assertFalse(found_in(zones, "Mist Wood", triton))
+
     def test_preferred_pieces_are_explored_first(self):
         points = [((0, 5000), 0), ((0, 1000), 0), ((0, 3000), 1)]
         self.assertEqual(next_area_to_explore(points, me=(0, 0), prefer={1}), ((0, 3000), 1))
@@ -105,6 +176,40 @@ class TargetsTest(unittest.TestCase):
         self.assertTrue(back_away(0.1, 2 * math.pi - 0.1))
         self.assertFalse(back_away(1.0, 1.0 + math.pi))
         self.assertFalse(back_away(0.0, 2.0))
+
+
+class NamedEnemiesTest(unittest.TestCase):
+    def test_an_enemy_seated_in_a_duel_is_not_a_target(self):
+        seated = {"id": 1, "name": "Cyclops-Blue-L02", "display_code": "WizardMobs_00000008", "in_a_duel": True}
+        free = {"id": 2, "name": "Cyclops-Blue-L02", "display_code": "WizardMobs_00000008", "in_a_duel": False}
+        other = {"id": 3, "name": "Troll-Green-L01", "display_code": "WizardMobs_00000001", "in_a_duel": False}
+        self.assertEqual(named_enemies_not_in_a_duel([seated, free, other], "WizardMobs_00000008"), [free])
+        self.assertEqual(named_enemies_not_in_a_duel([seated, free, other], None), [])
+
+
+class LeadsToAnotherZoneTest(unittest.TestCase):
+    def test_a_goal_naming_another_zone_is_a_door(self):
+        goal = {"type": "waypoint", "destination_zone": "WizardCity/WC_Streets/Interiors/WC_HauntedCave_T1"}
+        self.assertTrue(leads_to_another_zone(goal, "WizardCity/WC_Streets/WC_HauntedCave"))
+
+    def test_an_explore_goal_naming_none_or_this_zone_is_a_spot_to_walk_to(self):
+        self.assertFalse(leads_to_another_zone({"type": "waypoint", "destination_zone": ""}, "WizardCity/WC_NightSide"))
+        self.assertFalse(leads_to_another_zone({"type": "waypoint", "destination_zone": None}, "WizardCity/WC_NightSide"))
+        self.assertFalse(leads_to_another_zone({"type": "waypoint", "destination_zone": "WizardCity/WC_NightSide"},
+                                               "WizardCity/WC_NightSide"))
+
+
+
+class BountyTargetByCodeTest(unittest.TestCase):
+    def test_the_goals_own_enemy_is_a_target_however_far_from_the_arrow(self):
+        from wizardtraining.targets import quest_targets
+        kraken = {"id": 1, "name": "Kraken-WCBoss-L03", "display_code": "WizardMobs_00000279", "in_a_duel": False,
+                  "position": xyz(-13428.0, 1348.0, -1994.0)}
+        ghost = {"id": 2, "name": "Ghost-Blue-L02", "display_code": "WizardMobs_00000100", "in_a_duel": False,
+                 "position": xyz(-8245.0, -1521.0, -675.0)}
+        arrow = xyz(-14340.0, 1339.0, -1994.0)
+        self.assertEqual(quest_targets([kraken, ghost], arrow), [])
+        self.assertEqual(quest_targets([kraken, ghost], arrow, "WizardMobs_00000279"), [kraken])
 
 
 if __name__ == "__main__":

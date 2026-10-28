@@ -27,7 +27,8 @@ from wizwalker.utils import get_wiz_install
 from .connection import BATTLE_LOG_TAIL_BYTES, client_log_tail, lost_connection, moves_by_round
 from .geometry import flat_distance
 from .movement import KeysIgnored, face_and_step
-from .policy import UNIVERSAL, Card, Cast, CombatPolicy, Combatant, DamageModifier, Flee, Pass, RoundView, problem_with
+from .policy import (UNIVERSAL, Card, Cast, CombatPolicy, Combatant, DamageModifier, Enchant, Flee, Pass, RoundView,
+                     problem_with)
 from .reports import plain
 from .state import attempt
 from .screen import or_default, visible_names_under, window_saying
@@ -224,7 +225,9 @@ async def read_round(combat):
         power_pips=await number(me.power_pips()),
         cards=tuple([Card(name=await attempt(card.name()), spell_type=await attempt(card.type_name()),
                           castable=await attempt(card.is_castable()) is True, school=school, pips=pips,
-                          accuracy=await number(card.accuracy()), effects=card_effects)
+                          accuracy=await number(card.accuracy()), effects=card_effects,
+                          enchanted=await attempt(card.is_enchanted()) is True,
+                          item_card=await attempt(card.is_item_card()) is True)
                      for card, (school, pips, card_effects) in zip(cards, details)]),
         enemies=tuple([Combatant(name=await attempt(enemy.name()), health=await number(enemy.health()),
                                  incoming=await incoming_modifiers(hanging), resistances=await resistances(enemy),
@@ -259,6 +262,9 @@ async def clear_the_way(client) -> list[str]:
     return answered
 
 
+MAX_ENCHANT_TRIES = 2
+
+
 async def play_round(combat, policy: CombatPolicy, can_flee: bool = True) -> dict:
     answered = await clear_the_way(combat.client)
     changed = await reopen_card_choice(combat.client)
@@ -273,6 +279,20 @@ async def play_round(combat, policy: CombatPolicy, can_flee: bool = True) -> dic
                            f"world view: {await visible_children(combat.client, ['WorldView'])}")
         return entry
     choice = policy.choose(view)
+    for _ in range(MAX_ENCHANT_TRIES):
+        if not isinstance(choice, Enchant) or problem_with(choice, view):
+            break
+        onto = view.cards[choice.onto].name
+        await cards[choice.card].cast(cards[choice.onto], sleep_time=PAUSE_BETWEEN_CAST_CLICKS_SECONDS)
+        view, me, cards, enemies = await read_hand(combat)
+        view = replace(view, can_flee=can_flee and await flee_button_enabled(combat.client))
+        took = any(card.enchanted for card in view.cards)
+        entry.setdefault("enchanted", []).append(f"{onto}: {'took' if took else 'did not take'}")
+        if not took and hasattr(policy, "enchant_refused"):
+            policy.enchant_refused(onto)
+        choice = policy.choose(view)
+    if isinstance(choice, Enchant):
+        choice = Pass(problem_with(choice, view) or "enchantments did not take")
     acting_since = datetime.datetime.now().replace(microsecond=0)
     if isinstance(choice, Flee):
         entry["action"] = f"flee: {choice.reason} ({await flee(combat)})"
@@ -287,6 +307,8 @@ async def play_round(combat, policy: CombatPolicy, can_flee: bool = True) -> dic
         card = view.cards[choice.card]
         target = f"{choice.target} {view.enemies[choice.enemy].name}" if choice.target == "enemy" else choice.target
         entry["action"] = f"cast {card.name}{f' ({card.school})' if card.school else ''} on {target}"
+        if choice.reason:
+            entry["action"] += f" ({choice.reason})"
         if not await cast_taken(combat.client):
             _, me, cards, enemies = await read_round(combat)
             await cards[choice.card].cast(cast_target(choice, me, enemies), sleep_time=PAUSE_BETWEEN_CAST_CLICKS_SECONDS)

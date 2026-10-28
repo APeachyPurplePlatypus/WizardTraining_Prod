@@ -10,6 +10,10 @@ import re
 MARKUP = re.compile(r"<[^>]*>")
 FRIEND_BOX_TITLE = "friend"
 FRIEND_REQUEST_QUESTION = "as your friend?"
+TALK_PROMPT_ENDING = "to talk"
+NOT_DOOR_ACTIONS = ("talk", "collect", "use", "open", "read")
+# What X does at a prompt that is not a door's: a person's "to Talk", a reagent's "to Collect" (leaving the Dark Cave a
+# reagent's was taken for the door's, 11:39), an object's "to Use", a chest's "to Open", a sign's "to Read".
 
 
 async def or_default(coro, default):
@@ -63,6 +67,51 @@ def plain_text(markup: str) -> str:
 def is_friend_request(title: str, caption: str) -> bool:
     """Another player's friend request: a box titled "Friend" asking "Accept <player> ... as your friend?"."""
     return title.lower() == FRIEND_BOX_TITLE and caption.lower().endswith(FRIEND_REQUEST_QUESTION)
+
+
+GAME_NOTICE_TITLE = "info"
+GAME_NOTICE_BUTTONS = ["rightButton"]
+
+
+def is_game_notice(title: str, buttons: list[str]) -> bool:
+    """The game's own notice: a box titled "INFO" whose only button is its OK (`rightButton`), such as "You cannot
+    teleport to that location. The dungeon timer has ended and the dungeon has been reset." Another player's
+    request (friend, trade, duel) has another title and Yes and No buttons, and is never one."""
+    return title.strip().lower() == GAME_NOTICE_TITLE and buttons == GAME_NOTICE_BUTTONS
+
+
+TALK, USE = "talk", "use"
+
+
+def prompt_fits(in_range, prompt: str, *, wants: str | None) -> bool:
+    """The interact prompt shows and is for what X is pressed for: a talk's reads "to Talk", a quest object's anything
+    else. By Private Emerson in Cyclops Lane another prompt showed (one that teleports), X was pressed for the talk
+    three times, and each took the wizard 17,000 units to the top of the lane (2026-10-28, 08:14 to 08:22). By the
+    Golem Court seedling of "The Facts of Life", 110 units from it, the prompt was Farley's "to Talk", 416 units away,
+    and each X opened his shop menu (09:40)."""
+    if in_range is not True:
+        return False
+    if wants == TALK:
+        return prompt_offers_talk(prompt)
+    if wants == USE:
+        return not prompt_offers_talk(prompt)
+    return True
+
+
+def prompt_offers_talk(prompt: str) -> bool:
+    """The interact prompt is a person's: it reads "Press X to Talk" (the game's NPCInteractText). A door's reads
+    "to Enter" or "to Teleport", a chest's "to Open", an object's "to Use"."""
+    return plain_text(prompt).lower().endswith(TALK_PROMPT_ENDING)
+
+
+def prompt_is_not_a_doors(prompt: str) -> bool:
+    return prompt_action(prompt).lower() in NOT_DOOR_ACTIONS
+
+
+def prompt_action(prompt: str) -> str:
+    """The word the interact prompt ends with, such as "Talk" or "Enter": what pressing X would do."""
+    words = plain_text(prompt).split()
+    return words[-1] if words else ""
 
 
 async def visible_names_under(window, depth: int, limit: int = 60) -> list[str]:

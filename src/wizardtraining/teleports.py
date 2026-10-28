@@ -95,14 +95,20 @@ def choose_crossing(volumes: list[tuple[TeleportVolume, int | None]], *, start_p
     2. the untried volume in the wizard's piece nearest the goal;
     3. the first volume of the shortest known chain to a piece that still has an untried volume.
     Volumes that left the zone or did nothing are not tried again."""
-    chain = known_chain(volumes, outcomes, start_piece, lambda piece: piece == goal_piece)
-    if chain:
-        return chain[0]
+    if known := known_crossing(volumes, start_piece=start_piece, goal_piece=goal_piece, outcomes=outcomes):
+        return known
     untried_here = [volume for volume, piece in volumes if piece == start_piece and volume.name not in outcomes]
     if untried_here:
         return min(untried_here, key=lambda volume: math.dist(volume.point, xy(goal)))
     has_untried = {piece for volume, piece in volumes if volume.name not in outcomes}
     chain = known_chain(volumes, outcomes, start_piece, lambda piece: piece in has_untried)
+    return chain[0] if chain else None
+
+
+def known_crossing(volumes: list[tuple[TeleportVolume, int | None]], *, start_piece: int, goal_piece: int,
+                   outcomes: dict[str, object]) -> TeleportVolume | None:
+    """The first volume of the shortest chain already seen to lead from `start_piece` to `goal_piece`, or None."""
+    chain = known_chain(volumes, outcomes, start_piece, lambda piece: piece == goal_piece)
     return chain[0] if chain else None
 
 
@@ -126,3 +132,26 @@ def known_chain(volumes: list[tuple[TeleportVolume, int | None]], outcomes: dict
                 came_from[landed] = (volume, piece)
                 frontier.append(landed)
     return []
+
+
+EXIT_WORD = "from "
+LEVEL_CHANGE = 500.0
+SAME_LEVEL = 300.0
+EXIT_REACH = 4000.0
+
+
+def exit_by_height(volumes: list[TeleportVolume], start, destination, outcomes: dict[str, object]) -> TeleportVolume | None:
+    """A way off the level the wizard is on, when the destination is on another one (heights LEVEL_CHANGE or more
+    apart): the nearest volume named for leaving a place ("... From Kraken Isle") at the wizard's height (within
+    SAME_LEVEL), within EXIT_REACH, and not already seen to leave the zone or do nothing; else None. The walk data is
+    flat, so a raised or sunken place can read as part of the level above or below it: on Kraken Isle, 1,300 below
+    Triton Avenue's street, every route to the street failed, while "Teleport location From Kraken Isle" is its
+    way off (18:12)."""
+    if abs(start.z - destination.z) < LEVEL_CHANGE:
+        return None
+    exits = [volume for volume in volumes
+             if EXIT_WORD in volume.name.lower() and abs(volume.z - start.z) <= SAME_LEVEL
+             and math.dist(volume.point, (start.x, start.y)) <= EXIT_REACH
+             and outcomes.get(volume.name) not in (LEFT_ZONE, NO_EFFECT)]
+    return min(exits, key=lambda volume: math.dist(volume.point, (start.x, start.y)), default=None)
+

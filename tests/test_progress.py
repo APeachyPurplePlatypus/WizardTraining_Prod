@@ -1,11 +1,12 @@
 import unittest
 
-from wizardtraining.progress import (APPROACH_MARGIN, ENEMY_NEAR_PATH, ENEMY_PATH_CLEARANCE, ENGAGE_HEALTH_FRACTION,
+from wizardtraining.progress import (APPROACH_MARGIN, DUEL_BLOCKS_THE_WAY, ENEMY_NEAR_PATH, ENEMY_PATH_CLEARANCE, ENGAGE_HEALTH_FRACTION,
                                      ENGAGE_MANA_FRACTION, MEANINGFUL_TRAVEL_DISTANCE, LimitReached, Limits,
                                      PlannedRoute, RunRecord, StopRun, check_limits, health_for_a_fight, leaves_world,
-                                     mana_for_a_fight, mana_to_travel, nav_did_better, progressed, remember_obstacles,
+                                     health_to_travel, mana_for_a_fight, mana_to_travel, still_to_recharge, worth_marking, worth_recalling, parked, nav_did_better, progressed, remember_obstacles,
                                      safe_to_stand, short_for_a_fight, should_drink_potion, stalled, topped_up,
                                      travel_outcome,
+                                     ready_to_recall,
                                      wanted_wisp, world_of)
 
 
@@ -20,6 +21,14 @@ class NavDidBetterTest(unittest.TestCase):
         self.assertFalse(nav_did_better([{"method": "collision", "result": "no route"},
                                          {"method": "nav", "result": "arrived"}]))
         self.assertFalse(nav_did_better([{"method": "collision", "result": "arrived"}]))
+
+    def test_a_turn_that_would_not_settle_says_nothing_about_the_walk_data(self):
+        self.assertFalse(nav_did_better([{"method": "collision", "result": "failed",
+                                          "reason": "turn failed: facing did not converge"},
+                                         {"method": "nav", "result": "arrived"}]))
+        self.assertTrue(nav_did_better([{"method": "collision", "result": "failed",
+                                         "reason": "stuck: sidesteps did not clear the obstacle"},
+                                        {"method": "nav", "result": "arrived"}]))
 
 
 class WorldTest(unittest.TestCase):
@@ -148,6 +157,22 @@ class TravelOutcomeTest(unittest.TestCase):
         self.assertTrue(self.outcome(ENEMY_NEAR_PATH, 0, stops_in_a_row=1))
         self.assertFalse(self.outcome(ENEMY_NEAR_PATH, 0, stops_in_a_row=Limits().max_immobile_threat_stops_in_a_row + 1))
 
+    def test_waiting_for_another_players_fight_counts_for_longer_than_waiting_for_an_enemy(self):
+        run = record()
+        run.duel_waits_in_a_row = Limits().max_duel_waits_in_a_row
+        self.assertTrue(travel_outcome("travel", DUEL_BLOCKS_THE_WAY, 0, run)["progress"])
+        run.duel_waits_in_a_row += 1
+        self.assertFalse(travel_outcome("travel", DUEL_BLOCKS_THE_WAY, 0, run)["progress"])
+        self.assertGreater(Limits().max_duel_waits_in_a_row, Limits().max_immobile_threat_stops_in_a_row)
+
+
+class ReadyToRecallTest(unittest.TestCase):
+    def test_recall_waits_for_mana_and_health_to_be_back(self):
+        self.assertFalse(ready_to_recall(0.5, 1.0))
+        self.assertFalse(ready_to_recall(0.9, 0.5))
+        self.assertTrue(ready_to_recall(0.8, 0.9))
+        self.assertTrue(ready_to_recall(None, None))
+
 
 class PlannedRouteTest(unittest.TestCase):
     path = [(0, 0), (1000, 0), (2000, 0)]
@@ -196,6 +221,48 @@ class WispTest(unittest.TestCase):
         self.assertTrue(mana_to_travel(7 / 32))
         self.assertTrue(mana_to_travel(None))
 
+    def test_too_little_health_to_travel_after_a_defeat(self):
+        self.assertFalse(health_to_travel(55 / 1102))
+        self.assertTrue(health_to_travel(630 / 1102))
+        self.assertTrue(health_to_travel(None))
+
+    def test_after_a_defeat_health_then_mana_are_recharged_nearly_full(self):
+        self.assertEqual(still_to_recharge(109 / 1102, 31 / 60), "health")
+        self.assertEqual(still_to_recharge(1000 / 1102, 31 / 60), "mana")
+        self.assertIsNone(still_to_recharge(1000 / 1102, 50 / 60))
+        self.assertIsNone(still_to_recharge(None, None))
+
+    def test_the_goals_zone_is_marked_once_where_enemies_were_met(self):
+        chamber = "Krokotopia/KT_Pyramid/KT_Chamber"
+        self.assertTrue(worth_marking(chamber, chamber, None, 80, enemies_here=True, refused=False))
+        self.assertFalse(worth_marking(chamber, chamber, chamber, 80, enemies_here=True, refused=False))
+        self.assertFalse(worth_marking(chamber, "Krokotopia/KT_Pyramid/KT_AltarOfKings", None, 80, enemies_here=True,
+                                       refused=False))
+        self.assertFalse(worth_marking("Krokotopia/KT_Hub", "Krokotopia/KT_Hub", None, 80, enemies_here=False,
+                                       refused=False))
+        self.assertFalse(worth_marking(chamber, chamber, None, 4, enemies_here=True, refused=False))
+        self.assertFalse(worth_marking(chamber, chamber, None, 80, enemies_here=True, refused=True))
+
+    def test_recall_to_the_door_of_the_dungeon_the_goal_is_in(self):
+        lane, dungeon, hub = "WizardCity/WC_Streets/WC_Cyclops", "WizardCity/WC_Streets/Interiors/WC_Cyclops_T1", "WizardCity/WC_Hub"
+        self.assertTrue(worth_recalling(hub, dungeon, lane, 80, door_for=dungeon))
+        self.assertFalse(worth_recalling(hub, dungeon, lane, 80))
+        self.assertFalse(worth_recalling(lane, dungeon, lane, 80, door_for=dungeon))
+
+    def test_a_parked_quest_waits_for_the_next_level(self):
+        self.assertTrue(parked({"Mad Maximus": 13}, "Mad Maximus", 13))
+        self.assertFalse(parked({"Mad Maximus": 13}, "Mad Maximus", 14))
+        self.assertFalse(parked({"Mad Maximus": 13}, "Bear Market", 13))
+        self.assertFalse(parked({}, None, 13))
+
+    def test_recall_into_the_goals_zone_from_elsewhere(self):
+        chamber, hub = "Krokotopia/KT_Pyramid/KT_Chamber", "Krokotopia/KT_Hub"
+        self.assertTrue(worth_recalling(hub, chamber, chamber, 80))
+        self.assertFalse(worth_recalling(chamber, chamber, chamber, 80))
+        self.assertFalse(worth_recalling(hub, "Krokotopia/KT_Pyramid/KT_PalaceOfFire", chamber, 80))
+        self.assertFalse(worth_recalling(hub, chamber, None, 80))
+        self.assertFalse(worth_recalling(hub, chamber, chamber, 5))
+
     def test_waiting_for_mana_goes_on_until_nearly_full(self):
         self.assertFalse(topped_up(12 / 30))
         self.assertFalse(topped_up(26 / 30))
@@ -234,6 +301,67 @@ class SafeToStandTest(unittest.TestCase):
         self.assertTrue(safe_to_stand("WizardCity/WC_Streets/WC_OldeTown", [firecat], enemies_in_sight=0))
         self.assertFalse(safe_to_stand("WizardCity/WC_Streets/WC_OldeTown", [firecat], enemies_in_sight=1))
 
+
+
+class RecallInTheGoalZoneTest(unittest.TestCase):
+    def test_no_recall_while_in_the_goals_zone(self):
+        from wizardtraining.progress import worth_recalling
+        cyclops, cave = "WizardCity/WC_Streets/WC_Cyclops", "WizardCity/WC_Streets/WC_DarkCave"
+        self.assertFalse(worth_recalling(cyclops, cyclops, cave, 80, door_for=cyclops))
+        self.assertTrue(worth_recalling("WizardCity/WC_Hub", cyclops, cave, 80, door_for=cyclops))
+
+
+class HeavyFightTest(unittest.TestCase):
+    def test_a_fight_costing_a_third_of_the_health_is_heavy(self):
+        from wizardtraining.progress import heavy_fight
+        self.assertTrue(heavy_fight(1047, 540, 1133))
+        self.assertFalse(heavy_fight(929, 543, 1133))
+        self.assertFalse(heavy_fight(1133, 1033, 1133))
+        self.assertFalse(heavy_fight(None, 543, 1133))
+
+    def test_a_door_known_to_open_on_an_instance_waits_for_a_full_refill(self):
+        from wizardtraining.progress import short_before_entering
+        tower = "WizardCity/WC_Streets/WC_Triton_Underwater/Interiors/WC_Triton_Underwater_T1"
+        self.assertEqual(short_before_entering("Enter", 525 / 1164, 68 / 96, tower), "health")
+        self.assertEqual(short_before_entering("Enter", 1100 / 1164, 60 / 96, tower), "mana")
+        self.assertIsNone(short_before_entering("Enter", 1100 / 1164, 90 / 96, tower))
+        self.assertIsNone(short_before_entering("Jump", 525 / 1164, 68 / 96, tower))
+
+    def test_a_shop_door_asks_for_nothing_and_an_unknown_door_only_that_the_wizard_not_be_low(self):
+        from wizardtraining.progress import short_before_entering
+        self.assertIsNone(short_before_entering("Enter", 525 / 1164, 30 / 96, "WizardCity/Interiors/WC_Shop_Robes"))
+        self.assertIsNone(short_before_entering("Enter", 525 / 1164, 68 / 96))
+        self.assertEqual(short_before_entering("Enter", 400 / 1164, 68 / 96), "health")
+
+    def test_obstacles_learned_near_a_spot_are_forgotten(self):
+        from wizardtraining.progress import forget_obstacles_near
+        shop = record()
+        shop.obstacles["WizardCity/WC_Shop_Area"] = [(-1500, -2300), (-1600, -2400), (2000, 0)]
+        self.assertEqual(forget_obstacles_near(shop, "WizardCity/WC_Shop_Area", (-1540, -2358)), 2)
+        self.assertEqual(shop.obstacles["WizardCity/WC_Shop_Area"], [(2000, 0)])
+
+    def test_a_held_quest_stays_parked_whatever_the_level(self):
+        from wizardtraining.progress import parked
+        held = {"Strange Brew": "waiting for wizard404 API"}
+        self.assertTrue(parked({"Strange Brew": 14}, "Strange Brew", 20, held))
+        self.assertFalse(parked({"Strange Brew": 14}, "Strange Brew", 15))
+        self.assertTrue(parked({}, "Strange  Brew", 15, held))
+
+    def test_after_a_heavy_fight_a_near_goal_comes_before_the_refill_at_half_health_or_more(self):
+        from wizardtraining.progress import worth_pushing_on
+        self.assertTrue(worth_pushing_on(629 / 1164, 3018))
+        self.assertFalse(worth_pushing_on(500 / 1164, 3018))
+        self.assertFalse(worth_pushing_on(900 / 1164, 6600))
+        self.assertFalse(worth_pushing_on(None, 3018))
+        self.assertTrue(worth_pushing_on(677 / 1164, 6800, stalled=True))
+        self.assertFalse(worth_pushing_on(500 / 1164, 6800, stalled=True))
+
+    def test_headway_is_a_thousand_nearer_the_goal_than_at_the_last_refill_trip(self):
+        from wizardtraining.progress import made_headway
+        self.assertFalse(made_headway(6800, 6850))
+        self.assertTrue(made_headway(5650, 6800))
+        self.assertTrue(made_headway(6800, None))
+        self.assertTrue(made_headway(None, 6800))
 
 if __name__ == "__main__":
     unittest.main()

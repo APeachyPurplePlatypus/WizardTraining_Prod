@@ -13,6 +13,9 @@ BATTLE_PHASES = {"starting", "pre_planning", "planning", "pre_execution", "execu
 
 
 async def attempt(coro):
+    """`coro`'s result made plain for a report (`reports.plain`), or "<unavailable: ...>" when it raises. Lists and
+    dicts come back as their text: read those with `screen.or_default`. Through `attempt`, the learned spells and
+    the enemies seen while settling into a zone read as text, and neither was ever used."""
     try:
         return plain(await coro)
     except Exception as exc:

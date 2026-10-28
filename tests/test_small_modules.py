@@ -1,3 +1,4 @@
+import asyncio
 import enum
 import json
 import tempfile
@@ -8,7 +9,8 @@ from types import SimpleNamespace
 from wizardtraining.config import DEIMOS_VARIABLE, RUNTIME_VARIABLE, Settings
 from wizardtraining.keys import RefusedKey, check_allowed
 from wizardtraining.reports import plain, save_report, with_text_keys
-from wizardtraining.state import battle_showing, free_to_move, health_fraction, mana_fraction
+from wizardtraining.screen import or_default
+from wizardtraining.state import attempt, battle_showing, free_to_move, health_fraction, mana_fraction
 
 
 class Key(enum.Enum):
@@ -19,6 +21,7 @@ class Key(enum.Enum):
     HOME = 0x24
     ESC = 0x1B
     SPACEBAR = 0x20
+    Z = 0x5A
 
 
 class KeysTest(unittest.TestCase):
@@ -30,6 +33,13 @@ class KeysTest(unittest.TestCase):
     def test_allows_walking_and_dialog_keys(self):
         check_allowed(Key.W)
         check_allowed(Key.SPACEBAR)
+
+    def test_z_only_for_a_photo(self):
+        with self.assertRaises(RefusedKey):
+            check_allowed(Key.Z)
+        check_allowed(Key.Z, for_photo=True)
+        with self.assertRaises(RefusedKey):
+            check_allowed(Key.Q, for_photo=True)
 
 
 class StateTest(unittest.TestCase):
@@ -92,6 +102,20 @@ class ReportsTest(unittest.TestCase):
             path = save_report("probe", {"position": SimpleNamespace(x=1.0, y=2.0, z=3.0)}, Path(folder))
             self.assertEqual(json.loads(path.read_text(encoding="utf-8"))["position"]["x"], 1.0)
 
+
+
+class AttemptTest(unittest.TestCase):
+    def test_attempt_gives_report_text_and_or_default_gives_the_value(self):
+        async def spells():
+            return [1496157882, 74836240]
+
+        async def broken():
+            raise RuntimeError("memory read failed")
+
+        self.assertEqual(asyncio.run(attempt(spells())), "[1496157882, 74836240]")
+        self.assertEqual(asyncio.run(or_default(spells(), None)), [1496157882, 74836240])
+        self.assertEqual(asyncio.run(attempt(broken())), "<unavailable: RuntimeError>")
+        self.assertIsNone(asyncio.run(or_default(broken(), None)))
 
 if __name__ == "__main__":
     unittest.main()

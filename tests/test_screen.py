@@ -1,7 +1,8 @@
 import asyncio
 import unittest
 
-from wizardtraining.screen import is_friend_request, plain_text, visible_named, visible_names_under, window_saying
+from wizardtraining.screen import (is_friend_request, is_game_notice, prompt_fits, TALK, USE, prompt_is_not_a_doors, plain_text, prompt_action, prompt_offers_talk, visible_named,
+                                   visible_names_under, window_saying)
 
 
 class StandIn:
@@ -67,11 +68,47 @@ class ScreenTest(unittest.TestCase):
         self.assertTrue(is_friend_request(title, caption))
         self.assertFalse(is_friend_request("Combat", "Are you sure you want to flee? You will lose all your Mana"))
 
+    def test_a_talk_needs_a_prompt_that_reads_to_talk(self):
+        self.assertTrue(prompt_fits(True, "Press X or to Talk", wants=TALK))
+        self.assertFalse(prompt_fits(True, "Press X or to Teleport", wants=TALK))
+        self.assertTrue(prompt_fits(True, "Press X or to Use", wants=None))
+        self.assertFalse(prompt_fits(False, "Press X or to Talk", wants=TALK))
+
+    def test_a_reagents_or_persons_prompt_is_not_a_doors(self):
+        self.assertTrue(prompt_is_not_a_doors("Press X or to Collect"))
+        self.assertTrue(prompt_is_not_a_doors("Press X or to Talk"))
+        self.assertFalse(prompt_is_not_a_doors("Press X or to Enter"))
+        self.assertFalse(prompt_is_not_a_doors("Press X or to Teleport"))
+
+    def test_a_persons_prompt_is_not_a_quest_objects(self):
+        self.assertFalse(prompt_fits(True, "Press X or to Talk", wants=USE))
+        self.assertTrue(prompt_fits(True, "Press X or to Collect", wants=USE))
+        self.assertFalse(prompt_fits(False, "Press X or to Collect", wants=USE))
+
+    def test_a_game_notice_is_a_box_titled_info_with_only_an_ok_button(self):
+        self.assertTrue(is_game_notice("INFO", ["rightButton"]))
+        self.assertFalse(is_game_notice("INFO", ["centerButton", "rightButton"]))
+        self.assertFalse(is_game_notice("Friend", ["rightButton"]))
+        self.assertFalse(is_game_notice("Trade", ["centerButton", "rightButton"]))
+        self.assertFalse(is_game_notice("INFO", []))
+
     def test_reports_window_names_without_their_text(self):
         names = asyncio.run(visible_names_under(idle_box(), depth=3))
         self.assertEqual(names, ["messageBoxBG", "messageBoxBG/messageBoxLayout",
                                  "messageBoxBG/messageBoxLayout/TextArea",
                                  "messageBoxBG/messageBoxLayout/AdjustmentWindow"])
+
+    def test_a_prompt_to_talk_is_a_persons_and_one_to_enter_is_a_door(self):
+        talk = ("<center>Press <image;Art/Art_Keyboard_L.dds;16;32;0xFFFFFFFF;t><image;Art/Art_Keyboard_Mid.dds;-1;32;"
+                "0xFFFFFFFF;bt><scale;0.700000><Xoffset;-5><Yoffset;-5>X<Yoffset;5></scale><Xoffset;-5>"
+                "<image;Art/Art_Keyboard_R.dds;16;32;0xFFFFFFFF;t> or <image;GUI/Art/Art_Mouse_Left_Click.dds> "
+                "to Talk</center>")
+        self.assertTrue(prompt_offers_talk(talk))
+        self.assertEqual(prompt_action(talk), "Talk")
+        for door in ("<center>Press X to Enter</center>", "Press X to Teleport", "Press X to Use", "Press X to Open", ""):
+            self.assertFalse(prompt_offers_talk(door))
+        self.assertEqual(prompt_action("<center>Press X to Enter</center>"), "Enter")
+        self.assertEqual(prompt_action(""), "")
 
 
 if __name__ == "__main__":
