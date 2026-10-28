@@ -160,7 +160,16 @@ class Hazards:
         return DUEL_CIRCLE_NO_GO if self.start is None else duel_clearance(self.start, circle)
 
     def enemy_will_be_near(self, point: Point, seconds: float) -> bool:
-        return any(math.dist(point, track.at(seconds)) < ENEMY_KEEP_OUT for track in self.tracks)
+        return any(math.dist(point, track.at(seconds)) < self.enemy_keep_out(track) for track in self.tracks)
+
+    def enemy_keep_out(self, track) -> float:
+        """How near a route may come to a tracked enemy: ENEMY_KEEP_OUT, or, when the walk begins nearer, a little
+        less than where it begins, so the wizard can walk away, as from a duel circle (`duel_clearance`). Recalled
+        to a mark set where the Kraken fight ended, the wizard stood within the respawned Kraken's keep-out, which
+        does not move, and every route method found no route (18:09)."""
+        if self.start is None:
+            return ENEMY_KEEP_OUT
+        return min(ENEMY_KEEP_OUT, max(0.0, math.dist(self.start, track.at(0.0)) - DUEL_WALK_AWAY_MARGIN))
 
     def line_is_open(self, a: Point, b: Point, seconds: float = 0.0) -> bool:
         """The line enters no duel circle, obstacle or keep-out circle, and no tracked enemy will be near it as

@@ -208,6 +208,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **A walk may start inside a still enemy's keep-out, and a mark that traps the wizard is forgotten** (`routes.Hazards.enemy_keep_out`, `QuestLoop.forget_a_trapping_mark`).
+  - **What:** a route beginning within ENEMY_KEEP_OUT of a tracked enemy may lead away from it, as from a duel circle. And when no route leads anywhere from the wizard's own mark (every method failed, or enemies left none, and it barely moved, within 600 of the mark), the mark is forgotten, so a Recall does not bring it back and a trip to the Commons walks back instead.
+  - **Why:** a refill mark was set where the Kraken fight ended, on Kraken Isle, whose way off the planner could not place; each walk strategy that went to the Commons recalled straight back onto the isle, and the run stopped (18:09 to 18:12). The coordinator asked for a general rule.
+  - **Verified:** offline (`tests/test_routes.py`; imports, tests).
+
 - **Volumes named for where they lead are walk-in teleports** (`untracked.walk_in_teleports`, `navigation.load_planner`).
   - **What:** besides the `TeleportVol_` volumes, a zone's trigger volumes whose names say where they lead ("Activator Volume To_Kraken") join the planner's teleports, so a target on a walkable piece reached only through one is crossed to the way any untried teleport is: walked into, its landing learned.
   - **Why:** "Decease the Kraken!" asks for Triton Avenue's Kraken, which stands on an isle (its own walkable piece, about 1,300 lower) reached through "Activator Volume To_Kraken", 250 from where the wizard stood; with that volume unknown, every route method failed, the stall was put on the enemies near the path, and the run stopped after six walk strategies (17:55 to 17:59).

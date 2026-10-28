@@ -95,6 +95,7 @@ WAYPOINT_ARRIVE_RADIUS = 150.0
 EXPLORE_ARRIVE_RADIUS = 40.0
 EXPLORE_FAILED_WALKS_TO_SKIP = 3
 RAMP_PIECE_REACH = 150.0
+MARK_TRAP_RADIUS = 600.0
 PROMPT_DOOR_REACH = 2500.0
 NPC_PROMPT_RANGE = 400.0
 NOT_A_DOOR_RADIUS = 600.0
@@ -1838,6 +1839,18 @@ class QuestLoop:
             self.events.emit("quest", f"the spot at ({spot.x:.0f}, {spot.y:.0f}) could not be walked to "
                                       f"{EXPLORE_FAILED_WALKS_TO_SKIP} times; its goal is left for this run")
 
+    def forget_a_trapping_mark(self, zone: str, where) -> None:
+        """No route leads anywhere from where the wizard stands, and that is its mark: forget the mark, so a Recall
+        does not bring it back here, and a trip to the Commons walks back instead. A mark set where the Kraken fight
+        ended stood on Kraken Isle, which no route leaves; each strategy that went to the Commons recalled straight
+        back to it, and the run stopped (18:09 to 18:12)."""
+        mark = self._mark_position
+        if self.record.marked_in != zone or mark is None or flat_distance(mark, where) > MARK_TRAP_RADIUS:
+            return
+        self.events.emit("travel", f"no route leads anywhere from the mark in {zone} at ({mark.x:.0f}, {mark.y:.0f}); "
+                                   "forgetting it, so the way back is walked")
+        self.forget_the_mark_in(zone)
+
     def forget_learned_obstacles_here(self, zone: str, where) -> None:
         """Every route method failed and the wizard barely moved, with no enemy or players' fight to blame: drop the
         obstacles learned this run near it, once per spot, so the next turn plans again without them."""
@@ -2982,6 +2995,8 @@ class QuestLoop:
         if (trip["reason"] == "every route method failed" and moved < BARELY_MOVED_DISTANCE and not around
                 and blocking_duel is None):
             self.forget_learned_obstacles_here(zone, start)
+        if trip["reason"] in ("every route method failed", ENEMIES_IN_THE_WAY) and moved < BARELY_MOVED_DISTANCE:
+            self.forget_a_trapping_mark(zone, start)
         methods = ", ".join(f"{tried['method']}: {tried.get('result')}{failure_text(tried)}{reroute_text(tried)}"
                             for tried in trip["attempts"])
         threat = (self.approaches.closest(time.monotonic(), NEAREST_ENEMIES_NOTED) or None

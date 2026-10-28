@@ -507,5 +507,23 @@ class HiddenDoorTest(unittest.TestCase):
         self.assertLess(beside[0][1], HIDDEN_DOOR_RADIUS)
 
 
+
+class WalkAwayFromAnEnemyTest(unittest.TestCase):
+    """Recalled to a spot inside a still enemy's keep-out (the Kraken, 18:09): routes may lead away, not nearer."""
+
+    def test_a_walk_beginning_inside_an_enemys_keep_out_may_only_lead_away(self):
+        from wizardtraining.motion import Track
+        hazards = Hazards.of(tracks=[Track((0.0, 0.0))], start=(300.0, 0.0))
+        self.assertFalse(hazards.forbids((300.0, 0.0)))
+        self.assertFalse(hazards.forbids((700.0, 0.0)))
+        self.assertTrue(hazards.forbids((100.0, 0.0)))
+
+    def test_outside_the_keep_out_it_stays_whole(self):
+        from wizardtraining.motion import Track
+        from wizardtraining.routes import ENEMY_KEEP_OUT
+        hazards = Hazards.of(tracks=[Track((0.0, 0.0))], start=(2000.0, 0.0))
+        self.assertTrue(hazards.forbids((ENEMY_KEEP_OUT - 10.0, 0.0)))
+
+
 if __name__ == "__main__":
     unittest.main()
