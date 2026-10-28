@@ -4,6 +4,8 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ## Unreleased
 
+## 0.3.0 (2026-10-28)
+
 ### Added
 
 - **Attacks the target does not resist come first: the wand cards before resisted Ice hits** (`policy.unresisted`).
