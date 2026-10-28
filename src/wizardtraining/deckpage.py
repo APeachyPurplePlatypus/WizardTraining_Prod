@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import struct
+import time
 from dataclasses import dataclass
 
 from wizwalker.memory.memory_objects.spell import DynamicGraphicalSpell
@@ -27,6 +28,8 @@ SPELL_LIST, DECK_LIST = [*DECK_PAGE, "AllPageSpellList"], [*DECK_PAGE, "CardsInD
 PAGE_UP, PAGE_DOWN, DECK_NAME = [*DECK_PAGE, "PageUp"], [*DECK_PAGE, "PageDown"], [*DECK_PAGE, "DeckName"]
 ENTRIES_AT, SPELL_ENTRY_SIZE, DECK_ENTRY_SIZE, LIMIT_AT = 0x300, 0x78, 0x28, 0x10
 CLICK_SETTLE_SECONDS = 1.0
+OPEN_TIMEOUT_SECONDS = 6.0
+POLL_SECONDS = 0.3
 ADDED, REFUSED = "added", "refused"
 
 
@@ -55,15 +58,31 @@ class DeckPageView:
         return sum(1 for card in self.cards if card == template_id)
 
 
+async def shows_within(client, path: list[str], seconds: float) -> bool:
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        if await showing(client, path):
+            return True
+        await asyncio.sleep(POLL_SECONDS)
+    return False
+
+
 async def open_deck_page(client) -> None:
+    """Open the book with the HUD button and go to its Deck tab, waiting for each. Two seconds after a dialog that
+    taught two spells closed, the book's Deck tab was not there yet, and the click on it stopped the run (10:08)."""
     await enable_clicks(client)
     if not await showing(client, BOOK):
         await click(client, SPELLBOOK_BUTTON)
         await asyncio.sleep(BOOK_OPEN_SECONDS)
-    await click(client, DECK_TAB)
-    await asyncio.sleep(PAGE_SETTLE_SECONDS)
-    if not await showing(client, DECK_PAGE):
+    if not await shows_within(client, DECK_TAB, OPEN_TIMEOUT_SECONDS):
+        raise DeckEditStopped("the spellbook's Deck tab did not show")
+    try:
+        await click(client, DECK_TAB)
+    except LookupError as missing:
+        raise DeckEditStopped(str(missing)) from missing
+    if not await shows_within(client, DECK_PAGE, OPEN_TIMEOUT_SECONDS):
         raise DeckEditStopped("the Deck page did not open")
+    await asyncio.sleep(PAGE_SETTLE_SECONDS)
 
 
 async def close_book(client) -> None:

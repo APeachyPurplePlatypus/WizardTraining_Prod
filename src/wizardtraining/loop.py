@@ -128,6 +128,7 @@ WALK_SAMPLE_MOVED = 1500.0
 MAX_TELEPORTS_PER_GOAL = 2
 GATHER_SETTLE_SECONDS = 3.0
 REAGENT_ZONES_PER_TRY = 3
+DECK_RETRY_SECONDS = 60.0
 GATHERED_FORGET_SECONDS = 120.0
 BOX_CLOSE_WAIT_SECONDS = 10.0
 LOAD_STUCK_SECONDS = 60.0
@@ -163,6 +164,7 @@ class QuestLoop:
         self.edit_deck = edit_deck
         self.deck_log = DeckLog(settings.runtime_folder)
         self._deck_checked: tuple | None = None
+        self._deck_retry_at = 0.0
         self._enemy_names: dict[str, str] = {}
         self.use_potions = use_potions
         self.wear_gear = wear_gear
@@ -1409,8 +1411,9 @@ class QuestLoop:
     async def keep_looking_turn(self, stat: str, state: dict, planner: RoutePlanner) -> dict:
         """The safe zone was searched for wisps and none is left in sight: search it again from the start, since used-up
         wisps come back, and health and mana come back while walking as while standing. Standing only when no part of
-        the zone is left to walk to. The operator, 2026-10-28 (relayed): standing to regenerate is fine, but the wizard
-        should go on hunting for wisps in known safe areas, which is faster than waiting, and regenerates as it looks."""
+        the zone is left to walk to. The operator, 2026-10-28: "Standing to regenerate is fine, but it should continue
+        to hunt for wisps in known safe areas since that is faster than just waiting around plus you regen health as you
+        are looking." Used-up wisps come back."""
         turn = await self.explore_for_wisps_turn(stat, state, planner, reach=refill_reach(True), again=True)
         if turn["progress"]:
             return turn
@@ -1979,7 +1982,9 @@ class QuestLoop:
         deck, the first card wanted is put in, and the add the page refuses gives it (`learn_capacity`). None when
         there is nothing to do here."""
         key = (tuple(sorted(self.record.known_spells)), tuple(sorted(self.record.essence_quests)))
-        if key == self._deck_checked or in_dungeon(state["zone"], self.record.entered_with_x):
+        if key == self._deck_checked or time.monotonic() < self._deck_retry_at:
+            return None
+        if in_dungeon(state["zone"], self.record.entered_with_x):
             return None
         if not await self.safe_here():
             return None
@@ -1995,8 +2000,9 @@ class QuestLoop:
             ids = {name: template_id for template_id, name in names.items()}
             for change in plan_changes(spells, wanted_deck(spells, capacity, essence_needed=essence_needed)):
                 view = await self.carry_out(change, ids[change.name], view, state)
-        except DeckEditStopped as stopped:
-            self.events.emit("deck", f"the deck edit stopped: {stopped}")
+        except (DeckEditStopped, LookupError) as stopped:
+            self._deck_checked, self._deck_retry_at = None, time.monotonic() + DECK_RETRY_SECONDS
+            self.events.emit("deck", f"the deck edit stopped: {stopped}; trying again in {DECK_RETRY_SECONDS:.0f} s")
             return stalled("deck edit stopped", reason=str(stopped))
         finally:
             await close_book(self.client)

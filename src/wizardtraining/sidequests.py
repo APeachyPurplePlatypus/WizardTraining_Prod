@@ -18,7 +18,8 @@ UNSUPPORTED = {
                           "blocker (BigGenericBlocker_CollossusGate) stops the wizard about 100 units short of the "
                           "gate's trigger, with no prompt and no message (2026-10-28, 00:08 to 00:12). It needs a "
                           "prerequisite quest: the account is a premium member, so it is not membership (the "
-                          "operator, 2026-10-28, relayed: another quest must be completed to gain access)",
+                          "operator, 2026-10-28: \"it's likely you can't get into Colossus boulevard because you need "
+                          "need to compete another quest to gain access\")",
 }
 
 

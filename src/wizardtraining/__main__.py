@@ -47,9 +47,6 @@ def main(argv=None) -> int:
     play.add_argument("--use-travel-buttons", action="store_true",
                       help="refill mana by the game's own travel buttons: Mark Location, Go to The Commons, then "
                            "Recall Location back (operator's decision of 2026-10-28; nothing is moved by the framework)")
-    play.add_argument("--leave-dungeons", action="store_true",
-                      help="let the travel buttons take the wizard out of a dungeon (never a tower) to refill and "
-                           "back by Recall; off by default, since the first such trip could not Recall back in")
     play.add_argument("--clear-world", metavar="WORLD",
                       help="finish a world's quests first, as its zone paths name it (WizardCity): the quests the "
                            "quest page lists there, then each giver the journal's Quest Finder points to, then back to "
@@ -83,8 +80,7 @@ def main(argv=None) -> int:
     offers = (TakeAllQuests if args.side_quests else MainQuestsOnly)(approved_titles=args.approve_quest)
     report, path = asyncio.run(play_quests(settings, limits, offer_policy=offers, use_potions=args.use_potions,
                                             wear_gear=args.wear_gear, use_travel_buttons=args.use_travel_buttons,
-                                            clear_world=args.clear_world, leave_dungeons=args.leave_dungeons,
-                                            edit_deck=args.edit_deck))
+                                            clear_world=args.clear_world, edit_deck=args.edit_deck))
     print(f"stopped: {report['stopped']}\nreport: {path}")
     return 0
 
