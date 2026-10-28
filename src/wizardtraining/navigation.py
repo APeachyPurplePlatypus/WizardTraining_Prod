@@ -27,8 +27,8 @@ from .config import DEIMOS_VARIABLE
 from .routes import NavGraph, RoutePlanner, parse_nav_file
 from .patrols import PatrolMap, parse_nodes, parse_paths
 from .placed import parse_placed_objects
-from .untracked import parse_trigger_volumes
-from .teleports import parse_teleport_volumes
+from .untracked import WALK_IN_RADIUS, parse_trigger_volumes, walk_in_teleports
+from .teleports import TeleportVolume, parse_teleport_volumes
 
 WALL_CLEARANCE = 45.0
 BODY_HEIGHT = 180.0
@@ -56,6 +56,8 @@ async def load_planner(zone: str, deimos_root: Path | None) -> RoutePlanner:
                                    "placed objects": placed_status, "patrols": patrol_status})
     planner.placed_objects = placed
     planner.trigger_volumes = await _trigger_volumes(wad)
+    volumes = volumes + [TeleportVolume(volume.name, volume.x, volume.y, volume.z, WALK_IN_RADIUS)
+                         for volume in walk_in_teleports(planner.trigger_volumes)]
     planner.zone_data = zone_data
     planner.patrols = patrols
     if free is not None:

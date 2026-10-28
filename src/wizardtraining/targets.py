@@ -63,9 +63,13 @@ def measured(enemies: list[dict], me, duel_circles) -> list[dict]:
     return sorted(enemies, key=lambda enemy: enemy["distance"])
 
 
-def quest_targets(enemies: list[dict], arrow) -> list[dict]:
+def quest_targets(enemies: list[dict], arrow, code: str | None = None) -> list[dict]:
+    """The enemies a bounty is after: those near its arrow, and any whose display code is the goal's own `code`,
+    wherever they stand, leaving out those in another player's duel. Triton Avenue's Kraken stood 912 from its
+    bounty's arrow, so it counted as a bystander to keep away from, and no route to it was left (17:55)."""
     return [enemy for enemy in enemies
-            if not enemy["in_a_duel"] and flat_distance(enemy["position"], arrow) <= QUEST_TARGET_ARROW_RADIUS]
+            if not enemy["in_a_duel"] and (flat_distance(enemy["position"], arrow) <= QUEST_TARGET_ARROW_RADIUS
+                                           or (code and enemy.get("display_code") == code))]
 
 
 def named_enemies_not_in_a_duel(enemies: list[dict], code: str | None) -> list[dict]:

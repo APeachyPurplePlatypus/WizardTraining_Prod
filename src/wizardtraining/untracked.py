@@ -84,6 +84,19 @@ def parse_trigger_volumes(data: bytes) -> list[TriggerVolume]:
     return volumes
 
 
+WALK_IN_WORD = re.compile(r"(?:^|[\s_])to[\s_]", re.IGNORECASE)
+WALK_IN_RADIUS = 150.0
+
+
+def walk_in_teleports(volumes: list[TriggerVolume]) -> list[TriggerVolume]:
+    """Trigger volumes, other than the TeleportVol_ ones, whose names say where they lead ("Activator Volume
+    To_Kraken"): walked into, they move the wizard like a teleport volume. Triton Avenue's Kraken stands on an isle
+    reached only through "Activator Volume To_Kraken"; with it unknown, every route to the Kraken failed and the
+    bounty stalled until the run stopped (17:55 to 17:59)."""
+    return [volume for volume in volumes
+            if not volume.name.startswith("TeleportVol_") and WALK_IN_WORD.search(volume.name)]
+
+
 def quest_words(*texts: str | None) -> set[str]:
     """The telling words of a quest's title or a goal's text, lowercase, each with its singular: "Find the Smiths"
     gives {"smiths", "smith"}."""

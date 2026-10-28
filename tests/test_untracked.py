@@ -31,6 +31,16 @@ class TriggerVolumeTest(unittest.TestCase):
         self.assertEqual(parse_trigger_volumes(data), [TriggerVolume("Colossus Boulevard Smith", 39950.0, 10837.0, -620.0)])
 
 
+class WalkInTeleportTest(unittest.TestCase):
+    def test_a_volume_named_for_where_it_leads_is_a_walk_in_teleport(self):
+        from wizardtraining.untracked import walk_in_teleports
+        volumes = [TriggerVolume("Activator Volume To_Kraken", -11055, 265, -675),
+                   TriggerVolume("Activator Volume Kraken", -13969, 208, -1994),
+                   TriggerVolume("TeleportVol_Teleport location (Tele Up)", -16336, 1176, 0),
+                   TriggerVolume("Triton Avenue Smith", -15946, -4534, -1400)]
+        self.assertEqual([volume.name for volume in walk_in_teleports(volumes)], ["Activator Volume To_Kraken"])
+
+
 class QuestWordsTest(unittest.TestCase):
     def test_telling_words_and_their_singulars(self):
         self.assertEqual(quest_words("Find the Smiths"), {"smiths", "smith"})

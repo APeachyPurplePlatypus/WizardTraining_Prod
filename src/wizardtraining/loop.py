@@ -1539,7 +1539,7 @@ class QuestLoop:
         door with no target in reach leads through it: in the Witch's house, the bounty's arrow pointed at the exit,
         the wizard "arrived" at it each turn, and the run stopped for turns without progress."""
         enemies = await nearby_enemies(self.client)
-        targets = quest_targets(enemies, arrow)
+        targets = quest_targets(enemies, arrow, goal.get("target_code"))
         in_reach = [target for target in targets if target["distance"] <= TARGET_REACH]
         if in_reach:
             result = await approach(self.client, in_reach[0])
@@ -1551,7 +1551,7 @@ class QuestLoop:
             return await self.zone_door_turn(XYZ(door.x, door.y, door.z))
 
         async def target_in_reach():
-            here = quest_targets(await nearby_enemies(self.client), arrow)
+            here = quest_targets(await nearby_enemies(self.client), arrow, goal.get("target_code"))
             return "target in reach" if any(target["distance"] <= TARGET_REACH for target in here) else None
 
         return await self.travel_turn("travel toward bounty targets", arrow, arrive_radius=ARROW_ARRIVE_RADIUS,

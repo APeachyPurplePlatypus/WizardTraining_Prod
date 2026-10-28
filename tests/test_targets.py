@@ -193,5 +193,19 @@ class LeadsToAnotherZoneTest(unittest.TestCase):
                                                "WizardCity/WC_NightSide"))
 
 
+
+class BountyTargetByCodeTest(unittest.TestCase):
+    def test_the_goals_own_enemy_is_a_target_however_far_from_the_arrow(self):
+        from wizwalker import XYZ
+        from wizardtraining.targets import quest_targets
+        kraken = {"id": 1, "name": "Kraken-WCBoss-L03", "display_code": "WizardMobs_00000279", "in_a_duel": False,
+                  "position": XYZ(-13428.0, 1348.0, -1994.0)}
+        ghost = {"id": 2, "name": "Ghost-Blue-L02", "display_code": "WizardMobs_00000100", "in_a_duel": False,
+                 "position": XYZ(-8245.0, -1521.0, -675.0)}
+        arrow = XYZ(-14340.0, 1339.0, -1994.0)
+        self.assertEqual(quest_targets([kraken, ghost], arrow), [])
+        self.assertEqual(quest_targets([kraken, ghost], arrow, "WizardMobs_00000279"), [kraken])
+
+
 if __name__ == "__main__":
     unittest.main()

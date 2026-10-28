@@ -208,6 +208,12 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **Volumes named for where they lead are walk-in teleports** (`untracked.walk_in_teleports`, `navigation.load_planner`).
+  - **What:** besides the `TeleportVol_` volumes, a zone's trigger volumes whose names say where they lead ("Activator Volume To_Kraken") join the planner's teleports, so a target on a walkable piece reached only through one is crossed to the way any untried teleport is: walked into, its landing learned.
+  - **Why:** "Decease the Kraken!" asks for Triton Avenue's Kraken, which stands on an isle (its own walkable piece, about 1,300 lower) reached through "Activator Volume To_Kraken", 250 from where the wizard stood; with that volume unknown, every route method failed, the stall was put on the enemies near the path, and the run stopped after six walk strategies (17:55 to 17:59).
+  - **And the target itself:** a bounty's targets now include any enemy whose display code is the goal's own, however far from the arrow (`targets.quest_targets`): the Kraken stood 912 from its arrow, past the 700 that counted, so it was a bystander whose keep-away covered the only way to it.
+  - **Verified:** offline (`tests/test_untracked.py`; the planner's crossing checked against Triton Avenue's files).
+
 - **Colossus Boulevard is in the Wizard City zone tree, and gate names match despite doubled letters** (`training.ZONE_PARENT`, `placed.single_letters`).
   - **What:** Colossus Boulevard hangs off the Shopping District; the Shopping District's gate to it, "BigGenericBlocker_CollossusGate", now matches the zone's name with doubled letters written once.
   - **Why:** after the Triton Avenue Smith, the last open goal was on Colossus Boulevard, no way there was known from anywhere, and "Find the Smiths" was parked (17:38).
