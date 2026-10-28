@@ -6,6 +6,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Added
 
+- **A reagent not found in three zones parks its quest; a wanted reagent seen on other quests is a detour** (`QuestLoop.park_for_the_reagent`, `QuestLoop.reagent_detour_turn`, `targets.worth_a_detour`, `Knowledge.wanted_reagents`).
+  - **What:** while clearing a world, a scavenge quest whose reagent was not found in three zones is parked until the next level, and its reagent kept in the knowledge file as wanted, so the Quest Finder's other givers go on. On any other quest, outside towers and dungeons and when not recharging, a wanted reagent loaded within 3,000 units with no enemy within 800 of it is walked to and gathered, and its quest is no longer parked. When the world's clearing ends, the quests still waiting for reagents are made active once more for one more search before the paused quest.
+  - **Why:** suggested to the operator, 2026-10-28, 13:24 UTC, as a change of strategy: Mist Wood was not found in Cyclops Lane, Unicorn Way or the Commons in about 40 minutes of searching, while the world's other quests waited. Reagents respawn and other players gather them, so a sweep of every zone can miss one that a later pass would find.
+  - **Verified:** offline (`tests/test_targets.py`, `tests/test_knowledge.py`); in the game, next run.
+
 - **OK is pressed on the game's "INFO" notices** (`ui.close_game_notice`, `screen.is_game_notice`; docs/safety.md).
   - **What:** a message box titled "INFO" whose only button is its OK (`rightButton`) is closed with that OK, and what it said is logged. Boxes from other players (friend, trade, duel requests) have other titles and Yes and No buttons, and are left as before.
   - **Why:** the operator, 2026-10-28, 11:38 UTC: "Approve", for clicking OK on INFO boxes, game notices only. After a Recall into a dungeon that had reset, the game's box ("You cannot teleport to that location. The dungeon timer has ended and the dungeon has been reset.") stayed open and took every click, and the run stopped for it from 01:32 until the operator's answer.

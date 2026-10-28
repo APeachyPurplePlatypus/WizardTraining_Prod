@@ -153,6 +153,16 @@ def looks_like_a_reagent(entity_name: str) -> bool:
     return REAGENT_NAME.match(entity_name) is not None
 
 
+REAGENT_DETOUR = 3000.0
+REAGENT_SAFE_CLEARANCE = 800.0
+
+
+def worth_a_detour(reagent_distance: float, enemy_distances: list[float]) -> bool:
+    """A wanted reagent in sight while doing something else is worth the walk when it is within REAGENT_DETOUR and no
+    enemy stands within REAGENT_SAFE_CLEARANCE of it."""
+    return reagent_distance <= REAGENT_DETOUR and all(distance > REAGENT_SAFE_CLEARANCE for distance in enemy_distances)
+
+
 def zones_to_search_for(reagent_zones: dict[str, list[str]], reagent: str, candidates: list[tuple[int, str]]) -> list[str]:
     """The zones to look in next for a reagent: those it is known or said to grow in first, in that order, then the
     others nearest first (`candidates` as (doors away, zone))."""

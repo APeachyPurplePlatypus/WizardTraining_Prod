@@ -70,7 +70,7 @@ from .spells import KNOWN_AT_FIRST_CHECK, LEARNED, SpellLog, learned_text, newly
 from .session import NoClient, attached, hooks_ready
 from .state import attempt, battle_showing, free_to_move, health_fraction, mana_fraction, snapshot
 from .placed import gate_toward, objects_for_goal
-from .targets import (area_in_zone, found_in, is_reagent, looks_like_a_reagent, zones_to_search_for, bystanders, enemies_to_route_around, in_grace_after_battle, keeps_blocking,
+from .targets import (area_in_zone, found_in, is_reagent, looks_like_a_reagent, worth_a_detour, zones_to_search_for, bystanders, enemies_to_route_around, in_grace_after_battle, keeps_blocking,
                       leads_to_another_zone, named_enemies_not_in_a_duel, next_area_to_explore, others, quest_targets,
                       refill_reach, safe_wisps,
                       summary, too_close, WISP_REACH)
@@ -123,6 +123,7 @@ ZONE_SAMPLE_SECONDS = (15.0, 180.0)
 WALK_SAMPLE_MOVED = 1500.0
 MAX_TELEPORTS_PER_GOAL = 2
 GATHER_SETTLE_SECONDS = 3.0
+REAGENT_ZONES_PER_TRY = 3
 GATHERED_FORGET_SECONDS = 120.0
 BOX_CLOSE_WAIT_SECONDS = 10.0
 LOAD_STUCK_SECONDS = 60.0
@@ -178,6 +179,7 @@ class QuestLoop:
         self._finder_givers: dict[tuple, int] = {}
         self._finder_just_activated = False
         self._walking_at: tuple[str, dict] | None = None
+        self._reagents_revisited = False
         self._loading_since: float | None = None
         self._gathered: list[tuple[int, float]] = []
         self._dungeons_give_nothing_back = False
@@ -859,6 +861,8 @@ class QuestLoop:
                 return back
         if self._left_dungeon is not None and self._marked_in is None:
             await self.check_the_dungeon_held(state)
+        if (detour := await self.reagent_detour_turn(state)) is not None:
+            return detour
         wanted = wanted_wisp(fraction, mana_fraction(state))
         if wanted is not None:
             turn = await self.wisp_turn(wanted, state, heading=await self.wisp_heading(wanted, state))
@@ -1116,6 +1120,14 @@ class QuestLoop:
         return None
 
     async def finish_clearing(self, world: str, why: str) -> dict:
+        if self.record.wanted_reagents and not self._reagents_revisited:
+            self._reagents_revisited = True
+            waiting = list(self.record.wanted_reagents.values())
+            for title in waiting:
+                self.record.parked_quests.pop(title, None)
+            self.events.emit("world", f"{world}: {why}; trying the quests that wait for reagents once more "
+                                      f"({', '.join(waiting)})")
+            return await self.activate_for_world(waiting[0], "a quest waiting for its reagent, tried once more")
         paused = self.record.paused_quest
         self.record.clearing_world = self.record.paused_quest = None
         self.events.emit("world", f"{world} cleared: {why}" + (f"; back to {paused}" if paused else ""))
@@ -1807,6 +1819,8 @@ class QuestLoop:
         planner = await self.planner()
         known = self.record.reagent_zones.get(reagent, [])
         searched = self.record.reagent_searched.setdefault(reagent, [])
+        if self.record.clearing_world and len(searched) >= REAGENT_ZONES_PER_TRY:
+            return await self.park_for_the_reagent(reagent, searched)
         if known and zone not in known and any(other not in searched for other in known):
             return await self.next_zone_for_reagent_turn(reagent, zone, planner)
         explored = self.record.explored.setdefault(f"{zone}|{reagent}", [])
@@ -1824,6 +1838,52 @@ class QuestLoop:
                 explored.append((round(x), round(y)))
             return turn
         return await self.next_zone_for_reagent_turn(reagent, zone, planner)
+
+    async def park_for_the_reagent(self, reagent: str, searched: list[str]) -> dict:
+        """While clearing a world, a scavenge quest whose reagent was not found in REAGENT_ZONES_PER_TRY zones is
+        parked until the next level, and its reagent kept as wanted: the Quest Finder's other givers go on, a wanted
+        reagent seen on the way is a detour (`reagent_detour_turn`), and the quest is tried once more at the end of the
+        world's clearing. Mist Wood was not found in Cyclops Lane, Unicorn Way or the Commons in 40 minutes."""
+        title = " ".join(((self.record.quest or {}).get("title") or "").split())
+        level = (await snapshot(self.client))["level"]
+        if not title or not isinstance(level, int):
+            raise StopRun(f"no {reagent} found in {', '.join(searched)}; left for the operator")
+        self.record.parked_quests[title] = level
+        self.record.wanted_reagents[reagent] = title
+        self.record.reagent_searched.pop(reagent, None)
+        self.events.emit("gather", f"no {reagent} found in {', '.join(searched)}; parking {title}, gathering {reagent} "
+                                   "when one is seen on the way, and trying again at the end of the world's quests")
+        return progressed("parked a quest whose reagent was not found", quest=title)
+
+    async def reagent_detour_turn(self, state: dict) -> dict | None:
+        """A reagent a parked quest wants is in sight, near, with no enemy near it (`targets.worth_a_detour`): gather it,
+        and make that quest one to do again. Not in a tower or dungeon, nor while recharging."""
+        if not self.record.wanted_reagents or in_dungeon(state["zone"], self.record.entered_with_x) or self.record.recharging:
+            return None
+        recent = {gathered for gathered, at in self._gathered if time.monotonic() - at < GATHERED_FORGET_SECONDS}
+        me = await self.client.body.position()
+        enemies = await nearby_enemies(self.client)
+        for reagent, title in list(self.record.wanted_reagents.items()):
+            found = [found for found in await objects_named(self.client, lambda name: is_reagent(name, reagent))
+                     if found["id"] not in recent]
+            if not found:
+                continue
+            target = min(found, key=lambda found: flat_distance(me, found["position"]))
+            distance = flat_distance(me, target["position"])
+            if not worth_a_detour(distance, [flat_distance(enemy["position"], target["position"]) for enemy in enemies]):
+                continue
+            if distance > OBJECT_USE_DISTANCE:
+                self.say_once("gather", f"{reagent} in sight in {state['zone']}, {distance:.0f} away: a detour for {title}")
+                return await self.travel_turn(f"walk to {reagent}", target["position"], arrive_radius=OBJECT_USE_DISTANCE / 2,
+                                              avoid=enemies)
+            turn = await self.gather_turn(reagent, target)
+            if turn["progress"]:
+                found_in(self.record.reagent_zones, reagent, state["zone"])
+                self.record.parked_quests.pop(title, None)
+                self.record.wanted_reagents.pop(reagent, None)
+                self.events.emit("gather", f"gathered {reagent} for {title}; it is a quest to do again")
+            return turn
+        return None
 
     async def reagent_name(self, goal: dict) -> str:
         code = goal.get("item_code")
@@ -1852,6 +1912,8 @@ class QuestLoop:
         searched = self.record.reagent_searched.setdefault(reagent, [])
         if zone not in searched:
             searched.append(zone)
+        if self.record.clearing_world and len(searched) >= REAGENT_ZONES_PER_TRY:
+            return await self.park_for_the_reagent(reagent, searched)
         candidates = [other for other in self.record.zone_links
                       if world_of(other) == world_of(zone) and other not in searched and INTERIOR_WORD not in other
                       and not in_dungeon(other, self.record.entered_with_x)]
@@ -1863,14 +1925,8 @@ class QuestLoop:
             if door is not None:
                 self.say_once("gather", f"no {reagent} left to find in {zone}; going on to {other}")
                 return await self.walk_to_door_turn(f"walk toward {other} for {reagent}", *door)
-        title = " ".join(((self.record.quest or {}).get("title") or "").split())
-        level = (await snapshot(self.client))["level"]
-        if self.record.clearing_world and title and isinstance(level, int):
-            self.record.parked_quests[title] = level
-            self.record.reagent_searched.pop(reagent, None)
-            self.events.emit("gather", f"no {reagent} found in {', '.join(sorted(searched))}; parking {title} until the "
-                                       f"wizard is past level {level}, while the world's other quests go on")
-            return progressed("parked a quest whose reagent was not found", quest=title)
+        if self.record.clearing_world:
+            return await self.park_for_the_reagent(reagent, searched)
         raise StopRun(f"no {reagent} found in {', '.join(sorted(searched))}, and no way to another open zone of "
                       f"{world_of(zone)} is known; left for the operator")
 
