@@ -69,6 +69,7 @@ from .teleports import LEFT_ZONE, NO_EFFECT, TeleportVolume, describe_outcome, v
 from .trainer import OPENED_DIALOG, OPENED_MENU, close_training, learn_free_spells, open_training, open_with_professor
 from .training import (GATE, SCHOOLS, TRAINER, School, in_dungeon, spells_to_learn, way_to_school, way_toward_zone,
                        zone_for_area)
+from .worldgate import go_to_world, leave_the_map, spiral_map_open
 from .ui import POTION_BUTTON, answer_known_popup, click, interact_prompt_text, message_box, visible_children
 
 TARGET_REACH = 1200.0
@@ -704,6 +705,8 @@ class QuestLoop:
                              "goal_id": goal.get("id"), "main": quest["mainline"] is True,
                              "goal_zone": goal["destination_zone"], "arrow": plain(arrow)}
         here = await self.client.zone_name()
+        if await spiral_map_open(self.client):
+            return await self.world_gate_turn(goal, here)
         if self.record.limits.stay_in_world and leaves_world(here, goal["destination_zone"]):
             if (switched := await self.switch_quest_turn(side_quests_only=True)) is not None:
                 return switched
@@ -814,6 +817,25 @@ class QuestLoop:
         if turn.get("trip", {}).get("reason") in (None, "target in sight", "every route method failed"):
             explored.append((round(x), round(y)))
         return turn
+
+    async def world_gate_turn(self, goal: dict, here: str) -> dict:
+        """The Spiral Map is open (X at the Spiral Door): go to the world the goal is in when that is another world and
+        the run may leave this one (`--leave-world`); otherwise close the map. "A Whole New World" sends the wizard
+        through it to Krokotopia: X at the door's prompt ("to Interact") opened the map, and the run pressed X again
+        and again while it stayed open."""
+        world = world_of(goal.get("destination_zone"))
+        if world and world != world_of(here) and not self.record.limits.stay_in_world:
+            problem = await go_to_world(self.client, world)
+            if problem is None:
+                self.events.emit("door", f"went through the world gate to {world}")
+                self.record.last_place = None
+                return progressed("went through the world gate", world=world)
+            self.events.emit("door", f"could not go through the world gate to {world}: {problem}")
+            await leave_the_map(self.client)
+            return stalled("could not go through the world gate", problem=problem)
+        await leave_the_map(self.client)
+        self.events.emit("door", "closed the Spiral Map: the goal is not in another world the run may go to")
+        return stalled("closed the Spiral Map")
 
     async def switch_quest_turn(self, *, side_quests_only: bool = False) -> dict | None:
         """Make another quest the active one through the quest book (`questbook.activate_quest`), when the offer
