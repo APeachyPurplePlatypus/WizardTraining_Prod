@@ -6,6 +6,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Added
 
+- **Traps: in the deck after the hits, and set on the target before a hit of 2 pips or more** (`decks.role_of`, `decks.TRAP_COPIES`, `policy.trap_before_a_big_hit`).
+  - **What:** a spell whose effect raises incoming damage ("modify_incoming_damage 40") is a trap, not a shield: the deck takes up to two copies, after the attacks and before the stuns. In a fight with no finishing blow this round and nothing to heal, when an attack of 2 pips or more is in hand (or within two pips), the policy sets a castable trap on the enemy that attack will go to, unless one of its school is on it already.
+  - **Why:** the wizard learned Ice Trap (0 pips, +40% to the next Ice hit) from the Ice school's quests (13:25); the deck plan had counted it a shield, never cast. Colossus Boulevard's Evil Snowmen resist Ice by 20%, and one fight there was lost. The coordinator had asked for blades and traps before big hits.
+  - **Verified:** offline (`tests/test_decks.py`, `tests/test_policy.py`).
+
 - **Clearing Wizard City visits the wizard's school professor once a level for school quests** (`QuestLoop.school_quest_turn`, `Knowledge.school_quests_checked`).
   - **What:** when the journal has no quest of the world left to do, and before the Quest Finder, the wizard goes to its school's professor (the way the spell training uses) and talks; a new quest in their menu is taken. Once per world and level, kept in the knowledge file.
   - **Why:** "Introduction to Ice", taken from Lydia Greyrose's menu, gave 190 XP at its hand-in, where Wizard City's side quests gave about 35; the Quest Finder never pointed at her, and her menu then offered "No More Mr. Ice Guy" (13:24). Asked by the coordinator.

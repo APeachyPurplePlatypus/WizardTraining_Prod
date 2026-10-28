@@ -370,6 +370,24 @@ class ServicesMenuTest(unittest.TestCase):
         self.assertEqual(policy.decide(["I am offering you a side quest."], can_go_back=True), DECLINE)
 
 
+class TrapTest(unittest.TestCase):
+    TRAP = Card("Ice Trap", "Trap", True, "Ice", 0)
+    SNOWMAN = Card("Evil Snowman", "Damage", False, "Ice", 3)
+    BEETLE = Card("Frost Beetle", "Damage", True, "Ice", 1)
+
+    def test_a_trap_goes_on_the_target_before_a_big_hit(self):
+        snowmen = (Combatant("Evil Snowman", 310), Combatant("Evil Snowman", 310))
+        self.assertEqual(SpellTypePolicy().choose(view([self.BEETLE, self.TRAP, self.SNOWMAN], pips=2, enemies=snowmen)),
+                         Cast(1, "enemy", 0))
+
+    def test_no_second_trap_on_a_trapped_enemy_and_none_without_a_big_hit(self):
+        trapped = (Combatant("Evil Snowman", 310, incoming=(DamageModifier("Ice", 40),)),)
+        self.assertNotEqual(SpellTypePolicy().choose(view([self.BEETLE, self.TRAP, self.SNOWMAN], pips=2,
+                                                          enemies=trapped)).card, 1)
+        self.assertNotEqual(SpellTypePolicy().choose(view([self.BEETLE, self.TRAP], pips=1,
+                                                          enemies=(Combatant("Ghost", 300),))).card, 1)
+
+
 class NoEffectTest(unittest.TestCase):
     SNAKE = Card("Thunder Snake - Starter Wand", "Damage", True, "Storm", 1, accuracy=70)
     CAT = Card("Fire Cat - Starter Wand", "Damage", True, "Fire", 1, accuracy=75)

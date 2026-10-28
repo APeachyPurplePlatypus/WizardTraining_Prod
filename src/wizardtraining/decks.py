@@ -10,8 +10,10 @@ game's files give it), and the deck is filled in this order, each spell up to it
     nine opening hands of ten.
  2. Heals, the strongest first: the policy heals below 40% health and before a big hit.
  3. Attacks, the most pips first (damage grows with pips), then the biggest hit.
- 4. Stuns: the policy stuns while saving a pip for a bigger attack, and the enemy holding the most pips.
- 5. Nothing else: shields, which the policy never casts (Volcanic Shield blocks only Fire and Storm), Extract
+ 4. Traps, TRAP_COPIES of each: the policy sets one on the target before a hit of 2 pips or more ("Ice Trap":
+    +40% to the next Ice hit on it, against Colossus Boulevard's Evil Snowmen, who resist Ice by 20%).
+ 5. Stuns: the policy stuns while saving a pip for a bigger attack, and the enemy holding the most pips.
+ 6. Nothing else: shields, which the policy never casts (Volcanic Shield blocks only Fire and Storm), Extract
     spells no goal needs, and spells of other kinds.
 
 Every card put in or taken out gets one line in runtime/deck-changes.jsonl, and every spell left out one line too:
@@ -28,7 +30,8 @@ from pathlib import Path
 
 DECK_LOG_NAME = "deck-changes.jsonl"
 ADD, REMOVE, KEEP = "add", "remove", "keep"
-EXTRACT, HEAL, ATTACK, STUN, SHIELD, OTHER = "extract", "heal", "attack", "stun", "shield", "other"
+EXTRACT, HEAL, ATTACK, TRAP, STUN, SHIELD, OTHER = "extract", "heal", "attack", "trap", "stun", "shield", "other"
+TRAP_COPIES = 2
 EFFECT_ROLES = {"collect_essence": EXTRACT, "heal": HEAL, "damage": ATTACK, "stun": STUN,
                 "modify_incoming_damage": SHIELD}
 NO_CAPACITY_KNOWN = 10_000
@@ -64,10 +67,25 @@ class DeckChange:
     reason: str
 
 
+def incoming_change(effect: str) -> int | None:
+    """The percent of a "modify_incoming_damage" effect: positive for a trap ("modify_incoming_damage 40", Ice Trap),
+    negative for a shield ("modify_incoming_damage -70", Volcanic Shield)."""
+    words = effect.split()
+    if len(words) == 2 and words[0] == "modify_incoming_damage":
+        try:
+            return int(words[1])
+        except ValueError:
+            return None
+    return None
+
+
 def role_of(effects) -> str:
     """What the combat policy does with a spell of these effects ("damage 65-105", "heal 400", "stun 1",
     "modify_incoming_damage -70", "collect_essence 100"): the role of its first effect the policy knows."""
     for effect in effects:
+        change = incoming_change(effect)
+        if change is not None and change > 0:
+            return TRAP
         role = EFFECT_ROLES.get(effect.split()[0] if effect.split() else "")
         if role is not None:
             return role
@@ -83,7 +101,7 @@ def deck_spell(name: str, copies: int, limit: int, effects, pips: int | None) ->
 
 
 def priority(spell: DeckSpell) -> tuple:
-    order = {EXTRACT: 0, HEAL: 1, ATTACK: 2, STUN: 3}
+    order = {EXTRACT: 0, HEAL: 1, ATTACK: 2, TRAP: 3, STUN: 4}
     return order.get(spell.role, len(order)), -(spell.pips or 0) if spell.role == ATTACK else 0, -spell.strength
 
 
@@ -93,6 +111,8 @@ def why_wanted(spell: DeckSpell) -> str:
         HEAL: f"{spell.name} heals {spell.strength}: heals come first, since the policy heals below 40% health and "
               "before a big hit",
         ATTACK: f"{spell.name} hits for up to {spell.strength} with {spell.pips} pips: the strongest hits come first",
+        TRAP: f"{spell.name} raises the next hit on its target by {spell.strength}%: the policy sets it before a hit "
+              "of 2 pips or more",
         STUN: f"{spell.name} stuns: the policy casts it while saving a pip for a bigger attack, and on the enemy "
               "holding the most pips",
     }[spell.role]
@@ -110,10 +130,10 @@ def wanted_deck(spells: list[DeckSpell], capacity: int, *, essence_needed: bool)
     room = capacity
     wanted = []
     for spell in sorted(spells, key=priority):
-        if spell.role not in (EXTRACT, HEAL, ATTACK, STUN) or (spell.role == EXTRACT and not essence_needed):
+        if spell.role not in (EXTRACT, HEAL, ATTACK, TRAP, STUN) or (spell.role == EXTRACT and not essence_needed):
             wanted.append(Wanted(spell.name, 0, why_left_out(spell)))
             continue
-        target = spell.limit
+        target = min(spell.limit, TRAP_COPIES) if spell.role == TRAP else spell.limit
         copies = max(0, min(target, room))
         room -= copies
         reason = why_wanted(spell)

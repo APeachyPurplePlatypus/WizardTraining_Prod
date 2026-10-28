@@ -259,6 +259,8 @@ class SpellTypePolicy:
             return None
         if finisher is not None:
             return finisher
+        if (trap := trap_before_a_big_hit(view, attacks, self.strategy.target)) is not None:
+            return trap
         stun = stun_while_saving_a_pip(view, attacks)
         if stun is not None:
             return stun
@@ -379,6 +381,32 @@ def cheapest_finisher(view: RoundView, attacks: list[int]) -> Cast | None:
         return None
     _, _, enemy, card = min(sure)
     return Cast(card, ATTACK_TARGETS[view.cards[card].spell_type], enemy)
+
+
+TRAP_WORD = "trap"
+
+
+def is_trap(card: Card) -> bool:
+    return TRAP_WORD in (card.name or "").lower() or TRAP_WORD in (card.spell_type or "").lower()
+
+
+def trap_before_a_big_hit(view: RoundView, attacks: list[int], target_rule: str) -> Cast | None:
+    """A castable trap on the enemy the next attack goes to, when an attack of 2 pips or more is in hand (castable now
+    or within two pips) and that enemy has no trap of its school on it yet: Ice Trap adds 40% to the next Ice hit, and
+    Colossus Boulevard's Evil Snowmen resist Ice by 20% (12:32 to 13:11, one fight lost). None otherwise."""
+    trap = first_castable(view.cards, is_trap)
+    if trap is None or not view.enemies:
+        return None
+    have = (view.pips or 0) + (view.power_pips or 0)
+    big = [card for card in view.cards if card.spell_type in ATTACK_TARGETS and (card.pips or 0) >= 2
+           and (card.pips or 0) <= have + 2 and not is_trap(card)]
+    if not big:
+        return None
+    enemy = most_dangerous(view.enemies) if target_rule == MOST_DANGEROUS else weakest(view.enemies)
+    school = view.cards[trap].school
+    if any(modifier.percent > 0 and modifier.school in (school, UNIVERSAL) for modifier in view.enemies[enemy].incoming):
+        return None
+    return Cast(trap, "enemy", enemy)
 
 
 def stun_while_saving_a_pip(view: RoundView, attacks: list[int]) -> Cast | None:

@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from wizardtraining.decks import (ADD, ATTACK, EXTRACT, HEAL, KEEP, OTHER, REMOVE, SHIELD, STUN, DeckChange, DeckLog,
+from wizardtraining.decks import (ADD, ATTACK, EXTRACT, HEAL, KEEP, OTHER, REMOVE, SHIELD, STUN, TRAP, DeckChange, DeckLog,
                                   change_text, cell_center, deck_spell, first_missing, plan_changes, role_of,
                                   spell_page_and_cell, wanted_deck)
 
@@ -15,6 +15,7 @@ LIST = [deck_spell("Freeze", 3, 3, ["stun 1"], 0),
         deck_spell("Evil Snowman", 2, 3, ["damage 240-300"], 3),
         deck_spell("Pixie", 3, 3, ["heal 400"], 2),
         deck_spell("Extract Undead", 0, 3, ["collect_essence 100"], 0)]
+ICE_TRAP = deck_spell("Ice Trap", 0, 3, ["modify_incoming_damage 40"], 0)
 
 
 def copies(wanted):
@@ -24,6 +25,7 @@ def copies(wanted):
 class RoleTest(unittest.TestCase):
     def test_roles_come_from_the_spells_effects(self):
         self.assertEqual([spell.role for spell in LIST], [STUN, SHIELD, ATTACK, ATTACK, ATTACK, HEAL, EXTRACT])
+        self.assertEqual(ICE_TRAP.role, TRAP)
         self.assertEqual(role_of([]), OTHER)
         self.assertEqual(LIST[3].strength, 195)
 
@@ -42,6 +44,12 @@ class WantedDeckTest(unittest.TestCase):
         self.assertEqual(copies(wanted)["Freeze"], 2)
         extract = next(want for want in wanted if want.name == "Extract Undead")
         self.assertIn("no open quest goal needs an essence", extract.reason)
+
+    def test_a_trap_comes_after_the_hits_and_before_the_stuns(self):
+        wanted = wanted_deck(LIST + [ICE_TRAP], 14, essence_needed=False)
+        self.assertEqual(copies(wanted)["Ice Trap"], 2)
+        self.assertEqual(copies(wanted)["Freeze"], 0)
+        self.assertIn("before a hit of 2 pips or more", next(want for want in wanted if want.name == "Ice Trap").reason)
 
     def test_a_shield_is_never_wanted(self):
         wanted = wanted_deck(LIST, 100, essence_needed=False)
