@@ -84,6 +84,15 @@ These come from one character's first unattended play, level 1 to level 5 in Wiz
 - **Single-button game boxes can open over a battle.** The "Quest Friend Finder" tip did, and took every click, so no card reached the fight for three minutes; any game box whose only button is OK is now closed with it (the operator: "there is only one answer, so hit okay").
 - **The game offers help from other players: the Quest Friend Finder.** Per its tip, the HUD button asks the friendly players in the world to join you, and those who accept are grouped and teleported to you. It may help with what is too hard alone: a dungeon's bosses (Sunken City), or a zone where every fight costs most of the wizard's health (Triton's underwater zone). The operator, 2026-10-29: "you might be able to use that in the future". It brings other players in, so it is not pressed without the operator's approval; its button and how a group plays (other players' turns, sharing the fight) are still to be read.
 
+## Opportunities
+
+Game features, tips and patterns that could speed progress, noted as they are met. The operator, 2026-10-29: "there is a lot going on in mmorpgs, you are going to need to decide when to add something to your memory bank ... there will be similar opportunities that arise. See if you can reconize these patterns". Each new one is also named in the run's report and in the level retro. Anything that brings in other players, or spends gold or crowns, waits for the operator.
+
+- **Quests pay, street fights do not.** A hand-in gave 270 to 315 XP (Curfew!, Who is the Keymaster?), about nine fights' worth in Triton's underwater zone, where each fight gave about 30 to 45 XP and cost 40 to 65% of the wizard's health and a trip home. Avoid fights on the way to goals rather than farm them.
+- **The game's tip boxes announce its features.** The "Quest Friend Finder" tip told of a HUD button that groups friendly players with you and teleports them to you: help for bosses and for zones too hard alone (see Popups).
+- **Wisps near other players are usually taken.** In the Commons about half the wisp walks gave nothing, whether the walk ended 9 or 30 from the wisp (2026-10-28).
+- **The game's own travel beats walking.** Mark and Recall, Go to The Commons, and a dungeon's return button (`ResumeInstanceButton`) cut the walk back after a refill or a defeat to a few seconds; the travel plan (`travelplan.py`) weighs them against the walk.
+
 ## Screenshots
 
 - **They do not work yet, and are not needed often.** GDI `PrintWindow` returns a blank client area for this DirectX client, and an F12 sent as a window message saved nothing. Memory reads and the UI window tree answered every question so far.
