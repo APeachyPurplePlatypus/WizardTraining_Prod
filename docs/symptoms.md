@@ -26,7 +26,7 @@ Check the cheap things first: whether a battle is showing, whether a window or g
   - a menu that won't switch;
   - the Quest Finder when the world has no quest givers left.
   - Guard against the whole family at once: when several turns in a row take almost no time and change nothing, back off and count a stall instead of trying again at full speed.
-- **The Quest Finder answers "There are no available quests in this world".** The world's givers are used up. Retry any quests set aside in that world, then move on.
+- **The Quest Finder says the world has no quests left.** The world's givers are used up. Retry any quests set aside in that world, then move on.
 
 ## Quests
 
