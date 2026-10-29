@@ -43,7 +43,7 @@ from .events import (EventLog, describe_battle, describe_changes, describe_round
                      enemy_names, health_text, threat_text)
 from .gear import describe_stats, upgrades
 from .gametravel import (RECALL_NOT_REACHED, go_home_ready, go_to_the_commons, has_mark, mark_here, recall, recall_ready,
-                         recall_tip, resume_instance, resume_tip)
+                         pressed_lately, recall_tip, resume_instance, resume_tip)
 from .geometry import Point, distance_to_path, flat_distance, path_within, xy
 from .keys import tap
 from .knowledge import Knowledge
@@ -104,6 +104,7 @@ NPC_PROMPT_RANGE = 400.0
 NOT_A_DOOR_RADIUS = 600.0
 ENTRANCE_ARRIVE_RADIUS = 80.0
 ENTRANCE_AT_ARROW_RADIUS = 300.0
+LATE_TRAVEL_LOAD_SECONDS = 90.0
 INTERACT_PROMPT = "interact prompt"
 LOADING_WAIT_SECONDS = 3.0
 DOOR_WAIT_SECONDS = 15.0
@@ -3391,6 +3392,10 @@ class QuestLoop:
         teleport volume is there."""
         walking_at, self._walking_at = self._walking_at, None
         if walking_at is None or walking_at[0] != zone or not isinstance(walking_at[1], dict):
+            return
+        if pressed_lately(self.client, LATE_TRAVEL_LOAD_SECONDS):
+            self.events.emit("walk", "a load began during a walk soon after a travel button was pressed: taken for "
+                                     "the button's load, not a door")
             return
         point = XYZ(walking_at[1]["x"], walking_at[1]["y"], 0.0)
         if flat_distance(point, destination) <= 2 * HIDDEN_DOOR_RADIUS:

@@ -165,6 +165,13 @@ class GameTravelTest(unittest.TestCase):
         self.assertEqual(run(game, gametravel.resume_instance), gametravel.RESUME_NOT_SHOWING)
         self.assertEqual(game.clicked, [])
 
+    def test_a_press_is_kept_so_a_late_load_is_taken_for_its_own(self):
+        game = Game(zone="WizardCity/WC_Hub", marked=True)
+        client = game.client()
+        self.assertFalse(gametravel.pressed_lately(client, 90))
+        gametravel.note_press(client)
+        self.assertTrue(gametravel.pressed_lately(client, 90))
+
     def test_only_the_travel_buttons_are_ever_clicked(self):
         game = Game(resume_tip="Teleport to Sunken City")
         run(game, gametravel.mark_here)

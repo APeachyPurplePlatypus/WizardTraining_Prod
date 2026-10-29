@@ -28,6 +28,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **A load soon after a travel button is the button's, not a door** (`gametravel.note_press`, `gametravel.pressed_lately`, `QuestLoop.note_hidden_door`).
+  - **What:** each press of Go to The Commons, Recall or the dungeon's return button is kept; a load that begins during a walk within 90 s of one is not taken for a door the zone's data does not list.
+  - **Why:** a Recall from the Commons showed no zone change for the 25 s it was given, then its load began as the wizard walked; the run kept a door at (9310, -670) in the Commons for routes to keep out of (19:58), removed by hand from knowledge.json. The load then lasted over 60 s and the run stopped for the operator.
+  - **Verified:** offline (`tests/test_gametravel.py`).
+
 - **A quest NPC behind a door at its arrow is gone in to** (`QuestLoop.door_behind_the_arrow_turn`, `QuestLoop.entrance_at_the_arrow`, `dialog.NPC_OUT_OF_REACH`).
   - **What:** when the talk at a quest NPC's arrow cannot get close to anyone and a tower or dungeon entrance stands within 300 of the arrow, the wizard walks into that entrance (X at its prompt, refilled first when it opens on an instance) instead of trying to talk again.
   - **Why:** "Who is the Keymaster?"'s talk named no zone, and its arrow stood on WC_Triton_Underwater_T1's entrance semicircle while the NPC (the one Curfew! was handed in to) was inside; the wizard tried to talk at the door for 90 s (19:38 to 19:39).

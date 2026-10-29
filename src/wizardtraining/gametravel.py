@@ -14,6 +14,7 @@ and takes it back to where it was inside, within the dungeon's 30-minute timer (
 from __future__ import annotations
 
 import asyncio
+import time
 
 from .screen import or_default
 from .state import attempt
@@ -104,6 +105,18 @@ async def press_mark(client) -> str | None:
     return f"the game refused Mark Location here: the Recall tooltip did not change and no mana was spent ({seen})"
 
 
+def note_press(client) -> None:
+    """Keep when a travel button was last pressed (`pressed_lately`): its load can begin after the wait for it
+    gave up."""
+    client.travel_pressed_at = time.monotonic()
+
+
+def pressed_lately(client, seconds: float) -> bool:
+    """A travel button was pressed within `seconds`. A Recall from the Commons showed no zone change for its 25 s,
+    then its load began, and the run took the load for a door in the Commons (19:58)."""
+    return time.monotonic() - getattr(client, "travel_pressed_at", float("-inf")) <= seconds
+
+
 async def zone_changed(client, zone: str) -> bool:
     return await or_default(client.is_loading(), False) is True or await or_default(client.zone_name(), zone) != zone
 
@@ -123,6 +136,7 @@ async def go_to_the_commons(client) -> str | None:
         return "Go to The Commons is cooling down"
     zone = await client.zone_name()
     await click(client, HUB_BUTTON)
+    note_press(client)
     return None if await wait_for_zone_change(client, zone) else "the zone did not change after Go to The Commons"
 
 
@@ -137,6 +151,7 @@ async def recall(client) -> str | None:
         return "Recall is cooling down"
     zone = await client.zone_name()
     await click(client, RECALL_BUTTON)
+    note_press(client)
     if not await wait_for_zone_change(client, zone):
         return RECALL_NOT_REACHED
     return None if await zone_after_loading(client) not in (None, zone) else RECALL_NOT_REACHED
@@ -157,6 +172,7 @@ async def resume_instance(client) -> str | None:
         return RESUME_NOT_SHOWING
     zone = await client.zone_name()
     await click(client, RESUME_BUTTON)
+    note_press(client)
     if not await wait_for_zone_change(client, zone):
         return "the zone did not change after the dungeon's return button"
     landed = await zone_after_loading(client)
