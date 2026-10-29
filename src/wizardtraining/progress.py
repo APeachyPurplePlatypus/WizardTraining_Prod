@@ -424,6 +424,23 @@ def worth_pushing_on(health: float | None, distance_to_goal: float | None, *, st
             and (stalled or distance_to_goal <= GOAL_PUSH_DISTANCE))
 
 
+HOUSE_DOOR_DISTANCE = 1000.0
+GO_IN_FIRST_HEALTH_FRACTION = 0.6
+INTERIOR_PART = "/Interiors/"
+
+
+def worth_going_in_first(health: float | None, door_distance: float | None, goal_zone: str | None,
+                         dungeons: list[str] = ()) -> bool:
+    """The goal is in an interior that is not an instance (a house, a shop), its door (the quest arrow) is within
+    HOUSE_DOOR_DISTANCE, and the wizard has GO_IN_FIRST_HEALTH_FRACTION of its health: go in before refilling, and
+    refill after. Inside, nothing attacks; outside, the refill trip costs a Mark and a Recall (about 10 mana) and
+    minutes of wisp walking. At 830 of 1195 by H1's door under Triton Avenue, for a talk inside, the wizard went home
+    for health first (21:07). Instances keep the full refill: health does not come back inside them."""
+    return (health is not None and door_distance is not None and isinstance(goal_zone, str)
+            and INTERIOR_PART in goal_zone and not is_an_instance(goal_zone) and goal_zone not in dungeons
+            and door_distance <= HOUSE_DOOR_DISTANCE and health >= GO_IN_FIRST_HEALTH_FRACTION)
+
+
 def parked(parked_quests: dict[str, int], title: str | None, level, held: dict[str, str] | None = None) -> bool:
     """A quest parked while clearing a world (its fight lost with PARK_AFTER_STRATEGIES strategies) stays parked
     until the wizard is past the level it was parked at; a held one (`held`, title to reason) stays parked whatever

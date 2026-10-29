@@ -45,6 +45,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **A house or shop whose door is close is gone into before refilling** (`progress.worth_going_in_first`, `QuestLoop.distance_to_the_arrow`, `QuestLoop.refill_after_heavy_fight_turn`).
+  - **What:** after a heavy fight, or short in a zone where fights are heavy, with the goal in an interior that is not an instance and its door (the quest arrow) within 1,000, the wizard goes in at 60% health or more and refills after. Instances, dungeons and goals in streets keep the full refill.
+  - **Why:** the push-on rule counted only goals in the zone the wizard stood in. At 830 of 1195 by H1's door under Triton Avenue, for a talk inside, the wizard went home for health first: a Mark and a Recall (about 10 mana, with mana the bottleneck) and two minutes of wisp walking (21:07). The coordinator suggested the rule.
+  - **Verified:** offline (`tests/test_progress.py`).
+
 - **Mana is topped up where it is safe before setting off for a goal behind an instance door** (`progress.short_for_an_instance_goal`, `QuestLoop.out_into_a_heavy_zone_turn`).
   - **What:** in a zone without enemies, with the goal in an instance (named so, or behind a dungeon-entry box) and mana under 80%, which the door asks for, the wizard recharges there first.
   - **Why:** from the Commons at 67, then 52, then 47 of 98 mana, the wizard Recalled to Curfew!'s instance door, where the door rule sent it home for mana: about 10 mana a round trip in Mark and Recall (20:54 to 21:01).

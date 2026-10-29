@@ -387,6 +387,24 @@ class HeavyZoneTest(unittest.TestCase):
         self.assertFalse(short_for_a_heavy_zone(None, 3))
 
 
+class GoInFirstTest(unittest.TestCase):
+    house = "WizardCity/WC_Streets/WC_Triton_Underwater/Interiors/WC_Triton_Underwater_H1"
+
+    def test_a_house_whose_door_is_close_is_gone_into_before_refilling(self):
+        from wizardtraining.progress import worth_going_in_first
+        self.assertTrue(worth_going_in_first(830 / 1195, 900, self.house))
+        self.assertFalse(worth_going_in_first(500 / 1195, 900, self.house))
+        self.assertFalse(worth_going_in_first(830 / 1195, 3000, self.house))
+        self.assertFalse(worth_going_in_first(830 / 1195, None, self.house))
+
+    def test_not_for_an_instance_a_dungeon_or_a_street(self):
+        from wizardtraining.progress import worth_going_in_first
+        instance = "WizardCity/WC_Streets/WC_Triton_Underwater/Interiors/WC_Triton_Underwater_T1"
+        self.assertFalse(worth_going_in_first(0.9, 500, instance))
+        self.assertFalse(worth_going_in_first(0.9, 500, self.house, [self.house]))
+        self.assertFalse(worth_going_in_first(0.9, 500, "WizardCity/WC_Streets/WC_Triton"))
+
+
 class InstanceGoalManaTest(unittest.TestCase):
     def test_mana_is_topped_up_before_setting_off_for_an_instance_goal(self):
         from wizardtraining.progress import short_for_an_instance_goal

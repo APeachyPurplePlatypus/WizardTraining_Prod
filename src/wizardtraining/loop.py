@@ -52,7 +52,7 @@ from .movement import LOADING, KeysIgnored, Reroute, face, travel
 from .navigation import load_planner
 from .policy import LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, SpellTypePolicy, biggest_hits
 from .progress import (DUEL_BLOCKS_THE_WAY, DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY, ENEMY_NEAR_PATH, LimitReached, Limits, PATH_THREATS,
-                       PlannedRoute, RunRecord, StopRun, check_limits, leaves_world, health_to_travel, mana_for_a_fight, mana_to_travel, heavy_zone_on_the_way, short_for_a_heavy_zone, short_for_an_instance_goal, still_to_recharge, trapped_by, worth_marking, worth_recalling, dungeon_held, resume_in_time, RESUME_TRIP_SECONDS, on_a_refill_trip,
+                       PlannedRoute, RunRecord, StopRun, check_limits, leaves_world, health_to_travel, mana_for_a_fight, mana_to_travel, worth_going_in_first, heavy_zone_on_the_way, short_for_a_heavy_zone, short_for_an_instance_goal, still_to_recharge, trapped_by, worth_marking, worth_recalling, dungeon_held, resume_in_time, RESUME_TRIP_SECONDS, on_a_refill_trip,
                        PARK_AFTER_STRATEGIES, HEAVY_ZONE_FIGHTS, RECALL_MANA_NEEDED, RECHARGE_HEALTH_FRACTION, heavy_fight, parked, worth_pushing_on, short_before_entering, made_headway, GOAL_HEADWAY, STALLED_TRIPS_TO_PARK, forget_obstacles_near, OBSTACLE_FORGET_RADIUS,
                        nav_did_better, progressed, ready_to_recall, remember_obstacles, safe_to_stand, short_for_a_fight,
                        should_drink_potion, stalled, topped_up, travel_outcome, wanted_wisp,
@@ -414,6 +414,14 @@ class QuestLoop:
             self.record.refill_after_heavy_fight = False
             self.say_once("health", f"{state['health']} of {state['max_health']} health {after}, and the goal is "
                                     f"{distance:.0f} away and {why}: going on to it before refilling")
+            return None
+        quest = self.record.quest or {}
+        door = await self.distance_to_the_arrow()
+        if worth_going_in_first(fraction, door, quest.get("goal_zone"), self.record.dungeon_zones):
+            self.record.refill_after_heavy_fight = False
+            self.say_once("health", f"{state['health']} of {state['max_health']} health, and the goal is in "
+                                    f"{quest.get('goal_zone')}, a house or shop whose door is {door:.0f} away: going in "
+                                    "first, refilling after")
             return None
         if await self.safe_here():
             return await self.keep_looking_turn("health", state, await self.planner())
@@ -2088,6 +2096,13 @@ class QuestLoop:
         if self.record.marked_in == zone:
             self.record.marked_in, self.record.mark_tip = None, None
             self._mark_position = None
+
+    async def distance_to_the_arrow(self) -> float | None:
+        """How far the active quest's arrow is, wherever the goal is; None without an arrow."""
+        arrow = (self.record.quest or {}).get("arrow")
+        if not arrow:
+            return None
+        return flat_distance(await self.client.body.position(), XYZ(arrow["x"], arrow["y"], 0.0))
 
     async def distance_to_the_goal_here(self, zone: str) -> float | None:
         """How far the active quest's arrow is, when it points into this zone; None otherwise."""
