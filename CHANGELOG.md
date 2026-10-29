@@ -56,6 +56,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **The wizard moves on sooner after a battle** (`combat.battle_over`, `combat.wait_out_of_the_duel`, `combat.fight`, `gametravel.press_mark`, `QuestLoop.note_the_way_out_of_a_battle`, `progress.acted_after_battle`, `docs/lessons-learned.md`).
+  - **What:** the battle's end is confirmed 0.3 s after it reads over, not 1 s; the wizard is out of the duel as soon as the client stops reading in battle, at most 2 s, not after a flat 2 s; the client log read for the moves sent goes to a worker thread; Mark Location is done as soon as the Recall button names the new mark or mana was spent, at most 2 s. Each battle's end is followed in the event log by a `timing` event, the turns until the first move, each with its time.
+  - **Why:** over 26 won fights on 2026-10-28, the first move after the battle came 6 s after its end at the median and 9 to 24 s often, once 49 s; the operator: "it waits too long after a battle is fought to make a decision on what to do next".
+  - **Verified:** offline (the suite, with and without WizWalker); in the game: the timings after the next fights.
+
 - **No Recall when the goal is next door, no mount indoors, no refusal taken for a feature** (`progress.worth_recalling`, `QuestLoop.next_door`, `QuestLoop.gear_turn`, `opportunities.from_tip`).
   - **What:** a Recall toward the goal is skipped when the goal's zone is one door from here, by the zone links or the way the wizard came in; a mount is not worn in an interior or a dungeon, and the gear check comes again once the wizard is out; a tip box that refuses something ("You cannot ...") is not kept as an opportunity.
   - **Why:** in H1 under Triton Avenue, after "Way To His Heart" was handed in, the gear check tried to wear the broom, the mount being off indoors, and the game refused ("You cannot equip a mount in this area!"), which the opportunity store kept as a feature; then the wizard recalled to its mark in Triton Avenue and walked back through the door to the underwater zone, which H1's own door opened on (21:56 to 21:57).

@@ -63,7 +63,8 @@ IDLE_BOX_SEARCH_DEPTH = 9
 LEVELS_ABOVE_THE_CAPTION_SHOWN = 4
 FLEE_WORD = "flee"
 CONFIRMED = "confirmed"
-BATTLE_END_CONFIRM_SECONDS = 1.0
+BATTLE_END_CONFIRM_SECONDS = 0.3
+OUT_OF_THE_DUEL_POLL_SECONDS = 0.1
 DUEL_CIRCLE_EXIT_SECONDS = 2.0
 SCHOOL_NAMES = {2343174: "Fire", 72777: "Ice", 83375795: "Storm", 2448141: "Myth", 2330892: "Life",
                 78318724: "Death", 1027491821: "Balance", 2625203: "Star", 78483: "Sun", 2504141: "Moon",
@@ -119,10 +120,19 @@ async def wait_for_phase(client, wanted: set, timeout: float):
 
 
 async def battle_over(client) -> bool:
+    """The duel reads ended, and still does a moment later (BATTLE_END_CONFIRM_SECONDS)."""
     if await duel_phase(client) is not DuelPhase.ended:
         return False
     await asyncio.sleep(BATTLE_END_CONFIRM_SECONDS)
     return await duel_phase(client) is DuelPhase.ended
+
+
+async def wait_out_of_the_duel(client) -> None:
+    """Poll until the client no longer reads in battle, at most DUEL_CIRCLE_EXIT_SECONDS, instead of a flat wait:
+    after each won battle a fixed 2 s went by before anything else (2026-10-28)."""
+    deadline = time.monotonic() + DUEL_CIRCLE_EXIT_SECONDS
+    while time.monotonic() < deadline and await or_default(client.in_battle(), False) is True:
+        await asyncio.sleep(OUT_OF_THE_DUEL_POLL_SECONDS)
 
 
 async def wait_for_next_round(client, combat, round_number, timeout: float) -> str:
@@ -513,6 +523,6 @@ async def fight(client, policy: CombatPolicy, on_round=None) -> dict:
         else:
             result["stopped"] = "round limit reached; left for the operator"
     result["final_phase"] = plain(await duel_phase(client))
-    await asyncio.sleep(DUEL_CIRCLE_EXIT_SECONDS)
-    note_moves_sent(result["rounds"])
+    await wait_out_of_the_duel(client)
+    asyncio.get_running_loop().run_in_executor(None, note_moves_sent, result["rounds"])
     return result

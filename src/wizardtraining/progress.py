@@ -344,6 +344,16 @@ def short_for_a_heavy_zone(health: float | None, heavy_fights_there: int) -> boo
     return health is not None and heavy_fights_there >= HEAVY_ZONE_FIGHTS and health < RECHARGE_HEALTH_FRACTION
 
 
+NOT_A_MOVE = ("battle", "settled after arriving", "waited for loading", "dialog", "deck", "gear",
+              "pressed OK", "could not equip")
+
+
+def acted_after_battle(did: str | None) -> bool:
+    """A turn that moved the wizard or sent it somewhere (a walk, a travel button, a door), as opposed to settling,
+    reading a dialog or checking gear: what the timeline after a battle waits for."""
+    return isinstance(did, str) and not did.startswith(NOT_A_MOVE)
+
+
 def short_for_an_instance_goal(goal_zone: str | None, mana: float | None, dungeons: list[str] = ()) -> bool:
     """The goal is in an instance (`is_an_instance`, or a zone behind a dungeon-entry box) and mana is under
     RECHARGE_MANA_FRACTION, which its door asks for (`short_before_entering`): top up where it is safe before setting

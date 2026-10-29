@@ -52,7 +52,7 @@ from .movement import LOADING, KeysIgnored, Reroute, face, travel
 from .navigation import load_planner
 from .policy import LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, SpellTypePolicy, biggest_hits
 from .progress import (DUEL_BLOCKS_THE_WAY, DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY, ENEMY_NEAR_PATH, LimitReached, Limits, PATH_THREATS,
-                       PlannedRoute, RunRecord, StopRun, check_limits, leaves_world, health_to_travel, mana_for_a_fight, mana_to_travel, MARK_AT_DOOR_RADIUS, walk_to_mark_at_the_door, worth_going_in_first, heavy_zone_on_the_way, short_for_a_heavy_zone, short_for_an_instance_goal, still_to_recharge, trapped_by, worth_marking, worth_recalling, dungeon_held, resume_in_time, RESUME_TRIP_SECONDS, on_a_refill_trip,
+                       PlannedRoute, RunRecord, StopRun, check_limits, leaves_world, health_to_travel, mana_for_a_fight, mana_to_travel, MARK_AT_DOOR_RADIUS, acted_after_battle, walk_to_mark_at_the_door, worth_going_in_first, heavy_zone_on_the_way, short_for_a_heavy_zone, short_for_an_instance_goal, still_to_recharge, trapped_by, worth_marking, worth_recalling, dungeon_held, resume_in_time, RESUME_TRIP_SECONDS, on_a_refill_trip,
                        PARK_AFTER_STRATEGIES, HEAVY_ZONE_FIGHTS, RECALL_MANA_NEEDED, RECHARGE_HEALTH_FRACTION, heavy_fight, parked, worth_pushing_on, short_before_entering, made_headway, GOAL_HEADWAY, STALLED_TRIPS_TO_PARK, forget_obstacles_near, OBSTACLE_FORGET_RADIUS,
                        nav_did_better, progressed, ready_to_recall, remember_obstacles, safe_to_stand, short_for_a_fight,
                        should_drink_potion, stalled, topped_up, travel_outcome, wanted_wisp,
@@ -109,6 +109,7 @@ ENTRANCE_ARRIVE_RADIUS = 80.0
 ENTRANCE_AT_ARROW_RADIUS = 300.0
 LATE_TRAVEL_LOAD_SECONDS = 90.0
 RECALL_FIGHT_SECONDS = 15.0
+AFTER_BATTLE_TURNS_TIMED = 6
 INTERACT_PROMPT = "interact prompt"
 LOADING_WAIT_SECONDS = 3.0
 DOOR_WAIT_SECONDS = 15.0
@@ -233,6 +234,7 @@ class QuestLoop:
         self._declined_dungeons: set[str | None] = set()
         self._went_home_for_wisps: set[str] = set()
         self._hud_read = False
+        self._after_battle: list | None = None
         self._recalled_at: float | None = None
         self._journal_zones: tuple[frozenset, dict] | None = None
         self._finder_givers: dict[tuple, int] = {}
@@ -326,6 +328,7 @@ class QuestLoop:
             started = time.monotonic()
             turn = await self.checked_turn(state)
             turn_seconds = time.monotonic() - started
+            hooks_started = time.monotonic()
             quest = self.record.quest or {}
             turn.update(level=state["level"], health=state["health"], zone=state["zone"], position=plain_xy(state),
                         goal=(quest.get("goal"), quest.get("goal_zone")), arrow=plain_xy({"position": quest.get("arrow")}))
@@ -335,10 +338,30 @@ class QuestLoop:
             self.learn_walk_speed(turn, turn_seconds)
             await self.check_spells(state)
             await self.check_experience(turn)
+            self.note_the_way_out_of_a_battle(turn, started, turn_seconds, time.monotonic() - hooks_started)
             log.info("turn %d: %s (progress=%s, level=%s, health=%s, zone=%s, goal=%s %s)", len(self.record.turns),
                      turn["did"], turn["progress"], state["level"], health_text(state), state["zone"], quest.get("goal"),
                      quest.get("goal_zone") or "")
             self.note_changes(state)
+
+    def note_the_way_out_of_a_battle(self, turn: dict, started: float, seconds: float, hooks: float) -> None:
+        """After a won battle, time each turn until the first that moves the wizard (`progress.acted_after_battle`)
+        and log the timeline from the battle's end: the operator, 2026-10-29: "it waits too long after a battle is
+        fought to make a decision on what to do next"."""
+        if turn.get("did") == "battle":
+            self._after_battle = [] if turn.get("progress") else None
+            return
+        if self._after_battle is None or self._battle_ended_at is None:
+            return
+        self._after_battle.append((round(started - self._battle_ended_at, 1), turn.get("did"), round(seconds, 1),
+                                   round(hooks, 1)))
+        if acted_after_battle(turn.get("did")) or len(self._after_battle) >= AFTER_BATTLE_TURNS_TIMED:
+            steps = "; ".join(f"+{at:.1f} s {did} ({took:.1f} s, then {checks:.1f} s of checks)"
+                              for at, did, took, checks in self._after_battle)
+            first = self._after_battle[-1]
+            self.events.emit("timing", f"after the battle: {steps}; the first move came {first[0] + first[2]:.1f} s "
+                                       f"after the battle ended", gap=first[0] + first[2])
+            self._after_battle = None
 
     async def out_into_a_heavy_zone_turn(self, state: dict, fraction: float | None) -> dict | None:
         """In a dungeon or instance (not a tower floor) whose goal is out in a zone where fights are heavy

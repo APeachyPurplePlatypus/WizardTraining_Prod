@@ -30,6 +30,7 @@ RECALL_TIMER = [*RECALL_BUTTON, "txtRecallTimer"]
 TIP_OFFSET = 520
 NO_MARK_TIP = "No Mark Set"
 MARK_SETTLE_SECONDS = 2.0
+MARK_POLL_SECONDS = 0.1
 MARK_RETRY_SECONDS = 3.0
 NO_MARK = "the Recall button still shows no mark after Mark Location"
 ZONE_CHANGE_WAIT_SECONDS = 25.0
@@ -91,8 +92,13 @@ async def press_mark(client) -> str | None:
     tip_before, mana_before = await tip_of(client, RECALL_BUTTON), await attempt(client.stats.current_mana())
     mark_shown, mark_tip = await showing(client, MARK_BUTTON), await tip_of(client, MARK_BUTTON)
     await click(client, MARK_BUTTON)
-    await asyncio.sleep(MARK_SETTLE_SECONDS)
-    tip_after, mana_after = await tip_of(client, RECALL_BUTTON), await attempt(client.stats.current_mana())
+    deadline = time.monotonic() + MARK_SETTLE_SECONDS
+    while True:
+        await asyncio.sleep(MARK_POLL_SECONDS)
+        tip_after, mana_after = await tip_of(client, RECALL_BUTTON), await attempt(client.stats.current_mana())
+        spent = isinstance(mana_before, int) and isinstance(mana_after, int) and mana_after < mana_before
+        if (tip_after and tip_after != NO_MARK_TIP and (tip_after != tip_before or spent)) or time.monotonic() >= deadline:
+            break
     paid = isinstance(mana_before, int) and isinstance(mana_after, int) and mana_after < mana_before
     if tip_after and tip_after != NO_MARK_TIP and (tip_after != tip_before or paid):
         return None

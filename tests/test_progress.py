@@ -421,6 +421,16 @@ class GoInFirstTest(unittest.TestCase):
         self.assertFalse(worth_going_in_first(0.9, 500, "WizardCity/WC_Streets/WC_Triton"))
 
 
+class AfterBattleTest(unittest.TestCase):
+    def test_a_move_ends_the_timeline_and_bookkeeping_does_not(self):
+        from wizardtraining.progress import acted_after_battle
+        for did in ("went to the Commons for a refill", "travel to waypoint", "walk to a health wisp",
+                    "recalled toward the goal", "entered with X at the interact prompt"):
+            self.assertTrue(acted_after_battle(did), did)
+        for did in ("battle", "settled after arriving", "dialog", "deck edit stopped", None):
+            self.assertFalse(acted_after_battle(did), did)
+
+
 class InstanceGoalManaTest(unittest.TestCase):
     def test_mana_is_topped_up_before_setting_off_for_an_instance_goal(self):
         from wizardtraining.progress import short_for_an_instance_goal

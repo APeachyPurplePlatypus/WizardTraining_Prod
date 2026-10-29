@@ -47,6 +47,11 @@ These come from one character's first unattended play, level 1 to level 5 in Wiz
 - **A window's visible flag is its own.** `is_visible()` does not look at parents: hidden battle windows still say visible outside battle. WizWalker's `WindowFlags.disabled` (bit 31) is set on the action buttons while they cannot be used.
 - **Results:** after the spell-type fix, every automated battle (about 12) was won, most in 1 or 2 rounds, with starter cards against Skeletal Pirates, Lost Souls and Dark Fairies.
 
+## Acting promptly after battle
+
+- **Wait for the signal, not for a time.** After each won battle the framework slept a flat second to confirm the end, then a flat two for the duel circle, read the game's 4 MB client log for diagnostics, and slept two more after Mark Location: from the battle's end to the first move took 6 s at the median and 9 to 24 s often over 26 fights (2026-10-28), and the operator saw it: "it waits too long after a battle is fought". Poll for the thing waited for (the battle reads over, the wizard out of the duel, the Recall button naming the new mark), with a short cap, and do diagnostics off the critical path.
+- **Time it.** Each battle's end is followed in the log by a timeline of the turns until the first move (a `timing` event), so the gap is measured, not guessed.
+
 ## Discarding to dig for cards
 
 - **A card that will not help soon is a slot for a better draw.** Right-clicking a card in hand during the wizard's own planning discards it; the hand fills again from the deck at the next round. With a 14-card deck and a hand of 7, a stun held while the need is damage, an attack every enemy resists, or a second heal while health is safe keeps the wizard passing or casting wands; discarded, the slot can bring an attack it can use (the operator, 2026-10-29).
