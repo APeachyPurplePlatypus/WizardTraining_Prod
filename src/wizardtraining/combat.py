@@ -27,8 +27,9 @@ from wizwalker.utils import get_wiz_install
 from .connection import BATTLE_LOG_TAIL_BYTES, client_log_tail, lost_connection, moves_by_round
 from .geometry import flat_distance
 from .movement import KeysIgnored, face_and_step
+from .discards import cards_to_discard, deck_left
 from .policy import (UNIVERSAL, Card, Cast, CombatPolicy, Combatant, DamageModifier, Enchant, Flee, Pass, RoundView,
-                     problem_with)
+                     from_an_item, problem_with)
 from .reports import plain
 from .state import attempt
 from .screen import or_default, visible_names_under, window_saying
@@ -45,6 +46,7 @@ CARDS_DRAW_SECONDS = 0.5
 EMPTY_HAND_READS = 6
 PAUSE_BETWEEN_CAST_CLICKS_SECONDS = 0.5
 CAST_TAKES_WITHIN_SECONDS = 3.0
+DISCARD_SETTLE_SECONDS = 0.5
 FLEE_CONFIRM_WAIT_SECONDS = 1.0
 PLANNING_PHASE = ["WorldView", "PlanningPhase"]
 PLANNING = [*PLANNING_PHASE, "Alignment", "PlanningPhaseSubWindow"]
@@ -278,12 +280,17 @@ async def play_round(combat, policy: CombatPolicy, can_flee: bool = True) -> dic
         entry["action"] = (f"pass: the hand read empty; on top: {await visible_children(combat.client, [])}, in the "
                            f"world view: {await visible_children(combat.client, ['WorldView'])}")
         return entry
+    if discarded := await discard_useless_cards(combat, policy, view, cards):
+        entry["discarded"] = discarded
+        view, me, cards, enemies = await read_hand(combat)
+        view = replace(view, can_flee=can_flee and await flee_button_enabled(combat.client))
     choice = policy.choose(view)
     for _ in range(MAX_ENCHANT_TRIES):
         if not isinstance(choice, Enchant) or problem_with(choice, view):
             break
         onto = view.cards[choice.onto].name
         await cards[choice.card].cast(cards[choice.onto], sleep_time=PAUSE_BETWEEN_CAST_CLICKS_SECONDS)
+        note_used_from_the_deck(policy, view.cards[choice.card])
         view, me, cards, enemies = await read_hand(combat)
         view = replace(view, can_flee=can_flee and await flee_button_enabled(combat.client))
         took = any(card.enchanted for card in view.cards)
@@ -305,6 +312,7 @@ async def play_round(combat, policy: CombatPolicy, can_flee: bool = True) -> dic
     else:
         await cards[choice.card].cast(cast_target(choice, me, enemies), sleep_time=PAUSE_BETWEEN_CAST_CLICKS_SECONDS)
         card = view.cards[choice.card]
+        note_used_from_the_deck(policy, card)
         target = f"{choice.target} {view.enemies[choice.enemy].name}" if choice.target == "enemy" else choice.target
         entry["action"] = f"cast {card.name}{f' ({card.school})' if card.school else ''} on {target}"
         if choice.reason:
@@ -315,6 +323,31 @@ async def play_round(combat, policy: CombatPolicy, can_flee: bool = True) -> dic
             entry["action"] += " (cast again: the first did not take)"
     entry["acting_since"] = acting_since.isoformat(timespec="seconds")
     return entry
+
+
+async def discard_useless_cards(combat, policy, view, cards) -> list[str]:
+    """Discard, by right-click, the cards in hand `discards.cards_to_discard` finds of no use soon, so the next
+    round's draw can bring better ones (the operator, 2026-10-29 02:01 UTC: "u can discard cards to find cards you
+    really need to use"). The deck's size comes from the policy (`deck_size`, set from the deck read in the zone);
+    treasure cards are never discarded. Says what was discarded and why; empty when nothing was."""
+    deck_size = getattr(policy, "deck_size", None)
+    if deck_size is None:
+        return []
+    treasure = frozenset([index for index, card in enumerate(cards) if await attempt(card.is_treasure_card()) is True])
+    left = deck_left(deck_size, view.cards, getattr(policy, "used_from_the_deck", 0))
+    found = cards_to_discard(view, deck_left=left, treasure=treasure, hit_seen=getattr(policy, "hit_seen", None))
+    done = []
+    for discard in sorted(found, key=lambda discard: discard.card, reverse=True):
+        await cards[discard.card].discard(sleep_time=DISCARD_SETTLE_SECONDS)
+        note_used_from_the_deck(policy, view.cards[discard.card])
+        done.append(f"{discard.reason} ({left} cards were left in the deck)")
+    return done
+
+
+def note_used_from_the_deck(policy, card) -> None:
+    """Count a card from the deck cast or discarded this battle, for `discards.deck_left`; item cards are not."""
+    if hasattr(policy, "used_from_the_deck") and not from_an_item(card):
+        policy.used_from_the_deck += 1
 
 
 def note_moves_sent(rounds: list[dict]) -> None:

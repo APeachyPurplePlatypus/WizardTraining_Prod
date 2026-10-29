@@ -185,6 +185,8 @@ class SpellTypePolicy:
         self.strategy_for = strategy_for
         self.essence_from = essence_from
         self.hit_seen = hit_seen
+        self.deck_size: int | None = None
+        self.used_from_the_deck = 0
         self._strategy_chosen = False
         self._extracted = False
         self._enchant_refused: set[str] = set()
@@ -192,6 +194,7 @@ class SpellTypePolicy:
         self._no_effect: set[str] = set()
 
     def new_fight(self) -> None:
+        self.used_from_the_deck = 0
         self._strategy_chosen = False
         self._extracted = False
         self._enchant_refused = set()

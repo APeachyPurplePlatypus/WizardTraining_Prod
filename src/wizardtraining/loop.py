@@ -2877,6 +2877,8 @@ class QuestLoop:
         finally:
             await close_book(self.client)
         _, names = await self.deck_spells_of(view)
+        if hasattr(self.combat_policy, "deck_size"):
+            self.combat_policy.deck_size = view.size
         if view.cards == before.cards:
             self.events.emit("deck", f"{view.name}, {view.size} cards, is as wanted: {self.deck_text(view, names)}")
             return None
