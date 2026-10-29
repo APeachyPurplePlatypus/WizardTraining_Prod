@@ -50,6 +50,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **An interior never entered counts as a door from the street of its place** (`travelplan.with_its_street`, `QuestLoop.travel_plan_turn`).
+  - **What:** for the travel plan, a goal in an interior the zone links do not know yet ("<place>/Interiors/<room>") is linked to the one known street of the same place, so a Recall to a mark in that street, or Go Home, can be weighed against the walk.
+  - **Why:** "Way To His Heart"'s goal was a house under Triton Avenue's underwater zone that the wizard had never entered; with no link to it, the plan read "walk ?, recall ?" and the wizard walked from the Commons through three zones instead of Recalling to its mark in the underwater zone (21:51, 21:54). The coordinator asked why.
+  - **Verified:** offline (`tests/test_travelplan.py`).
+
 - **The reroute's enemy tracks are read on the event loop's thread** (`QuestLoop.rerouter`).
   - **What:** the hazards for a reroute, with each enemy's track, are built before the A* search goes to the worker thread; only `planner.reroute` runs there.
   - **Why:** the worker thread read `MotionTracker`'s sample deques while the walking watcher added to them on the event loop, which can raise "deque mutated during iteration" (found reviewing the 100 Hz steering before its first run).

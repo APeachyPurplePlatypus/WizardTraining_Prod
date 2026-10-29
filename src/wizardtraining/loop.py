@@ -70,7 +70,7 @@ from .strategies import (COMBAT_STRATEGIES, CROWD_STRATEGIES, NO_CLOSER_SECONDS,
 from .travelplan import (GO_HOME, HUBS, RECALL, TRAVEL_MANA_RESERVE, WALK, TravelCosts, choose_travel, link_zones,
                          zone_hops, next_zone_on_the_way,
                          spare_mana,
-                         worth_a_way_back_mark, worth_going_home_for_wisps)
+                         worth_a_way_back_mark, worth_going_home_for_wisps, with_its_street)
 from .screen import or_default, prompt_action, prompt_is_not_a_doors, prompt_offers_talk, visible_names_under
 from .opportunities import (MEASURES_KEPT, USED_HUD_BUTTONS, describe, from_dialog, from_tip, measured_patterns, note,
                             now_text, unused_buttons)
@@ -2284,7 +2284,7 @@ class QuestLoop:
                                    or await recall_tip(self.client) != self.record.mark_tip):
             marked = None
         choice = choose_travel(here=here, goal_zone=goal_zone, door_distance=door_distance,
-                               links=self.record.zone_links,
+                               links=with_its_street(self.record.zone_links, goal_zone),
                                hub=self.record.hubs.get(world_of(here)) or HUBS.get(world_of(here)), marked_in=marked,
                                mana=state["mana"], costs=self.travel_costs,
                                go_home_ready=await go_home_ready(self.client),

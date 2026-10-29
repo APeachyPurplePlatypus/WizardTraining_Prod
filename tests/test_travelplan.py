@@ -23,6 +23,33 @@ def choose(here, goal_zone, door_distance, marked_in=None, mana=80, go_home_read
                          recall_ready=recall_ready)
 
 
+class InteriorNeverEnteredTest(unittest.TestCase):
+    street = "WizardCity/WC_Streets/WC_Triton_Underwater/WC_Triton_Underwater"
+    house = "WizardCity/WC_Streets/WC_Triton_Underwater/Interiors/WC_Triton_Underwater_H1"
+    hub = "WizardCity/WC_Hub"
+
+    def test_an_interior_never_entered_is_a_door_from_the_street_of_its_place(self):
+        from wizardtraining.travelplan import with_its_street
+        links = {}
+        link_zones(links, self.hub, "WizardCity/WC_Streets/WC_Triton")
+        link_zones(links, "WizardCity/WC_Streets/WC_Triton", self.street)
+        self.assertIsNone(zone_hops(links, self.street, self.house))
+        augmented = with_its_street(links, self.house)
+        self.assertEqual(zone_hops(augmented, self.street, self.house), 1)
+        self.assertEqual(zone_hops(augmented, self.hub, self.house), 3)
+        self.assertIsNone(zone_hops(links, self.street, self.house))
+
+    def test_a_recall_to_the_street_beats_an_unknown_walk(self):
+        from wizardtraining.travelplan import with_its_street
+        links = {}
+        link_zones(links, self.hub, "WizardCity/WC_Streets/WC_Triton")
+        link_zones(links, "WizardCity/WC_Streets/WC_Triton", self.street)
+        choice = choose_travel(here=self.hub, goal_zone=self.house, door_distance=2000.0,
+                               links=with_its_street(links, self.house), hub=self.hub, marked_in=self.street, mana=98,
+                               costs=TravelCosts(), go_home_ready=True, recall_ready=True)
+        self.assertEqual(choice.way, RECALL)
+
+
 class TravelPlanTest(unittest.TestCase):
     def test_zones_are_linked_both_ways_and_counted_in_doors(self):
         links = pyramid()

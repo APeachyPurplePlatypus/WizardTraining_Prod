@@ -83,6 +83,28 @@ def zone_hops(links: dict[str, list[str]], start: str, goal: str) -> int | None:
     return None
 
 
+INTERIORS = "/Interiors/"
+
+
+def with_its_street(links: dict[str, list[str]], zone: str | None) -> dict[str, list[str]]:
+    """`links`, with an interior no walk has entered yet ("<place>/Interiors/<room>") linked to the one known street
+    that shares its place ("<place>/<street>"), its likely door: "Way To His Heart"'s goal, a house under Triton
+    Avenue's underwater zone never entered, left the travel plan without a way, so the wizard walked from the Commons
+    instead of Recalling to the mark in that zone (21:51, 21:54). Unchanged when the zone is known or no single such
+    street is."""
+    if not isinstance(zone, str) or INTERIORS not in zone or zone in links:
+        return links
+    place = zone.split(INTERIORS, 1)[0] + "/"
+    streets = {known for known in links if known.startswith(place) and INTERIORS not in known}
+    if len(streets) != 1:
+        return links
+    street = streets.pop()
+    augmented = {known: list(others) for known, others in links.items()}
+    augmented.setdefault(street, []).append(zone)
+    augmented[zone] = [street]
+    return augmented
+
+
 def spare_mana(mana) -> bool:
     """Mana for a travel button with TRAVEL_MANA_RESERVE left over for fights (two or three heals' worth)."""
     return isinstance(mana, int) and not isinstance(mana, bool) and mana >= TRAVEL_MANA_RESERVE + TRAVEL_MANA_COST
