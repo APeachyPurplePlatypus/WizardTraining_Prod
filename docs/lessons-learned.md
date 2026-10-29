@@ -81,6 +81,9 @@ These come from one character's first unattended play, level 1 to level 5 in Wiz
 
 - **The Endorse Wizard window held the keyboard** after a game restart: A, D and W did nothing. The loop now stops with that diagnosis (`movement.KeysIgnored`) when the first A tap changes nothing while it should be free to move. It answers the window before each turn: its buttons are `MainLayout/FriendlyWindow/FriendlyButton`, `KnowledgeableWindow/KnowledgeableButton` (shown as "Savvy") and `HelpfulWindow/HelpfulButton`, and `NameText` holds the other player's name.
 
+- **Single-button game boxes can open over a battle.** The "Quest Friend Finder" tip did, and took every click, so no card reached the fight for three minutes; any game box whose only button is OK is now closed with it (the operator: "there is only one answer, so hit okay").
+- **The game offers help from other players: the Quest Friend Finder.** Per its tip, the HUD button asks the friendly players in the world to join you, and those who accept are grouped and teleported to you. It may help with what is too hard alone: a dungeon's bosses (Sunken City), or a zone where every fight costs most of the wizard's health (Triton's underwater zone). The operator, 2026-10-29: "you might be able to use that in the future". It brings other players in, so it is not pressed without the operator's approval; its button and how a group plays (other players' turns, sharing the fight) are still to be read.
+
 ## Screenshots
 
 - **They do not work yet, and are not needed often.** GDI `PrintWindow` returns a blank client area for this DirectX client, and an F12 sent as a window message saved nothing. Memory reads and the UI window tree answered every question so far.
