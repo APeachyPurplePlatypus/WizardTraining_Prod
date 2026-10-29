@@ -1,23 +1,18 @@
 ## What
 
-<!-- The change, in a sentence or two. -->
+<!-- The change to the guidance, in a sentence or two. -->
 
 ## Why
 
-<!-- The problem it solves or the reason for it. -->
+<!-- What happened in play, or in building a bot, that this lesson or rule comes from. -->
 
-## How it was tested
+## Seen in the game
 
-- [ ] `python -m unittest discover -s tests` passes
-- [ ] `python -m wizardtraining probe` against the game (if game code changed)
-- [ ] A short, bounded `play` run (if movement, quests, dialogs or combat changed)
-
-## Not verified
-
-<!-- What this change has not been tried against, so the next person knows. -->
+<!-- What was observed or measured, when, and what is still unverified. -->
 
 ## Checklist
 
-- [ ] Entry under "Unreleased" in `CHANGELOG.md`, with its rationale
-- [ ] No reports, screenshots, dialog text or personal data committed
-- [ ] Keeps the rules in the README: keyboard-only movement, no teleport, main quests by default, bounded runs
+- [ ] Entry under "Unreleased" in `CHANGELOG.md`, with its reason
+- [ ] Useful without any particular codebase: no module or function names, no tuned constants presented as settings
+- [ ] No paths from your own machine, no reports, screenshots, dialog text or other players' names
+- [ ] Consistent with `docs/safety.md`, or the safety change is called out above

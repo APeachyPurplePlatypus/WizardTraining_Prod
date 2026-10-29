@@ -1,79 +1,134 @@
 # Lessons learned
 
-These come from one character's first unattended play, level 1 to level 5 in Wizard City, on 2026-10-26, and from later runs; each run's findings are also summed up in [retros](retros/), the latest [level 10 to 15](retros/level-10-to-15.md). The code was a set of prototype scripts at the time; this framework is those scripts restructured. Each lesson gives what happened, what it taught, and where the fix lives now.
+These come from one character's unattended play from level 1 to 15, in Wizard City and Krokotopia, from 2026-10-26 on. An operator supervised it, and the agent that built and ran it changed it after every surprise. Each lesson says what happened, what it taught, and what to try. Each run's findings are summed up in the [retros](retros/), the latest [level 10 to 15](retros/level-10-to-15.md).
+
+The numbers are from one character on one game build. Use them as a scale, not as settings, and measure your own.
 
 ## Reading the game
 
-- **Hooks are patches to the game.** A run stopped with Ctrl+C while its output was piped through another program died before cleanup. Every later hook attempt failed with `PatternFailed` until the game was restarted. Now `session.attached()` always removes hooks, and the STOP file is the way to stop a run.
-- **Install only what you read.** The player, player stats, client and root-window hooks are enough for state, and the quest hook for the arrow. `activate_all_hooks` would add the movement/teleport hook, which nothing here needs.
-- **The quest arrow lags behind its hook.** Right after hooking, or while no quest is active, reading it fails with `AddressOutOfRange`. `quests.read_quest_arrow` retries for a few seconds.
-- **`QuestData.mainline()` separates main quests from side quests.** It was true for every main quest seen and false for "Quest Finder" and side quests.
-- **Quest and goal names are language keys** (`QuestTitle_...`, `WizardQuestGoals_TalkNPC`), not display text.
-- **Battle readings can lie.** `in_battle()` and `duel_phase()` sometimes read "not in battle" or `ended` mid-battle, because a failed duel lookup is reported as `ended`. The end of a battle is now confirmed with two readings 1 s apart.
-- **Enemies only show up close by.** Distant entities are "StandIn" placeholders without NPC data. The Deimos test (the `NPCBehavior` flag at offset 288) works once they load in full.
-- **Entity addresses are reused,** notably after zone changes. A stale classification once made a friendly position look like a ghost at the wizard's feet, causing endless step-aways. Classifications are now keyed by address and name, and cleared per zone.
+- **Hooks are patches to the game client.** A run killed while its output was piped through another program died before it could remove its hooks. Every later attempt to hook failed until the game was restarted. Always remove hooks on the way out, and give the bot a stop signal it checks often, such as a file it looks for, instead of killing it.
+- **Install only the hooks you read from.** Player, stats, client, root window and the quest arrow were enough for play, plus the mouseless cursor and render context for clicks. Anything that can move or teleport the character isn't needed and shouldn't be installed.
+- **The quest arrow lags behind its hook.** Right after hooking, or while no quest is active, reading it fails for a few seconds. Retry briefly before deciding there's no arrow.
+- **Main quests can be told from side quests.** The quest data carries a main-line flag. It was set on every main quest seen, and not on side quests or on "Quest Finder".
+- **Quest, goal and enemy names are language keys,** not display text. The game's locale files turn them into the words a player sees.
+- **Battle readings can lie.** "Not in battle" or "ended" sometimes read mid-battle, because a failed duel lookup can be reported as ended. Confirm a battle's end with two readings a second apart.
+- **Enemies only show their details close by.** Distant entities are placeholders without NPC data. Classify them once they load in full.
+- **Entity addresses get reused,** especially after zone changes. A stale classification once made a friendly NPC look like a ghost at the wizard's feet, and the wizard stepped away from it forever. Key what you know about an entity by more than its address, and clear it on each zone change.
 
 ## Moving
 
-- **Keys go to the window by message,** so the game window does not need focus. WizWalker's `send_key` always sends the key-up, even when cancelled.
-- **Q is not strafe.** It opened the quest book, which hid the NPC prompt until it was closed. Q and E are not allowed keys.
-- **Turning is learned.** A first A tap measures which way A turns and how fast (about 2.2 to 2.7 rad/s), and later turns are sized from that. Walking speed is about 600 units/s.
-- **Stop-and-go walking walked into mobs.** Blind 0.6 s steps with scans in between were the problem; sensing was fine (an enemy scan takes about 31 ms). Holding W continuously under a 20 Hz watcher fixed it: 5,054 units in 9.1 s with no unwanted battles.
-- **A watcher that fights the planner stands still.** Stopping for every enemy near the path, including ones the route had already planned around, produced 99 immobile stops in a row. `progress.PlannedRoute` now stops only for new enemies or ones that came closer.
-- **Unbounded planning stalls.** A* over the walk grid in a large interior expanded up to 40,000 nodes. Planning now gives up after 8,000 nodes or 2 s and falls back to the next method.
-- **Walk data:** in Unicorn Way, zone.nav had 1,079 waypoints on a 480-unit grid over walkable ground. Deimos's collision walk grid matched live ground heights to within 0.1 units and planned in 0.1 to 0.4 s.
-- **Standing still while planning gets the wizard caught.** In Cyclops Lane each turn stood still 4 to 6 seconds before its route was ready, and the patrolling Trolls and Cyclopes walked into it. Profiling put 99% of a nav route's time in one check comparing every shortcut sample with all 1,141 waypoints; bucketing the waypoints made a route take under 0.25 s.
-- **Patrol paths are not enemy paths.** The Commons, Ravenwood, the Shopping District and Olde Town have patrol paths for their friendly NPCs, and General Akilles' tower has none. Whether a place is safe is told by the enemies loaded, not by the zone files.
-- **Walk data can be wrong.** In the Commons, a straight line that Deimos's walk grid and `straight_path_walkable` both call clear was blocked in the game. Every route method aimed at the same spot until the run gave up. The wizard now records where it gets blocked and plans around those points (found by the framework's first smoke run, 2026-10-26).
-- **There is no safe-zone flag** in the collision data. Spawn and patrol data exist (spawnData.xml, pathData.xml) but need extra tools to decode. Instead, routes cost more near the enemies currently seen, and merged legs keep clear of them.
+- **Keys can go to the game window by message,** so the window doesn't need focus. Make sure every key-down gets its key-up, even when the action is cancelled.
+- **Q is not strafe.** It opens the quest book, which then hides the NPC interact prompt until it's closed. Keep an explicit list of allowed keys, and refuse everything else.
+- **Turning has to be learned.** Measure which way a turn key turns and how fast before relying on it (about 2.2 to 2.7 rad/s here). Walking speed was about 600 units/s, and much faster on a mount.
+- **Stop-and-go walking walks into enemies.** Blind steps with scans in between were the problem, not slow sensing: an enemy scan took about 31 ms. Holding forward continuously under a fast watcher fixed it, with 5,054 units in 9 seconds and no unwanted battles.
+- **A watcher that fights the planner stands still.** Stopping for every enemy near the path, including ones the route already planned around, produced 99 stops in a row. Stop only for new enemies, or ones that came closer than the plan allowed.
+- **Bound every search.** A* over a large interior's walk grid once expanded 40,000 nodes. Cap the nodes and the time, then fall back to the next method.
+- **Standing still to plan gets the wizard caught.** In Cyclops Lane each turn stood still 4 to 6 seconds before its route was ready, and patrols walked into it. One check comparing every sample with every waypoint took 99% of that time; indexing the waypoints spatially brought a route under 0.25 s. Profile before guessing.
+- **Walk data can be wrong.** A straight line the collision data called clear was blocked in the game, and every route method aimed at the same spot until the run gave up. Record where the character actually gets blocked, and plan around those points from then on.
+- **Some ramps and stairs are missing from the collision data.** A raised terrace then reads as its own walkable piece with no way onto it, though players walk up. The game's nav graph links the levels, but its waypoints can be far apart. Walk by the collision data to the foot of the ramp, climb the nav graph's short legs to the top, then plan again from there. This applies to every walk, whatever its target.
+- **There is no safe-zone flag.** Patrol paths exist for friendly NPCs too (the Commons and Olde Town have them), and an enemy tower had none. Whether a place is safe is told by the enemies loaded right now, not by the zone files.
+
+## Steering
+
+From walks with a mount, with crowds of patrols, and with the operator's own work on steering (2026-10-28 and 29):
+
+- **Steer in a closed loop.** Read position and heading on every tick, and choose the keys from what is read. Timed taps run blind: while a tap sleeps, a walking or mounted character covers 50 to 100 units it doesn't see.
+- **Corner by looking ahead.** Aim at a point that slides ahead along the path, its distance growing with the speed. Hold forward through bends with a turn key at the same time, instead of stopping and turning in place at every corner.
+- **Brake from the measured speed, and size arrival to it.** Measure speed from the change in position, not from a constant: a mount, a slow or a fast zone changes it. Release forward a little before the target, by that speed. Never ask for an arrival circle smaller than one check can carry the character past. A wisp walk aiming within 10 units, with a broom mount worn, went back and forth around the wisp for three full minutes.
+- **Mind the turning circle.** When a close target sits inside the character's minimum turning circle (speed divided by turn rate), holding forward and a turn key only orbits it. Drop forward for a moment until the target is outside the circle, then go on.
+- **Chase moving targets live.** A wisp or an enemy walked to by a snapshot of its position is walked to where it used to be. Re-read its position as you go, lead it a little by its velocity, and end the chase when it disappears.
+- **Keep an oscillation guard as a backstop.** When the target keeps turning up behind the character on the way in, it's as near as it will get. Accept arrival, or give up in seconds, not minutes.
+- **Read enemy velocity from a short, recent window,** and from their facing when they turn. A long window smears a patrol's turn into a wrong velocity for most of a second.
+- **Crowded streets need a nearer horizon.** Projecting ten or more patrolling enemies several seconds ahead can seal every route through a narrow street. When nothing gets through, plan around the nearby enemies only, start moving, and let the fast local steering deal with the far ones as they come.
+- **Keep perception and planning off the steering loop.** Position and heading are cheap to read; the entity list, the UI tree and route searches are not. Run them beside the steering so it never waits on them, and give a worker thread its own copy of the data it plans from.
+- **A 100 Hz steering loop is cheap.** It used 1 to 2% of one CPU core.
 
 ## Quests and dialogs
 
-- **The next main quest arrives by itself.** A follow-up dialog opens a few seconds after the quest-completing talk ends. The dialog code now waits up to 10 s for follow-ups.
-- **Offer pages have DECLINE.** On them, Space presses ACCEPT. Side-quest offers said so in their text, and are now declined. Main-quest dialogs seen so far had no DECLINE button.
-- **Talk to the right NPC.** With several NPCs nearby, X went to the wrong one. The wizard now walks within 80 units of the arrow's NPC with the prompt showing.
-- **Counters.** One NPC stood in a booth the wizard could not walk around. X is now accepted when the prompt shows and the nearest friendly NPC is the one at the arrow; it worked from 266 units away.
-- **Doors.** A waypoint goal still open with the wizard at its arrow is a door. The zone change starts a few seconds after walking in, so the loop pushes in and waits up to 15 s. Towers and dungeons open only with X once the interact prompt shows; walking into them does nothing.
-- **"Arrived" is not progress.** Counting arrival where the wizard already stood as progress kept one run looping for 200 turns. Progress now needs real movement or a state change.
-
-## Fighting
-
-- **Match cards by spell type.** Matching on spell effects never matched, so the wizard passed every round. Deimos's approach, reading the game's own spell type, worked at once.
-- **Clicking needs two hooks:** the mouseless cursor hook, and the render-context hook for UI scale.
-- **A defeat came from planning too early.** The route was planned before nearby enemies had loaded, and the wizard waited in place as they arrived. The loop now re-plans when threats appear, steps away from close enemies, rests below 65% health, and stops on any defeat.
-- **Every spell costs mana, wand spells too.** Each pip costs a mana: the starter wand's Scarab, Imp and Frost Beetle each took 1. The pool is 30 at level 8 and a Warhorn fight took 6 to 10. Zones without enemies give mana and health back by themselves, mana about 2 a minute (0 to 30 within 17 idle minutes in the Commons) and health about 2.4 a second, in steps of 13; streets with enemies and the tower do not (mana stayed 0 for minutes in the tower, health 402 through a minute of walking in Cyclops Lane). Mana also comes from mana wisps (+3 to +6 each), potions and level-ups. A defeat sends the wizard to the Commons, where it all comes back. The client's log records health changes in battle only. A health wisp gave about 200 of 801. After a lost connection, logging back in put the wizard straight back into the battle it was in, with 1 health.
-- **WizWalker's Pass and Flee clicked the wrong buttons in this client.** `pass_button` and `flee_button` click the `DoneWindow`'s Defeated buttons whenever `DoneWindow` says it is visible, and here it always does. The real ones are `PlanningPhaseSubWindow/SpellSelection/ActionButtons/Focus` (Pass) and `.../Flee`.
-- **A flee that does not take leaves the hand unusable.** After the real Flee click, the battle went on, and the planning window's "Waiting for Other Players..." panel stayed up, into the next battle too; no card click landed until its Change button was clicked. No flee has ended a battle yet.
-- **A window's visible flag is its own.** `is_visible()` does not look at parents: hidden battle windows still say visible outside battle. WizWalker's `WindowFlags.disabled` (bit 31) is set on the action buttons while they cannot be used.
-- **Results:** after the spell-type fix, every automated battle (about 12) was won, most in 1 or 2 rounds, with starter cards against Skeletal Pirates, Lost Souls and Dark Fairies.
+- **The next main quest arrives by itself.** A follow-up dialog opens a few seconds after the quest-completing talk ends. Wait for it before moving on.
+- **Offer pages have a DECLINE button,** and on them Space presses ACCEPT. Read the page before paging through it. Main-quest dialogs seen so far had no DECLINE.
+- **Talk to the right NPC.** With several NPCs nearby, the interact key went to the wrong one. Walk close to the NPC the quest names, with the prompt showing, before pressing it.
+- **NPCs behind counters can be talked to from farther away.** One stood in a booth the wizard couldn't walk around. The interact key worked from 266 units once the prompt showed and the nearest friendly NPC was the right one.
+- **Doors differ.** A walk-in door changes zone a few seconds after the character walks in, so push in and wait. Towers and dungeons open only with the interact key once its prompt shows.
+- **"Arrived" is not progress.** Counting an arrival where the character already stood as progress kept one run looping for 200 turns. Progress needs real movement or a change in state.
+- **Side quests pay.** Quests the main story never points at (found through the journal's Quest Finder and the school professors) gave a few hundred XP each, against 10 to 50 for a street fight. Clear a world's side quests before leaving it.
 
 ## Goals without a quest arrow
 
-- **The game files say where an untracked goal's targets are.** Things to collect and hidden spots to visit can show no quest arrow, and no quest finder points at them. The goal still names its zone, and the zone's own files hold the targets: placed objects (`gamedata.bin`) named by the goal's tags, and trigger volumes (`volumes.xml`) named after the quest, which count a visit when the wizard walks in; an "Explore" goal's spot is the zone's one Explore object. With no arrow, the wizard goes to the goal's zone, then to the nearest of those spots it has not tried, in that order of sources (`untracked.py`, `QuestLoop.untried_spots`); a spot that does not move the goal on is not tried again, one that three walks cannot reach is left, and when no spot is left the quest is parked until the wizard404 API can say more. Raised spots are reached by the ramp rule below. Found on 2026-10-28 with Triton Avenue's Cogs (by tag) and the ten Smiths of "Find the Smiths" (by trigger volume); the operator: "Please add a similar framework update regarding quests where we need to pick up items that the quest arrow does not assist with. Like the cogs or smiths".
+- **The game files say where untracked targets are.** Things to collect and hidden spots to visit can show no quest arrow. The goal still names its zone, and the zone's files hold the targets: placed objects named by the goal's tags, trigger volumes named after the quest (walking into one counts the visit), and the zone's Explore object. Go to the goal's zone, then try the nearest untried spot from those sources. Don't try a spot that didn't move the goal on again, and park the quest when none is left. Triton Avenue's Cogs were found by tag, and 9 of 10 Smiths of "Find the Smiths" by trigger volume.
 
 ## The zone graph
 
-- **The client's zone files do not say where street doors lead.** A zone's `gamedata.bin` names some interiors and sub-zones it opens onto (towers, houses, drains), but street-to-street links and some hidden sub-zones are known only from walking them. The hand-kept tree in `training.py` covers the usual streets; zones it lacks are reached by the links the wizard learns walking (`travelplan.link_zones`) and the doors it learns arriving (`RunRecord.zone_doors`, the spot where it came in from a zone is the door back to it): with no way in the tree, the zone walk takes the first zone of the fewest-doors way through the learned links and walks to that door (`travelplan.next_zone_on_the_way`, `QuestLoop.learned_door_toward`). Found on 2026-10-28, when the tree lacked Colossus Boulevard and Triton Avenue's underwater zone.
+- **The zone files don't say where street doors lead.** A zone's data names some interiors it opens onto, but street-to-street links and some hidden sub-zones are known only by walking them. Learn links as you walk: the spot where the character arrives from a zone is the door back to it. Use a hand-kept map where you have one, and the learned links where you don't.
+- **Learn where travel lands with care.** Go Home pressed while standing in a house's walk-in door loaded the house first. The bot credited that zone change to Go Home, learned the house as the world's hub, and later chose Go Home over a faster Recall because it seemed to land at the goal. A house is never a hub, and an interior only links to zones in its own place.
 
-## Ramps and stairs
+## Fighting
 
-- **Some ramps and stairs are missing from a zone's collision data.** A raised terrace or upper street then reads as its own walkable piece with no way onto it, though players walk up. The game's nav graph links the levels, but its waypoints can be far apart, and walking one long leg straight across a busy area gets stuck on whatever is in between. So when the collision data has no route to a destination on another piece and the nav graph has one, the walk goes by the collision data to the nav route's last waypoint on the wizard's own piece (the foot of the ramp), then up the nav legs, which are short where the ground climbs, only as far as the first waypoint on the next piece (the top of the ramp), and plans again from there, so a long nav leg across the new level also goes by the collision data (`ramps.py`, `QuestLoop.ramp_foot`). This applies to every walk, whatever its target. Found on 2026-10-28 with the Commons Smith of "Find the Smiths", on a terrace at height 253 (the operator: "there's no teleport in the Commons or anything so you need to be able to walk to that Smith"); Olde Town's Smith was reached the same way.
+- **Match cards by the game's spell type.** Matching on spell effects never matched, so the wizard passed every round. Reading the game's own spell type worked at once, as Deimos does.
+- **Every spell costs mana, wand spells too:** a mana a pip. At level 8 the pool was 30, and a fight took 6 to 10.
+- **Don't trust a library's button lookup blindly.** WizWalker's Pass and Flee clicked the Defeated window's buttons in this client, because that window always reads visible. The real ones are in the planning window's action buttons. A window's visible flag is its own and ignores its parents, and the action buttons carry a disabled flag while they can't be used.
+- **A flee that doesn't take leaves the hand unusable.** The flee confirmation box opens under the planning window, not on top, and while unanswered no card click lands. No flee ended a battle in this run.
+- **Unresisted attacks first.** Choose by expected damage after resistances, weaknesses, shields and traps, and prefer attacks the target takes in full, even small ones, over bigger resisted ones.
+- **Traps go on before a big hit of their school,** and whenever the round would otherwise play nothing: they cost no pips.
+- **Estimate danger from the hits seen.** A flat damage-per-pip guess made the wizard pass rounds at 94% health to save pips for a heal. Learn each enemy kind's biggest hit and use that.
+- **A miss is not immunity.** A spell that left its target's health unchanged once most likely fizzled: an 80% accurate spell fizzles one cast in five. One fizzle barred Snow Serpent for the rest of a fight, and the wizard chipped with one-pip spells for four rounds with three pips held. The fight took 12 rounds and 43% of its health. Set a card aside only after it fails again on the same target.
+- **Pips held beyond what a card needs are worth nothing until spent.** With a trap of its school waiting, or with three or more pips unspent, play the bigger hit over a one-pip spell that only roughly ties it. A fight that drags on costs more health than the pips saved.
+- **Discard cards that won't help soon.** Right-clicking a card in hand during your own planning discards it, and the hand refills from the deck next round. A stun when nothing needs stunning, an attack every enemy resists, or a second heal while health is safe, is a slot for a better draw. Keep the best castable attack, a heal the next two enemy turns may call for, traps, and anything used up when cast. Discard one card at a time and read the hand again after each, because the hand closes up: a second click by position took the wrong card. Keep enough in the deck to finish the fight, and log each discard's reason.
 
-## Health
+## After a battle
 
-- **Go into instances refilled.** A "to Enter" door can open on a tower or an instance the wizard does not walk out of partway, and inside it health and mana do not come back; the prompt does not name the zone. So the door's destination is taken from the doors learned walking out of zones: a door known to open on an instance (a zone named "_T<n>", a tower or a dungeon) waits for 90% health and 80% mana, by a trip to the Commons and a Recall back to the door; a door known to open on a shop, house or room asks for nothing; a door not known yet only asks that the wizard not be low (40% health, 20% mana) (`progress.short_before_entering`, `QuestLoop.refill_before_entering`). A quest waypoint under Triton Avenue was an instance's door, entered at 45% health (2026-10-28).
+- **Wait for the signal, not for a time.** Flat sleeps after each battle (to confirm the end, for the duel circle, after Mark Location) plus a big log read made the gap from a battle's end to the first move 6 s at the median and often 9 to 24 s. The operator noticed. Poll for what you're waiting for, with a short cap, and do diagnostics off the critical path: the gap fell to under 4 s.
+- **Time it.** Log a timeline of each step from a battle's end to the first move, so the gap is measured, not guessed.
 
-- **Health regenerates outdoors** (about 1.6 HP/s in the Commons) **but not in every interior**, nor on Triton Avenue or Cyclops Lane. Resting in one froze the run. Resting was later dropped altogether as too slow: health comes from potions, wisps, in-battle heals and level-ups.
-- **A dungeon keeps its progress for 30 minutes after the wizard leaves.** Sunken City's entry box says so ("If you log out or leave for more than 30 minutes, you will lose all of the progress you have made in this Dungeon"). The operator, 2026-10-28 20:48 UTC, relayed: after leaving, the game may show an extra teleport button by Go Home and Recall that returns to the dungeon within the timer; the 01:11 Recall back into WC_Cyclops_T1 used Recall instead and failed. Not yet tried: at the next dungeon, read the HUD's buttons (names, tooltips, timers) right after leaving, log them, and test one refill trip with that button, back well inside 30 minutes. Until that works, dungeons are refilled in place.
+## Health and refills
+
+- **Health and mana come back by themselves only in zones without enemies.** In the Commons, mana came back at about 2 a minute and health at about 2 a second. They don't come back in streets with enemies, in towers or inside instances (90 s standing gave nothing). Wisps help: about +3 to +6 mana each, and a health wisp gave about 200 of 801.
+- **Wisps near other players are usually taken.** In the Commons about half the wisp walks gave nothing. Keep looking while regenerating, but don't count on wisps.
+- **Check that waiting gives something back.** A refill walk wandered through a door into a small room off the Commons, where standing gave nothing. The bot walked to the spot it stood on and stood for 90 seconds, again and again, for three minutes. If health doesn't rise while standing, go to the hub.
+- **Count what fights cost.** In Triton's underwater street each fight cost 40 to 65% of health and gave 30 to 45 XP, and every one meant a refill trip. After a fight that costs a third of health or more, refill before going on, and remember which zones are heavy.
+- **Weigh a refill trip against the goal.** A trip costs mana and minutes. When the goal is close and safe, push on; when health is just short of the refill line in a quiet zone, walk on.
+- **Go into instances refilled.** A door can open on a tower or an instance that can't be left partway, and inside, nothing comes back. Learn which doors open on instances, and refill before those. One instance entered at 45% health lost its next fight.
+
+## Travel and marks
+
+- **The game's own travel buttons beat walking.** Mark Location, Recall Location, Go Home (to the world's hub, where health and mana come back) and a dungeon's return button cut the way back after a refill or a defeat to seconds. Treat them as route steps with costs (time, mana, cooldowns), and compare them with walking.
+- **Never mark where a fight just happened.** Patrols cross there, so the Recall back lands in the next fight: four of five Recalls did, one night. Mark at the goal's door, or at a spot where earlier Recalls landed with no fight, or walk back instead.
+- **A mark can trap the character.** One set where a boss fight ended put every Recall back on an island with no way off. If no route leaves a mark, forget it and never mark there again.
+- **Read the Recall timer.** When Recall is cooling down and is still the quickest way, wait out its timer instead of walking off.
+- **Mark Location can fail silently.** It failed four times with no message; log what the buttons showed each time.
+
+## Dungeons
+
+- **What is a dungeon isn't always in its name.** Interiors named with "_T" and a number are instances, but Sunken City is named like a street, and Triton Avenue's underwater zone opens like a door yet is a street. A zone behind the game's dungeon-entry box is a dungeon, and so are the zones under it.
+- **A dungeon keeps its progress for 30 minutes after leaving.** Its entry box says so. Leave by Go Home, refill, and come back with the dungeon's return button on the HUD within the timer, with a margin. Recall doesn't take the character back in. Check on landing that the enemies killed stayed down.
+- **Towers lose their progress when left partway.** Refill in place in a tower.
+- **Count loops from the last travel button,** not from the goal's start, so a long walk with refill trips isn't taken for a door loop.
+
+## Stopping
+
+- **A stopped character among enemies can be pulled into a fight it can't play.** Stopped in Triton's underwater street with an enemy about 400 units away, the wizard was in a battle within minutes, passed every round with no one at the keys, and was defeated. Stop where no enemy walks.
+- **Stop at a turn's boundary.** Two stops written right after the bot approached an enemy left a fight unplayed. Read what the bot is doing first, then signal the stop.
 
 ## The connection
 
-- **The game can drop its server connection mid-battle.** At 02:06 on 2026-10-27 the client logged "AppCloseConnection() called", reconnected, and was closed again. It froze in the battle's execution phase with the duel unchanged for minutes, and nothing in memory said why. The client's own log (`Bin/WizardClient.log`) did; the framework now reads it when a battle stalls. Logging back in is the operator's.
+- **The server connection can drop mid-battle.** The client froze in the battle's execution phase for minutes, and nothing in memory said why. The client's own log did. Read it when a battle stalls or a zone takes over a minute to load, and leave logging back in to the operator.
 
 ## Popups
 
-- **The Endorse Wizard window held the keyboard** after a game restart: A, D and W did nothing. The loop now stops with that diagnosis (`movement.KeysIgnored`) when the first A tap changes nothing while it should be free to move. It answers the window before each turn: its buttons are `MainLayout/FriendlyWindow/FriendlyButton`, `KnowledgeableWindow/KnowledgeableButton` (shown as "Savvy") and `HelpfulWindow/HelpfulButton`, and `NameText` holds the other player's name.
+- **Some windows hold the keyboard.** The Endorse Wizard window, after a shared battle, made the walking keys do nothing. If a turn key changes nothing while the character should be free to move, look for an open window before anything else.
+- **Single-button game boxes can open over a battle.** The "Quest Friend Finder" tip did, and took every click for three minutes. A game box whose only button is OK can be closed with it; a box from another player can't.
+
+## Gear and mounts
+
+- **Wear a mount when there is one.** A rented mount can be worn as soon as it arrives if none is worn. Mounts drop off indoors and come back outside, and the game asks before starting a rental's timer.
+- **Gear can be compared by its stats** (health, mana, resistances, then the school's damage and accuracy) once the item data is read. Only equip in a zone without enemies, because the spellbook stays open a few seconds per item.
+
+## Opportunities
+
+- **Watch for what could speed progress, and record it.** An MMO is full of features, tips and patterns a bot doesn't need yet. The operator: "there is a lot going on in mmorpgs, you are going to need to decide when to add something to your memory bank ... See if you can reconize these patterns". Watch the game's text (tip boxes, NPC pages that name a feature), numbers you measure (XP per activity, fight cost, wisp success), and HUD buttons never pressed. Keep each with how often it was seen, and gate anything that involves other players, gold or crowns behind the operator.
+- **Quests pay, street fights don't.** One hand-in gave 270 to 315 XP, about nine fights' worth in the underwater street, without their health cost. Avoid fights on the way to goals rather than farm them.
+- **The game offers help from other players.** The Quest Friend Finder's tip says its HUD button asks friendly players in the world to join, and those who accept are grouped and teleported to you. It could help with bosses or zones too hard alone, but it brings in other players, so it waits for the operator.
 
 ## Screenshots
 
-- **They do not work yet, and are not needed often.** GDI `PrintWindow` returns a blank client area for this DirectX client, and an F12 sent as a window message saved nothing. Memory reads and the UI window tree answered every question so far.
+- **Plain window capture doesn't work for this client.** GDI capture returns a blank client area for its DirectX view, and an F12 sent as a window message saved nothing. Memory reads and the UI window tree answered every question so far.
