@@ -30,6 +30,8 @@ ENTRIES_AT, SPELL_ENTRY_SIZE, DECK_ENTRY_SIZE, LIMIT_AT = 0x300, 0x78, 0x28, 0x1
 CLICK_SETTLE_SECONDS = 1.0
 OPEN_TIMEOUT_SECONDS = 6.0
 POLL_SECONDS = 0.3
+BOOK_GONE_SECONDS = 3.0
+BOOK_POLL_SECONDS = 0.2
 ADDED, REFUSED = "added", "refused"
 
 
@@ -86,9 +88,14 @@ async def open_deck_page(client) -> None:
 
 
 async def close_book(client) -> None:
+    """Close the spellbook and wait until it is gone, at most BOOK_GONE_SECONDS: a turn key sent a few seconds after
+    the start-up deck check closed the book was ignored, twice, and the run stopped (22:09, 22:28)."""
     if await showing(client, BOOK):
         await click(client, CLOSE_BOOK)
         await asyncio.sleep(PAGE_SETTLE_SECONDS)
+        deadline = asyncio.get_running_loop().time() + BOOK_GONE_SECONDS
+        while await showing(client, BOOK) and asyncio.get_running_loop().time() < deadline:
+            await asyncio.sleep(BOOK_POLL_SECONDS)
 
 
 async def _entries(window, size: int) -> list[bytes]:

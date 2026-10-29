@@ -109,6 +109,8 @@ ENTRANCE_ARRIVE_RADIUS = 80.0
 ENTRANCE_AT_ARROW_RADIUS = 300.0
 LATE_TRAVEL_LOAD_SECONDS = 90.0
 RECALL_FIGHT_SECONDS = 15.0
+KEYS_IGNORED_AGAIN_SECONDS = 30.0
+KEYS_IGNORED_RETRY_SECONDS = 1.0
 AFTER_BATTLE_TURNS_TIMED = 6
 INTERACT_PROMPT = "interact prompt"
 LOADING_WAIT_SECONDS = 3.0
@@ -238,6 +240,7 @@ class QuestLoop:
         self._after_battle: list | None = None
         self._turn_parts: dict[str, float] = {}
         self._recalled_at: float | None = None
+        self._keys_ignored_at = float("-inf")
         self._journal_zones: tuple[frozenset, dict] | None = None
         self._finder_givers: dict[tuple, int] = {}
         self._finder_just_activated = False
@@ -671,9 +674,14 @@ class QuestLoop:
                 return progressed(answered)
             if await self.busy_now():
                 return stalled("a turn key was ignored while a dialog or menu was opening")
-            if free_to_move(state):
+            if not free_to_move(state):
+                return stalled("a turn key was ignored while busy")
+            if time.monotonic() - self._keys_ignored_at <= KEYS_IGNORED_AGAIN_SECONDS:
                 raise StopRun(KEYS_IGNORED)
-            return stalled("a turn key was ignored while busy")
+            self._keys_ignored_at = time.monotonic()
+            await asyncio.sleep(KEYS_IGNORED_RETRY_SECONDS)
+            self.events.emit("walk", "a turn key was ignored; trying again once before stopping for the operator")
+            return stalled("a turn key was ignored; trying again")
 
     async def busy_now(self) -> bool:
         """A dialog or NPC menu can open a moment after a turn began, and then it swallows the turn keys."""
