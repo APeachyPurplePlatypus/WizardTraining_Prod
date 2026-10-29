@@ -502,12 +502,13 @@ async def follow_route(client, legs, *, final_radius: float, watch=None,
 
 
 async def travel(client, planner: RoutePlanner, destination, *, arrive_radius: float,
-                 watch=None, hazards: Hazards = Hazards(), live_tracks=None) -> dict:
+                 watch=None, hazards: Hazards = Hazards(), live_tracks=None, max_methods: int | None = None) -> dict:
     """Try each route method in turn, planning again from wherever the wizard is after a failure and around
-    any obstacle found so far. The result's "blocked_at" lists the obstacles found on this trip."""
+    any obstacle found so far, or only the first `max_methods` of them. The result's "blocked_at" lists the obstacles
+    found on this trip."""
     attempts, blocked_at = [], []
     tracks_fn = live_tracks or (lambda: hazards.tracks)
-    for method in planner.methods():
+    for method in planner.methods()[:max_methods]:
         start = await client.body.position()
         around = hazards.with_obstacles(blocked_at).clear_around(destination, arrive_radius + OBSTACLE_RADIUS)
         legs = planner.route(method, start, destination, around)

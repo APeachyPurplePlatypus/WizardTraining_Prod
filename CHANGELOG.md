@@ -56,6 +56,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **A wisp walk tries one route method, and a failed one says why** (`QuestLoop.wisp_turn`, `walk_attempt_text`, `movement.travel` `max_methods`).
+  - **What:** a walk to a wisp tries only the first route method; when it fails, the wizard goes on to the next wisp. A failed walk's log gives, per method, its result and reason, its time, where it began and ended, its distance to the wisp along the way, and its sidesteps, reroutes, turns in place, settle steps, oscillations and obstacles met. Logging and the method count only; the steering is unchanged.
+  - **Why:** two wisp walks in the Commons failed by every route method, 30 and 65 s each, the second ending 2,443 from its wisp, farther than it began (22:18 to 22:19); the log said only "every route method failed". The coordinator asked for the detail and to move on rather than try all three.
+  - **Verified:** offline (the suite, with and without WizWalker); in the game: the next failed wisp walk.
+
 - **The wizard moves on sooner after a battle** (`combat.battle_over`, `combat.wait_out_of_the_duel`, `combat.fight`, `gametravel.press_mark`, `QuestLoop.note_the_way_out_of_a_battle`, `progress.acted_after_battle`, `docs/lessons-learned.md`).
   - **What:** the battle's end is confirmed 0.3 s after it reads over, not 1 s; the wizard is out of the duel as soon as the client stops reading in battle, at most 2 s, not after a flat 2 s; the client log read for the moves sent goes to a worker thread; Mark Location is done as soon as the Recall button names the new mark or mana was spent, at most 2 s. Each battle's end is followed in the event log by a `timing` event, the turns until the first move, each with its time.
   - **Why:** over 26 won fights on 2026-10-28, the first move after the battle came 6 s after its end at the median and 9 to 24 s often, once 49 s; the operator: "it waits too long after a battle is fought to make a decision on what to do next".

@@ -169,6 +169,7 @@ NOT_FREE_TO_MOVE_WAIT_SECONDS = 3.0
 POTION_SETTLE_SECONDS = 3.0
 WISP_ARRIVE_RADIUS = 30.0
 WISP_SETTLE_SECONDS = 1.5
+WISP_ROUTE_METHODS = 1
 TELEPORT_WAIT_SECONDS = 8.0
 TELEPORT_POLL_SECONDS = 0.25
 JUMP_DISTANCE = 500.0
@@ -1196,7 +1197,7 @@ class QuestLoop:
                                       avoid=enemies, duel_circles=circles)
         trip = await travel(self.client, planner, wisp["position"], arrive_radius=WISP_ARRIVE_RADIUS,
                             watch=self.watcher(reroute=self.rerouter(planner, hazards, wisp["position"])),
-                            hazards=hazards, live_tracks=lambda: self._active_tracks)
+                            hazards=hazards, live_tracks=lambda: self._active_tracks, max_methods=WISP_ROUTE_METHODS)
         await asyncio.sleep(WISP_SETTLE_SECONDS)
         after = await snapshot(self.client)
         stat = "health" if wanted == "health" else "mana"
@@ -1205,8 +1206,8 @@ class QuestLoop:
             self.record.tried_wisps[str(wisp["id"])] = time.time()
         self.measure("wisp_walks", bool(gained))
         ended = flat_distance(await self.client.body.position(), wisp["position"])
-        methods = ("" if trip["result"] != "failed" else "; " + ", ".join(
-            f"{tried['method']}: {tried.get('result')}{failure_text(tried)}" for tried in trip.get("attempts", [])))
+        methods = "" if trip["result"] != "failed" else "; " + "; ".join(
+            walk_attempt_text(tried, wisp["position"]) for tried in trip.get("attempts", []))
         self.events.emit("wisp", f"{kind} {flat_distance(start, wisp['position']):.0f} away: {trip['result']}"
                                  f"{' (' + trip['reason'] + ')' if trip['reason'] else ''}, ended {ended:.0f} from it; "
                                  f"{stat} {state[stat]} -> {after[stat]}{methods}", ended=round(ended), gained=gained)
@@ -3698,6 +3699,29 @@ def plain_xy(state: dict) -> tuple | None:
     """A reading's position as rounded (x, y), or None."""
     position = state.get("position")
     return (round(position["x"]), round(position["y"])) if isinstance(position, dict) else None
+
+
+def walk_attempt_text(attempt: dict, target) -> str:
+    """One route method's walk, for a failed trip's log: its result and reason, the time it took, where it began and
+    ended against the target, the distances along its trail, and what its controller did (sidesteps, reroutes,
+    turns in place, settle steps, oscillations, obstacles met). Logging only."""
+    trail = attempt.get("trail") or []
+    near = [round(flat_distance(XYZ(x, y, 0.0), target)) for x, y in trail[::max(len(trail) // 5, 1)]]
+    end = trail[-1] if trail else None
+    parts = [f"{attempt.get('method')}: {attempt.get('result')}{failure_text(attempt)}"]
+    if attempt.get("seconds") is not None:
+        parts.append(f"{attempt['seconds']} s")
+    if attempt.get("from") and end:
+        parts.append(f"from ({attempt['from'][0]:.0f}, {attempt['from'][1]:.0f}) to ({end[0]}, {end[1]})")
+    if near:
+        parts.append("distance to it " + " > ".join(str(value) for value in near))
+    counts = [f"{attempt[name]} {label}" for name, label in (("sidesteps", "sidesteps"), ("reroutes", "reroutes"),
+                                                            ("turns_in_place", "turns in place"),
+                                                            ("settle_steps", "settle steps"),
+                                                            ("oscillations", "oscillations")) if attempt.get(name)]
+    if attempt.get("blocked_at"):
+        counts.append(f"{len(attempt['blocked_at'])} obstacles at {attempt['blocked_at'][:2]}")
+    return " ".join(parts) + (f" ({', '.join(counts)})" if counts else "")
 
 
 def failure_text(attempt: dict) -> str:
