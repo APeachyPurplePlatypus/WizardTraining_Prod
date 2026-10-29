@@ -87,8 +87,10 @@ class ScreenTest(unittest.TestCase):
 
     def test_a_game_notice_is_a_box_titled_info_with_only_an_ok_button(self):
         self.assertTrue(is_game_notice("INFO", ["rightButton"]))
+        self.assertTrue(is_game_notice("Quest Friend Finder", ["rightButton"]))
         self.assertFalse(is_game_notice("INFO", ["centerButton", "rightButton"]))
         self.assertFalse(is_game_notice("Friend", ["rightButton"]))
+        self.assertFalse(is_game_notice("Sunken City", ["centerButton", "rightButton"]))
         self.assertFalse(is_game_notice("Trade", ["centerButton", "rightButton"]))
         self.assertFalse(is_game_notice("INFO", []))
 

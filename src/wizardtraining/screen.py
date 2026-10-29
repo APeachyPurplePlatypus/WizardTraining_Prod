@@ -69,15 +69,17 @@ def is_friend_request(title: str, caption: str) -> bool:
     return title.lower() == FRIEND_BOX_TITLE and caption.lower().endswith(FRIEND_REQUEST_QUESTION)
 
 
-GAME_NOTICE_TITLE = "info"
 GAME_NOTICE_BUTTONS = ["rightButton"]
+PLAYER_BOX_TITLES = {"friend", "trade", "duel", "group", "teleport"}
 
 
 def is_game_notice(title: str, buttons: list[str]) -> bool:
-    """The game's own notice: a box titled "INFO" whose only button is its OK (`rightButton`), such as "You cannot
-    teleport to that location. The dungeon timer has ended and the dungeon has been reset." Another player's
-    request (friend, trade, duel) has another title and Yes and No buttons, and is never one."""
-    return title.strip().lower() == GAME_NOTICE_TITLE and buttons == GAME_NOTICE_BUTTONS
+    """The game's own notice: a box whose only button is its OK (`rightButton`), such as "INFO": "You cannot teleport
+    to that location. The dungeon timer has ended and the dungeon has been reset.", or the "Quest Friend Finder" tip
+    that opened over a battle and took every click (20:38). The operator, 2026-10-29 00:41 UTC: "there is only one
+    answer, so hit okay". Never a box titled for another player's request (PLAYER_BOX_TITLES); those have Yes and No
+    buttons anyway."""
+    return buttons == GAME_NOTICE_BUTTONS and title.strip().lower() not in PLAYER_BOX_TITLES
 
 
 DUNGEON_ENTRY_WORDS = "you are about to enter a dungeon"

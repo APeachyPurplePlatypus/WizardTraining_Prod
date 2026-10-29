@@ -137,14 +137,15 @@ async def visible_buttons(box) -> list[str]:
 
 async def close_game_notice(client) -> str | None:
     """Press OK on a game notice (`screen.is_game_notice`), and say what it said; None when none is showing. The
-    operator approved it on 2026-10-28 ("Approve", 11:38 UTC), for the OK of the game's INFO boxes only: after a
-    Recall the game refused, one stayed open and took every click until the run stopped for it."""
+    operator approved it for the game's INFO boxes on 2026-10-28 ("Approve", 11:38 UTC): after a Recall the game
+    refused, one stayed open and took every click until the run stopped for it; and for any game box whose only
+    button is OK on 2026-10-29 ("there is only one answer, so hit okay", 00:41 UTC)."""
     box = await message_box(client)
     if box is None or not is_game_notice(box.title, await visible_buttons(box.window)):
         return None
     await click_window(client, await window_at(box.window, BOX_NO))
     await asyncio.sleep(BOX_SETTLE_SECONDS)
-    return f"pressed OK on a game notice: {box.caption}"
+    return f"pressed OK on a game notice titled {box.title!r}: {box.caption}"
 
 
 async def dungeon_entry_box(client) -> MessageBox | None:

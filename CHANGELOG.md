@@ -6,6 +6,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Added
 
+- **Any game box whose only button is OK is closed with it** (`screen.is_game_notice`, `ui.close_game_notice`, `docs/safety.md`).
+  - **What:** a message box with OK (`rightButton`) as its only button is pressed OK, its title and text logged, whatever its title, but for titles of other players' requests (Friend, Trade, Duel, Group, Teleport). Before, only boxes titled "INFO".
+  - **Why:** the game's "Quest Friend Finder" tip opened over a battle in Triton's underwater zone and took every click, so the run stopped and the wizard could play no card for three minutes (20:38 to 20:41). The operator, 2026-10-29 00:41 UTC: "there is only one answer, so hit okay".
+  - **Verified:** offline (`tests/test_screen.py`); in the game: the box was closed by hand on his word, 20:41.
+
 - **Each wisp trip walks onto the wisp and logs where it ended** (`QuestLoop.wisp_turn`, `WISP_ARRIVE_RADIUS`).
   - **What:** the walk to a wisp stops within 10 of it, not 40, and the wisp event says how far from it the walk ended, and keeps that and whether anything was gained as fields.
   - **Why (the radius):** in the Commons a mana wisp the walk ended 25 from gave nothing, and one it ended 9 from gave 10 (20:14); a step closer costs next to nothing, a wisp walk that stops short costs the whole walk (the coordinator, 2026-10-29 00:16 UTC).
