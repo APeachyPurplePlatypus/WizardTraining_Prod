@@ -1,75 +1,50 @@
 # Architecture
 
-## Layers
+Design advice that held up over one bot's first fifteen levels. None of it depends on a language or a library. Take what fits your design.
 
-```
-loop        QuestLoop: one decision per turn; goal handlers; limits; report
- ├─ combat      approach an enemy; play rounds with a CombatPolicy
- ├─ dialog      walk up, X, Space through pages; quest offers via an OfferPolicy
- ├─ movement    calibrated A/D turns; walking with W held under a watcher; route following
- │   └─ navigation  load zone walk data into a RoutePlanner
- ├─ entities    classify loaded entities; enemies, NPCs, duel circles; step away
- ├─ quests      journal, active main quest, goals, quest arrow
- ├─ ui          windows by path; mouseless clicks
- └─ session     attach; reading hooks in; hooks always out
+## Keep decisions apart from game access
 
-decide (no game access): routes, targets, policy, progress, state, geometry, keys, reports, config
-```
+Split the bot into code that touches the game (reading memory, sending keys, clicking) and code that decides (routes, targets, card choice, refill rules, limits). The deciding code takes plain values and returns decisions, so it runs and is tested anywhere, without the game or the game library installed. Enforce the split with a test, or it erodes.
 
-The "do" modules talk to the game through WizWalker. The "decide" modules take plain values (tuples, dicts, dataclasses) and return decisions, so they run and test anywhere. `tests/test_import_boundary.py` enforces the split.
+Most bugs worth catching are in the decisions, and a test suite that runs in a second catches them before a live run does. One that slipped through: a logging helper lived on the game side, so the tests never ran it, and it stopped the first live run that hit it. Move anything that can be pure to the pure side.
 
-## One turn of the loop
+## One decision per turn
 
-`QuestLoop.run_turns` checks the limits and the STOP file, reads a `state.snapshot`, and stops if the target level is reached. Then `play_turn` picks exactly one action:
+A main loop that reads the state once and picks exactly one action keeps the bot understandable. Check the stop signal and the limits first, then:
 
-1. **Loading:** wait, up to a limit of waits in a row.
-2. **Battle showing:** `combat.fight` with the combat policy. A defeat stops the run (`Limits.max_defeats` is 0).
-3. **Dialog open:** `dialog.read_conversation`, including follow-ups.
-4. **Not clearly free to move:** a stalled turn.
-5. **Low health:** a potion (if allowed) or a health wisp. The wizard never rests to regain health: it is too slow.
-6. **Otherwise the quest:**
-   - read the active quest, and stop if it is not a main quest;
-   - take its first open goal and read the arrow;
-   - a goal in another zone goes to `waypoint_turn`, which walks to the door;
-   - every other goal goes to its handler in `goal_handlers()`.
+1. loading: wait;
+2. a battle: fight it;
+3. a dialog: read it;
+4. not clearly free to move: wait, and count it;
+5. short of health or mana: refill;
+6. otherwise: the quest's next goal.
 
-Each turn returns `progressed(...)` or `stalled(...)`. Several stalled turns in a row stop the run.
+Each turn reports whether it made progress. Several turns in a row without progress are a stall, so change strategy or stop.
 
-## Walking
+## Steer in a closed loop
 
-`movement.travel` asks the `RoutePlanner` for a route by each method in turn (collision grid, nav graph, straight line), and follows the first that works with `follow_route`:
+Walking is a control problem. A fast loop (100 Hz worked) reads position and heading and sets the keys from them, aiming at a point sliding ahead on the route and braking by the measured speed. Planning, entity scans and UI reads run beside it, never inside it. See the steering lessons in [lessons-learned.md](lessons-learned.md).
 
-- **W is held** (`keys.HeldKey`) while a watcher runs every 50 ms.
-- **The watcher** is `QuestLoop.watcher`. It stops the walk for the STOP file, a battle, loading, a dialog or the handler's own arrival check. It steps away from a close enemy. It ends the trip when a duel circle, or an enemy the route did not already account for (`progress.PlannedRoute`), is near the next 2000 units of path.
-- **Steering** uses short A/D taps sized by the turn calibration. Sharp corners stop and turn in place.
-- **Blockages:** no progress while W is held means blocked. The point just ahead is recorded as an obstacle for the zone, and the wizard sidesteps by turning off its bearing. The next route method, and every later route in that zone, plans around recorded obstacles.
+## Route planning in layers
 
-An interrupted trip returns to the loop, which re-plans on the next turn with fresh enemy positions.
+No single source of walk data was enough:
 
-Some zones' walkable areas come in separate pieces, such as Triton Avenue's lower street and upper level. When the target is in another piece, `QuestLoop.teleport_turn` walks into one of the zone's teleport volumes (`teleports.py`, read from the zone's `volumes.xml`) and remembers where it led.
+1. **A walk grid from the collision data,** with A* and string-pulling into straight legs. It's accurate, but it misses props and some ramps.
+2. **The game's nav graph,** which links levels the grid leaves apart.
+3. **A straight line,** refused when it crosses something dangerous.
 
-## Route planning
+Add costs near enemies and keep a hard keep-out from duel circles. Add the obstacles the character actually bumped into, so every later route avoids them. Bound each search in nodes and time, and fall back to the next layer when one fails. When a whole street is sealed by projected patrols, plan around the near ones only.
 
-`routes.RoutePlanner.route(method, start, goal, hazards)`:
+## Remember what's learned
 
-- **collision:** A* over Deimos's hex walk grid, built from the zone's collision.bcd. It is bounded by `MAX_GRID_NODES` and `PLANNING_SECONDS`, then string-pulled into straight legs that Deimos's `straight_path_walkable` accepts.
-- **nav:** A* over the zone.nav waypoint graph, string-pulled into legs that stay within one nav cell of a waypoint.
-Routes and the walking watcher look ahead. `motion.MotionTracker` turns the last second and a half of each enemy's positions into a velocity. A route may not come within 520 units of where a tracked enemy will be when the wizard gets there, which is assumed to be no further than four seconds of its current course. While walking, an enemy stops the trip only if its course will bring it close to the next stretch of the path.
+Keep a small store that survives restarts: doors and the zones they lead to, where travel buttons landed, which zones' fights are heavy, where marks were safe or led into fights, each enemy kind's biggest hit, and the deck's size. A restart then costs seconds, not the knowledge of an evening.
 
-- **straight:** one leg, refused if it crosses a duel circle or passes close to an enemy. When walk data loaded, it is also refused if it is more dangerous than its ends, so it never cuts across a patrol path.
+## Log why, and measure every rule
 
-`Hazards` adds cost near enemies (`ENEMY_AVOID_RADIUS`, `ENEMY_AVOID_WEIGHT`), and keeps merged legs `LEG_ENEMY_CLEARANCE` from enemies. It forbids duel circles (`DUEL_CIRCLE_NO_GO`) and recorded obstacles (`OBSTACLE_RADIUS`).
+- **Log each decision with its reason** (a discard, a refill, a skipped mark), as events you can read back. Then "why did it do that?" has an answer.
+- **Make every rule measurable.** Rounds per fight, health per fight, fights per walk, the gap after a battle, wisp success. Record the numbers before and after a change, so you can tell whether it helped.
+- **Keep run output out of version control.** It names the character and other players.
 
-## Battles
+## Supervision
 
-Each run starts with what earlier runs learned (`knowledge.Knowledge`, saved as `runtime/knowledge.json`): where teleport volumes lead, and which zones to route by the nav graph first. It adds what it learns when it ends.
-
-`combat.fight` waits for each planning phase. It builds a `policy.RoundView` (health, pips, cards by spell type and school, living enemies with their shields, wards, traps and resistances) and asks the policy for a `Cast`. It validates the choice, casts through the mouseless cursor or passes, and waits for the next round. The battle code stops on timeouts, a round limit or any error, leaving the battle to the operator.
-
-## Dialogs
-
-X opens a dialog once the wizard is close enough to the arrow's NPC, or the interact prompt belongs to it. Space pages through, except on a page with a DECLINE button, which is a quest offer: there the `OfferPolicy` decides. After a dialog ends, the code waits up to 10 s for a follow-up dialog, which is how the next main quest arrives.
-
-## Reports
-
-`progress.RunRecord` collects every turn, battle and conversation (page counts and lengths, not text), the planner status per zone, the start and end state, and why the run stopped. `loop.play` saves it to the runtime folder however the run ends. Reports are labelled `"simulated": false`: they are real game observations.
+The operator decides what the bot may do. Keep the allow-list of keys and clicks in one place, with a test that the code can't go beyond it. Give the bot a stop signal it checks often, and a way to report what it's doing in plain facts. See [safety.md](safety.md).

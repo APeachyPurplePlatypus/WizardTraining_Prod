@@ -1,52 +1,58 @@
-# Safety model
+# Safety
 
-The framework acts in a live online game, on a real account, among real players. These rules keep it predictable and keep it from harming the account, other players, or the operator's privacy. Changing one is a deliberate decision: record why in [CHANGELOG.md](../CHANGELOG.md).
+A Wizard101 bot acts in a live online game, on a real account, among real players. These principles kept one such bot predictable, kept it from harming the account or other players, and kept the operator in charge. They're written for an agent designing its own bot. Agree the details with your operator before the bot touches the game, and record every change to them with its reason.
 
-## The account and the operator
+## The operator decides
 
-- **No credentials.** The operator logs in and picks an existing character. The framework never reads, stores or types a password, and it stops at any login, CAPTCHA or access challenge.
-- **No spending or trading.** It never opens the Crown Shop (Ctrl+S is not an allowed key) and never trades, buys or sells.
-- **Potions only with permission.** With `--use-potions`, the wizard drinks health potions it already has when out of battle and below 40% health. It never buys potions or refills. Without the flag it never touches them, because consumables stay off by default.
-- **Gear only with permission.** With `--wear-gear`, the wizard equips better items it already has, in zones without enemies. It clicks only the HUD's spellbook button, the book's Inventory tab, a category tab, the item, Equip and the book's Close button: never the trash, recycle or quick-sell buttons. If a message box appears, the run stops and leaves it for you. Without the flag the wizard's outfit stays as you left it.
-- **Training points only for Elemental Blade and Elemental Trap (operator, 2026-10-28, 13:52 UTC: "The bot can use training points, but it must use them wisely. Without an API to search for card info it will be hard for you to plan, but once you get access to wizard404 API this will be easier to do. For now, only spend the points on the balance spells elemental blade, and elemental trap cards.").** The framework spends training points on the Balance spells Elemental Blade and Elemental Trap only, at the Balance trainer (the Balance Tree), and on nothing else; it never trains with gold. Each purchase is logged with its reason and the training points before and after. Card and quest data from the Wizard404 API, once there is access to it, would let later plans choose more. Approved again at 13:55 UTC: "Approve: stay in dungeons to refill; spend training points only on Elemental Blade and Elemental Trap."
-- **Photos for quests (operator, 2026-10-28, 14:55 UTC: "Approve photo").** When a quest goal asks for a photo ("Say Cheese!": "Just press 'Z' and take a Photo right here"), the framework presses Z to open Photomancy's Viewfinder, clicks its shutter button, clicks "Keep Picture" in the photo's preview (operator, 2026-10-28, 16:08 UTC: "Approve and keep picture"), and closes the Viewfinder; no other Photomancy click (never "Trash Picture"), and Z for nothing else (`keys.tap(..., for_photo=True)`, `photomancy.py`).
-- **No chat.** The chat hook is never installed and nothing is typed into chat.
-- **Your responsibility.** Automation may break Wizard101's terms of service. The README says so, and so should anything you build on this.
+- **Default-deny, with an allow-list the operator grows.** Start with the smallest set of keys and clicks the bot needs. Each new kind of action (a new button, a new key, a new kind of box answered) is the operator's call, recorded with their words and the date.
+- **Approval is specific.** "Yes" to answering one kind of box isn't "yes" to every box. Keep each approval as narrow as it was given, and widen it only when the operator does.
+- **Stop instead of guessing.** When something unknown happens (an unrecognised window, a goal type never seen, a quest it can't classify) the bot should stop with a clear reason, or park that work and move on, rather than improvise.
+- **Measure, then report.** The operator can't watch every minute. Log what the bot did and why, in facts (battles, walks, zone changes, XP), so a run can be followed and judged afterwards.
+
+## The account
+
+- **No credentials, ever.** The operator logs in and picks an existing character. The bot never reads, stores or types a password, and stops at any login, CAPTCHA or access challenge.
+- **No spending or trading** without the operator's explicit approval: no Crown Shop, no trades, no buying, selling or renting. Treat gold and crowns as the operator's.
+- **Consumables and gear off by default.** Drinking potions it already has, wearing better gear it already owns, editing its deck, or spending training points are each a separate permission. When they're allowed, use only the clicks they need, check each click's result, and never touch trash, recycle, quick-sell or discard-item buttons.
+- **No chat.** Don't install a chat hook, and don't type into chat.
+- **Your responsibility.** Automation may break the game's terms of service. Say so in anything you publish.
 
 ## How the character moves
 
-- **Keyboard only:** W, A, S and D for walking and turning, X to interact, Space for dialogs (`keys.ALLOWED_KEYS`), and Z only to open Photomancy's Viewfinder for a quest goal that asks for a photo (`keys.PHOTO_KEYS`, below). Any other key raises `RefusedKey`.
-- **No teleport by the framework, and no speed changes.** No writes to position, facing or speed. The game's own teleporters (doors, zone gates, in-zone teleport volumes such as Triton Avenue's "Tele Up") are walked into like a player would; that is not a teleport the framework performs. WizWalker's `goto` writes the facing, so it is not used. The movement-teleport hook is never installed.
-- **The game's own travel buttons are allowed (operator's decision, 2026-10-28: "Teleporting only refers to using deimos, you are allow to teleport using in game tools").** The ban above is on Deimos and WizWalker moving the character. With `--use-travel-buttons`, a mana refill in a street may press, on the HUD, Mark Location (`MarkButton`), Go to The Commons, the world's hub (`GoHomeButton`), and Recall Location (`RecallButton`), by the mouseless cursor, and nothing else there: never `GotoDormButton` or `ResumeInstanceButton`. Each press is checked by the tooltip the button shows (`gametravel.py`), Recall is used only once mana is back, and a button that is cooling down (its timer shows) is not pressed. In the game, Mark and Recall each cost about 5 mana and Go to The Commons is free. They are also steps of the route plan (operator, 2026-10-28: "teleport is now a funcion you can incorperate to improve movement efficency in your planning of routes, this could help a lot with but not limited to back tracking"; `travelplan.py`), keeping 30 mana for fights. **Dungeons and towers: refill in place** (operator, 2026-10-28, 13:52 UTC: "Stay in the dungeon, but it is documented that you can leave a dungeon up to 30 mins, so I skeptical of your observations."; earlier, of the buttons: "it works in dungeons but not towers"): the travel buttons never take the wizard out of a dungeon or a tower floor to refill, and it never walks out to refill; inside, it refills from wisps in reach and by standing. A mark set at a dungeon's door, outside it, may be recalled to.
-- **Game notices: OK on "INFO" boxes (operator, 2026-10-28, 11:38 UTC: "Approve").** A message box titled "INFO" whose only button is its OK (`rightButton`), the game's own notice such as "You cannot teleport to that location. The dungeon timer has ended and the dungeon has been reset.", is closed with that OK (`ui.close_game_notice`, `screen.is_game_notice`). Never a box from another player: friend, trade and duel requests have other titles and Yes and No buttons, and stay as before (friend requests declined, the others left for the operator). **Dungeon-entry boxes are left for the operator.** One was answered No once, on the operator's word (2026-10-28, 20:47 UTC: "Approve", to "click No on the Sunken City box"): the box titled "Sunken City", "You are about to enter a Dungeon! ... This Dungeon takes around 1 hour and 30 minutes to finish ... Are you sure you want to enter this Dungeon?", closed by its `rightButton` alone; the quest was parked until level 15 ("Once we hit level 15, we can go back to this dungeon"). That was a one-off, not a standing rule.
-- **Deck edits (operator, 2026-10-28, 13:45 UTC: "Yes, bot can edit decks.").** With `--edit-deck`, the framework puts spell cards into the equipped deck and takes them out, never in battle and only in a zone with no enemy nearby. It clicks only the HUD's spellbook button, the book's Deck tab, spell cards in the Deck page's spell list and deck list, the Deck page's arrows, and Close; never a trash, discard or sell button. Each click is checked by reading the lists again, and anything unexpected stops the edit with the book closed. Every card moved, or left out, is logged with its reason and the deck's size before and after (`runtime/deck-changes.jsonl`, `decks.py`).
-- **Clicks** use WizWalker's mouseless cursor, only for card, dialog and NPC-menu buttons, the HUD's potion button when potions are allowed, the spellbook's inventory buttons listed above when gear is allowed, and the Deck page's controls listed below when deck edits are allowed. The real mouse does not move.
-- **The world gate (operator's instruction, 2026-10-28: "move on to krok"):** at the Spiral Door, X opens the Spiral Map; with `--leave-world` the framework clicks the button of the world the active quest leads to (`wbtn<World>`) and Go To World, and otherwise Exit (`worldgate.py`). Going through world gates was always part of natural navigation (AGENTS.md); these are the clicks it takes.
-- **Quest book clicks (operator's decision, 2026-10-28):** with `--side-quests` the framework may click the HUD's spellbook button, the book's Quest tab, the quest page's Previous and Next buttons, a quest's Activate button and Close; never Hide or abandon; no keys. The code is `questbook.py`, and a test keeps the clicks to this list.
-- **No detection evasion.** The framework does not try to look human. It is honest automation within the limits above.
+- **Like a player, by keyboard.** Walk and turn with the movement keys, and interact and page through dialogs with their keys. Refuse any key not on the allow-list. Beware keys that open windows: Q opens the quest book.
+- **No teleport by the bot, and no speed changes.** Never write position, facing or speed to memory, and don't use a tool feature that does (check a library's source before enabling one). Walking into the game's own teleporters, doors and zone gates is what a player does, so it's allowed.
+- **The game's own travel buttons are the player's tools.** Mark, Recall, Go Home, a dungeon's return button and the world gate's map are ordinary play, used by clicking them as a player would, once the operator agrees. Check a button is the one you mean (by its tooltip, for instance) and that it isn't cooling down before pressing it.
+- **Clicks without the real mouse.** A mouseless cursor that clicks named windows keeps the operator's mouse free and makes every click a deliberate, listed action.
+- **No detection evasion.** Don't try to look human. Be honest automation within the limits above.
 
 ## Other players
 
-- **Duel circles are no-go areas.** Routes keep 900 units away from them, and straight lines through them are refused. Enemies standing in one are never targets.
-- **No chat, no trades, no following.**
-- **Endorsements are Friendly.** After another player shares a battle, the game asks to endorse them, and the window holds the keyboard until answered. The framework answers Friendly, never reads the player's name, and logs only that it endorsed. To decline instead, point the "Endorse a Wizard" entry of `ui.KNOWN_POPUPS` at the close button.
+- **Leave them alone.** Never enter another player's duel circle (keep routes well clear of them), never target an enemy standing in one, and don't follow, chat with or trade with anyone.
+- **Never answer another player's request.** Friend, trade, duel, group and teleport requests are the operator's. Decline or leave them, as agreed.
+- **Features that bring in other players wait for the operator.** Group help such as the Quest Friend Finder could speed progress, but it involves real people.
+- **Shared battles end with an endorsement window** that holds the keyboard. Answer it as agreed with the operator, without reading or logging the other player's name.
+
+## Boxes and popups
+
+- **A game box whose only button is OK can be closed with it,** with its title and text logged, once the operator agrees. A box with Yes and No is a decision. Answer one kind only when the operator has said how (a dungeon-entry box, for instance).
+- **Popups can hold the keyboard or take every click.** If keys stop working, look for an open window before anything else.
 
 ## The game client
 
-- **Only the hooks that reading needs** are installed: player, player stats, client, root window and quest arrow. Clicks add the render-context and mouseless-cursor hooks.
-- **Hooks are always removed** (`session.attached`). A killed process cannot remove them, so stop runs with the STOP file only.
+- **Install only the hooks you read from,** and always remove them on the way out, however the run ends.
+- **Never kill a run.** A process killed with its hooks in leaves them patched into the client until the game restarts. Give the bot a stop signal it checks every tick and between turns, and stop it at a turn's boundary in a zone with no enemies.
 
 ## Bounded runs
 
-`progress.Limits` bounds every run:
-- time, turns and battles;
-- turns without progress, step-aways, loading waits and immobile waits for enemies;
-- defeats, of which none are allowed by default.
+- **Bound everything:** time, turns, battles, rounds, waits, searches, and turns without progress. A loop without a bound is a bot standing still for hours.
+- **When something fails, change strategy.** Repeating the same failed action doesn't converge. Try the next approach not yet tried in that situation, log it, and stop for the operator when every approach has failed there.
 
-Battles have their own round, phase and total time limits. Route planning gives up after 2 s, and a route after 180 s. Unexpected situations raise `StopRun` with a reason in the report.
+## Towers and dungeons
+
+- **Know what leaving costs.** A dungeon in this game keeps its progress for 30 minutes after leaving. A tower loses its progress when left partway. Plan refills around that, and don't leave a tower partway.
 
 ## Privacy
 
-- **Reports stay local.** They are saved under `runtime/`, which Git ignores. They hold positions, zone names, quest keys and card names.
-- **No dialog text in reports.** NPCs often say the character's name, so reports keep page counts and lengths only.
-- **No screenshots.** The framework takes none. If you add them for troubleshooting, capture only the game window, keep the images local and never commit them: they can show other players' names and chat.
+- **Keep run output local and out of version control.** Reports, logs and screenshots hold positions, zone names, and often the character's name. NPCs say it in dialog, so keep dialog page counts, not text, in reports.
+- **No paths from your own machine** in anything you publish. Use placeholders or settings instead.
+- **Screenshots only when nothing else works.** Capture the game window only, keep the images local, and never commit them: they can show other players' names and chat.
