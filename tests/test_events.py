@@ -47,6 +47,11 @@ class DescriptionTest(unittest.TestCase):
         self.assertEqual(text, "round 2: me 450/624 with 3 pips; cast Frost Beetle on enemy; "
                                "enemies left: Haunted Minion 35")
 
+    def test_describe_round_shows_the_cards_discarded(self):
+        entry = round_entry(2, 450, "cast Frost Beetle on enemy", [("Haunted Minion", 35)])
+        entry["discarded"] = ["Freeze: no enemy can be stunned (7 cards were left in the deck)"]
+        self.assertIn("discarded Freeze: no enemy can be stunned", describe_round(entry))
+
     def test_describe_round_shows_the_pips_an_enemy_holds(self):
         entry = round_entry(8, 357, "cast Frost Beetle (Ice) on enemy General Akilles", [("General Akilles", 145)])
         entry["view"]["enemies"][0]["pips"] = 5

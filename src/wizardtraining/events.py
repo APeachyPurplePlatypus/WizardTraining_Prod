@@ -91,6 +91,8 @@ def describe_round(entry: dict) -> str:
     reopened = "reopened the card choice; " if entry.get("reopened card choice") else ""
     if entry.get("returned to combat"):
         reopened = f"{entry['returned to combat']}; {reopened}"
+    if entry.get("discarded"):
+        reopened = f"{reopened}discarded {'; '.join(entry['discarded'])}; "
     return (f"round {view['round_number']}: me {view['health']}/{view['max_health']} with {view['pips']} pips{mana}; "
             f"{reopened}{entry['action']}; enemies left: {enemies}{hand_text(view.get('cards'))}")
 
