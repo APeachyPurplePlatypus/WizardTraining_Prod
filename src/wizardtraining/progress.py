@@ -337,6 +337,18 @@ def short_for_a_heavy_zone(health: float | None, heavy_fights_there: int) -> boo
     return health is not None and heavy_fights_there >= HEAVY_ZONE_FIGHTS and health < RECHARGE_HEALTH_FRACTION
 
 
+def heavy_zone_on_the_way(here: str | None, ways: list[str | None], heavy_fights: dict[str, int],
+                          zones_with_enemies: list[str]) -> str | None:
+    """The first of `ways` (the goal's zone, the zone the goal was last entered from, the zone a Recall lands in)
+    other than `here` that has enemies and HEAVY_ZONE_FIGHTS heavy fights or more, else None. "We Need to Talk"'s
+    goal was in Curfew!'s instance, whose own zone had seen no heavy fight, so the wizard Recalled from the Commons at
+    75% into Triton's underwater zone outside it (20:46)."""
+    for way in ways:
+        if way and way != here and way in zones_with_enemies and heavy_fights.get(way, 0) >= HEAVY_ZONE_FIGHTS:
+            return way
+    return None
+
+
 def heavy_fight(health_before, health_after, max_health) -> bool:
     """A won fight that cost HEAVY_FIGHT_FRACTION of the wizard's health or more: in Colossus Boulevard pairs of Evil
     Snowmen and Gobbler Scouters cost 400 to 900 of 1,133, and two of three fights went under 25% (12:39 to 12:53)."""

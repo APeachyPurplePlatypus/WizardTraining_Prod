@@ -387,6 +387,18 @@ class HeavyZoneTest(unittest.TestCase):
         self.assertFalse(short_for_a_heavy_zone(None, 3))
 
 
+class HeavyZoneOnTheWayTest(unittest.TestCase):
+    def test_the_zone_outside_an_instance_goal_counts(self):
+        from wizardtraining.progress import heavy_zone_on_the_way
+        underwater = "WizardCity/WC_Streets/WC_Triton_Underwater/WC_Triton_Underwater"
+        instance = "WizardCity/WC_Streets/WC_Triton_Underwater/Interiors/WC_Triton_Underwater_T1"
+        heavy, enemies = {underwater: 8, instance: 1}, [underwater, instance]
+        self.assertEqual(heavy_zone_on_the_way("WizardCity/WC_Hub", [instance, underwater, None], heavy, enemies),
+                         underwater)
+        self.assertIsNone(heavy_zone_on_the_way("WizardCity/WC_Hub", [instance, None, None], heavy, enemies))
+        self.assertIsNone(heavy_zone_on_the_way(underwater, [underwater], heavy, enemies))
+
+
 class OnARefillTripTest(unittest.TestCase):
     def test_a_trip_is_over_once_the_wizard_is_in_a_dungeon_or_among_enemies(self):
         from wizardtraining.progress import on_a_refill_trip

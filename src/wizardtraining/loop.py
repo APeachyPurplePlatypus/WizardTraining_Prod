@@ -52,7 +52,7 @@ from .movement import LOADING, KeysIgnored, Reroute, face, travel
 from .navigation import load_planner
 from .policy import LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, SpellTypePolicy, biggest_hits
 from .progress import (DUEL_BLOCKS_THE_WAY, DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY, ENEMY_NEAR_PATH, LimitReached, Limits, PATH_THREATS,
-                       PlannedRoute, RunRecord, StopRun, check_limits, leaves_world, health_to_travel, mana_for_a_fight, mana_to_travel, short_for_a_heavy_zone, still_to_recharge, trapped_by, worth_marking, worth_recalling, dungeon_held, resume_in_time, RESUME_TRIP_SECONDS, on_a_refill_trip,
+                       PlannedRoute, RunRecord, StopRun, check_limits, leaves_world, health_to_travel, mana_for_a_fight, mana_to_travel, heavy_zone_on_the_way, short_for_a_heavy_zone, still_to_recharge, trapped_by, worth_marking, worth_recalling, dungeon_held, resume_in_time, RESUME_TRIP_SECONDS, on_a_refill_trip,
                        PARK_AFTER_STRATEGIES, HEAVY_ZONE_FIGHTS, RECALL_MANA_NEEDED, RECHARGE_HEALTH_FRACTION, heavy_fight, parked, worth_pushing_on, short_before_entering, made_headway, GOAL_HEADWAY, STALLED_TRIPS_TO_PARK, forget_obstacles_near, OBSTACLE_FORGET_RADIUS,
                        nav_did_better, progressed, ready_to_recall, remember_obstacles, safe_to_stand, short_for_a_fight,
                        should_drink_potion, stalled, topped_up, travel_outcome, wanted_wisp,
@@ -342,25 +342,26 @@ class QuestLoop:
         the case, or once the recharge is asked for."""
         zone = state["zone"]
         goal_zone = (self.record.quest or {}).get("goal_zone")
-        if (goal_zone not in (None, "", zone) and goal_zone in self.record.zones_with_enemies
-                and zone not in self.record.zones_with_enemies and not self.record.recharging
-                and not in_dungeon(zone, self.record.entered_with_x, self.record.dungeon_zones)
-                and short_for_a_heavy_zone(fraction, self.record.heavy_fights.get(goal_zone, 0))):
-            self.record.recharging = True
-            self.events.emit("health", f"{state['health']} of {state['max_health']} health in {zone}, and the goal is in "
-                                       f"{goal_zone}, where fights are heavy: recharging here before going")
+        ways = [goal_zone, self.record.arrivals.get(goal_zone or "", {}).get("from"), self.record.marked_in]
+        heavy = heavy_zone_on_the_way(zone, ways, self.record.heavy_fights, self.record.zones_with_enemies)
+        if heavy is None or not short_for_a_heavy_zone(fraction, self.record.heavy_fights.get(heavy, 0)):
             return None
-        if (goal_zone in (None, "", zone) or goal_zone not in self.record.zones_with_enemies or not self.use_travel_buttons
+        if (zone not in self.record.zones_with_enemies and not self.record.recharging
+                and not in_dungeon(zone, self.record.entered_with_x, self.record.dungeon_zones)):
+            self.record.recharging = True
+            self.events.emit("health", f"{state['health']} of {state['max_health']} health in {zone}, and the way to the "
+                                       f"goal is through {heavy}, where fights are heavy: recharging here before going")
+            return None
+        if (goal_zone in (None, "", zone) or not self.use_travel_buttons
                 or not in_dungeon(zone, self.record.entered_with_x, self.record.dungeon_zones)
-                or in_tower(zone, self.record.entered_with_x, self.record.dungeon_zones)
-                or not short_for_a_heavy_zone(fraction, self.record.heavy_fights.get(goal_zone, 0))):
+                or in_tower(zone, self.record.entered_with_x, self.record.dungeon_zones)):
             return None
         trip = await self.go_home_for("health", state)
         if trip is not None:
             self.record.recharging = True
-            self.events.emit("health", f"{state['health']} of {state['max_health']} health in {zone}, and the goal is out "
-                                       f"in {goal_zone}, where fights are heavy: refilling in the Commons before "
-                                       "stepping out")
+            self.events.emit("health", f"{state['health']} of {state['max_health']} health in {zone}, and the way to the "
+                                       f"goal is out through {heavy}, where fights are heavy: refilling in the Commons "
+                                       "before stepping out")
         return trip
 
     async def refill_after_heavy_fight_turn(self, state: dict) -> dict | None:
