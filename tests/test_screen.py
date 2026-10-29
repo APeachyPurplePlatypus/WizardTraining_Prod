@@ -130,5 +130,16 @@ class DungeonEntryBoxTest(unittest.TestCase):
         self.assertFalse(is_dungeon_entry(self.caption, ["leftButton", "centerButton", "rightButton"]))
 
 
+class MountTimerBoxTest(unittest.TestCase):
+    def test_the_rented_mounts_timer_question_for_the_mount_being_equipped(self):
+        from wizardtraining.screen import is_mount_timer_box
+        caption = "Equipping this mount will start its timer. Is that OK?"
+        broom = "Enchanted Broom (1 Day)"
+        self.assertTrue(is_mount_timer_box(broom, caption, ["centerButton", "rightButton"], broom))
+        self.assertFalse(is_mount_timer_box(broom, caption, ["centerButton", "rightButton"], "One-Day Dromedary"))
+        self.assertFalse(is_mount_timer_box(broom, "Sell this item?", ["centerButton", "rightButton"], broom))
+        self.assertFalse(is_mount_timer_box(broom, caption, ["rightButton"], broom))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -94,6 +94,17 @@ def is_dungeon_entry(caption: str, buttons: list[str]) -> bool:
     return DUNGEON_ENTRY_WORDS in caption.lower() and sorted(buttons) == DUNGEON_ENTRY_BUTTONS
 
 
+MOUNT_TIMER_WORDS = "start its timer"
+
+
+def is_mount_timer_box(title: str, caption: str, buttons: list[str], mount: str) -> bool:
+    """The game's question on equipping a rented mount: titled with the mount's name, "Equipping this mount will start
+    its timer. Is that OK?", with Yes (`centerButton`) and No (`rightButton`) (Enchanted Broom (1 Day), 20:58). The
+    operator allowed wearing rented mounts as soon as the wizard has them, 2026-10-29 00:55 UTC."""
+    return (plain_text(title).strip() == mount and MOUNT_TIMER_WORDS in caption.lower()
+            and sorted(buttons) == DUNGEON_ENTRY_BUTTONS)
+
+
 TALK, USE = "talk", "use"
 
 

@@ -30,7 +30,8 @@ from .gear import Item, Requirement, Wizard
 from .progress import StopRun
 from .quests import game_language
 from .state import attempt
-from .ui import click, click_window, showing, window_at
+from .screen import is_mount_timer_box
+from .ui import BOX_YES, click, click_window, message_box, showing, visible_buttons, window_at
 
 INVENTORY_BEHAVIOR, INVENTORY_ITEMS = "WizardInventoryBehavior", 112
 EQUIPMENT_BEHAVIOR, EQUIPMENT_ITEMS = "WizardEquipmentBehavior", 120
@@ -52,6 +53,8 @@ MESSAGE_BOX = ["MessageBoxModalWindow"]
 BOOK_OPEN_SECONDS = 2.0
 PAGE_SETTLE_SECONDS = 1.5
 EQUIP_SETTLE_SECONDS = 2.0
+TIMER_BOX_WAIT_SECONDS = 8.0
+TIMER_BOX_POLL_SECONDS = 0.5
 
 
 class _Memory(DynamicMemoryObject, PropertyClass):
@@ -163,6 +166,19 @@ async def _item_window(client, name: str):
     return None
 
 
+async def start_the_rental(client, item: Item) -> None:
+    """After Equip on a rented mount, the game asks whether to start its timer (`screen.is_mount_timer_box`): Yes.
+    Any other box is left open."""
+    for _ in range(int(TIMER_BOX_WAIT_SECONDS / TIMER_BOX_POLL_SECONDS)):
+        box = await message_box(client)
+        if box is not None:
+            if is_mount_timer_box(box.title, box.caption, await visible_buttons(box.window), item.name or ""):
+                await click_window(client, await window_at(box.window, BOX_YES))
+                await asyncio.sleep(EQUIP_SETTLE_SECONDS)
+            return
+        await asyncio.sleep(TIMER_BOX_POLL_SECONDS)
+
+
 async def equip(client, item: Item) -> str | None:
     """Equip `item` from the backpack through the spellbook, then close the book. None when the worn items then
     include it, or what went wrong. A message box that appears is left open, and the run stops for the operator."""
@@ -181,6 +197,7 @@ async def equip(client, item: Item) -> str | None:
         await asyncio.sleep(PAGE_SETTLE_SECONDS)
         await click(client, EQUIP_BUTTON)
         await asyncio.sleep(EQUIP_SETTLE_SECONDS)
+        await start_the_rental(client, item)
         if await showing(client, MESSAGE_BOX):
             raise StopRun(f"a message box appeared after equipping {item.name}; left for the operator")
     except LookupError as missing:
