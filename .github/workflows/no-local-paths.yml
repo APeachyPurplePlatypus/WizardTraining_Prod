@@ -1,0 +1,17 @@
+name: no local paths
+
+on:
+  pull_request:
+  push:
+
+jobs:
+  no-local-paths:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: No user folders or synced-drive paths in tracked files
+        run: |
+          if git grep -nIP '([A-Za-z]:[\\/]+Users[\\/]+[A-Za-z0-9._-]|/home/[a-z][a-z0-9_-]*/|/Users/[A-Za-z][A-Za-z0-9._-]*/|OneDrive)' -- . ':!.github/workflows/no-local-paths.yml'; then
+            echo "::error::A path from someone's own machine is in the lines above. Write a placeholder such as <framework folder>, or read it from an environment variable."
+            exit 1
+          fi
