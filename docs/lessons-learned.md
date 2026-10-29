@@ -64,12 +64,15 @@ These come from one character's first unattended play, level 1 to level 5 in Wiz
 
 ## Movement speed and oscillation
 
-- **Held W cannot stop on a small target, and the faster the wizard, the less.** The walker holds W and checks every 0.05 s, so each check carries the wizard 30 or more units at walking speed, more on a mount. A wisp walk aiming within 10, with the Enchanted Broom worn, went back and forth around the wisp for the route's whole 180 s (2026-10-28, 21:14 to 21:17); the operator saw it as "micro movements ... back in forth". Near a final target the walker now releases W and steps for the time the distance takes at its measured speed (`motion.step_seconds`, `movement.settle_on`), from a distance that grows with the speed (`motion.slow_down_distance`).
-- **Measure the speed, do not assume it.** It is taken from the position change per second while W is held (`motion.smoothed_speed`), so a mount, a slow or a fast zone changes it by itself.
-- **Guard against oscillating.** When the target turns up behind the wizard three times on the way in (`motion.OscillationGuard`), the wizard is as near as steps get: it counts as arrived within what the shortest steps can miss by (`motion.settle_radius`), else the walk fails in seconds, not minutes.
+General guidance for walking a character by keys, from tonight's walks (2026-10-28) and the operator's own work on steering:
 
-- **Steer in a closed loop, fast.** The operator replaced the held-W walker with a 100 Hz loop (`docs/update_pathfinding.md`): reading position and yaw costs microseconds, so the loop can steer, brake and dodge every 10 ms, while slower reads (the enemy list, the UI) run beside it. Its first walks, in the Commons and the Shopping District, went 3,945 and 2,710 and arrived with no back and forth (2026-10-28, 21:51).
-- **Data a worker thread reads must not change under it.** Moving the A* reroute to a worker thread kept the steering fast, but the reroute also read the enemy-motion deques the event loop keeps adding to; build such inputs on the event loop and hand the thread copies.
+- **Steer in a closed loop.** Read the position and heading on every tick and choose the keys from what is read, rather than timed key taps that run blind between reads: while a tap sleeps, a walking or mounted wizard covers 50 to 100 units it does not see.
+- **Corner by looking ahead.** Aim at a point that slides ahead along the path, its distance growing with the speed, and hold forward through bends with a turn key at the same time, instead of a dead stop and a turn in place at each corner or snapping to each waypoint late.
+- **Brake from the measured speed, and size arrival to it.** Measure the speed from the position change while walking, not a constant: a mount, a slow or a fast zone changes it. Release forward a little before the target by that speed, and never ask for an arrival circle smaller than what one check or the shortest step can carry the wizard past. A wisp walk aiming within 10 with the Enchanted Broom worn went back and forth around the wisp for the route's whole 180 s (21:14 to 21:17).
+- **Keep an oscillation guard as a backstop.** When the target keeps turning up behind the wizard on the way in, it is as near as it will get: accept arrival within what the shortest step can miss by, or give up in seconds, not minutes.
+- **Read enemy velocity from a short, recent window.** A long window smears a patrol's turn into a wrong velocity for most of a second; take it from the newest samples and catch a reversal at once.
+- **Keep perception and planning off the steering loop.** Reading position and heading is cheap; the entity list, the UI tree and route searches are not. Run them beside the steering, so it never waits on them.
+- **Build shared data on one thread before handing work to another.** A route search moved to a worker thread read the enemy-motion samples the main loop keeps adding to; build such inputs first and hand the thread its own copy.
 
 ## Ramps and stairs
 
