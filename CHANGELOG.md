@@ -38,6 +38,10 @@ Entries up to 0.3.0, when this repository also held an implementation, are in [C
   - mounts;
   - spotting opportunities, and the Quest Friend Finder.
   - **Why:** each came from a real failure or measurement in play. The fight-length and mark lessons followed seabed fights of 11 to 12 rounds costing 43 to 53% of health, and two Recalls that landed in fights.
+- **What patrol and spawn data say about safe ground** (game data, lessons learned).
+  - **What:** spawn data tells enemy paths from wisp, reagent and chest paths better than path names do; a path's nodes come from its own list, in any order; sidewalks are safer than streets but not safe; wisp paths are where to look for wisps.
+  - **Why:** a proposal to treat sidewalks and wisp paths as safe was checked against the game files of 19 zones. The spawn data part held and cut the ground priced as near enemies by 33 to 59% in the five streets measured; the safe-sidewalk part didn't, since in four busy streets a quarter to half of the sidewalk lay within 600 units of an enemy path.
+  - **Verified:** against the installed game files and offline route planning in nine zones. Not yet seen in play.
 - **A check that no path from someone's own machine is committed** (`.github/workflows/no-local-paths.yml`).
   - **What:** on every push and pull request, the tracked files are searched for Windows user folders, home folders and cloud-synced document folders. Any match fails the check and is listed.
   - **Why:** a path from a contributor's machine tells readers their user name and how their machine is laid out, and helps no one else.
