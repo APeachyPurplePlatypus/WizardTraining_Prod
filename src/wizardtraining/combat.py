@@ -27,7 +27,7 @@ from wizwalker.utils import get_wiz_install
 from .connection import BATTLE_LOG_TAIL_BYTES, client_log_tail, lost_connection, moves_by_round
 from .geometry import flat_distance
 from .movement import KeysIgnored, face_and_step
-from .discards import cards_to_discard, deck_left
+from .discards import MAX_DISCARDS_PER_ROUND, cards_to_discard, deck_left
 from .policy import (UNIVERSAL, Card, Cast, CombatPolicy, Combatant, DamageModifier, Enchant, Flee, Pass, RoundView,
                      from_an_item, problem_with)
 from .reports import plain
@@ -339,15 +339,23 @@ async def discard_useless_cards(combat, policy, view, cards) -> list[str]:
     """Discard, by right-click, the cards in hand `discards.cards_to_discard` finds of no use soon, so the next
     round's draw can bring better ones (the operator, 2026-10-29 02:01 UTC: "u can discard cards to find cards you
     really need to use"). The deck's size comes from the policy (`deck_size`, set from the deck read in the zone);
-    treasure cards are never discarded. Says what was discarded and why; empty when nothing was."""
+    treasure cards are never discarded. One card at a time, the hand read again and the choice made again after each:
+    the hand closes up after a discard, so the second of two discards chosen together hit the card now in the first's
+    place, an Evil Snowman instead of a second Freeze (22:20). Says what was discarded and why; empty when nothing
+    was."""
     deck_size = getattr(policy, "deck_size", None)
     if deck_size is None:
         return []
-    treasure = frozenset([index for index, card in enumerate(cards) if await attempt(card.is_treasure_card()) is True])
-    left = deck_left(deck_size, view.cards, getattr(policy, "used_from_the_deck", 0))
-    found = cards_to_discard(view, deck_left=left, treasure=treasure, hit_seen=getattr(policy, "hit_seen", None))
     done = []
-    for discard in sorted(found, key=lambda discard: discard.card, reverse=True):
+    for _ in range(MAX_DISCARDS_PER_ROUND):
+        if done:
+            view, _, cards, _ = await read_hand(combat)
+        treasure = frozenset([index for index, card in enumerate(cards) if await attempt(card.is_treasure_card()) is True])
+        left = deck_left(deck_size, view.cards, getattr(policy, "used_from_the_deck", 0))
+        found = cards_to_discard(view, deck_left=left, treasure=treasure, hit_seen=getattr(policy, "hit_seen", None))
+        if not found:
+            break
+        discard = found[0]
         await cards[discard.card].discard(sleep_time=DISCARD_SETTLE_SECONDS)
         note_used_from_the_deck(policy, view.cards[discard.card])
         done.append(f"{discard.reason} ({left} cards were left in the deck)")
