@@ -6,7 +6,8 @@ thing". A discard is a right-click on a card in the wizard's own hand; the hand 
 start of the next round, so a discarded card is a slot for a fresh draw, and one card fewer left in the deck.
 
 A card is let go when it will not help over the next round or two, by what the round shows: a stun when no enemy
-can be stunned, or when the wizard is safe and short of attacks (the need is damage); an attack every enemy resists
+can be stunned, or when the wizard is safe and short of attacks (the need is damage), but one stun is kept against two
+or more enemies that can be stunned, where a stun a round holds back half the hits; an attack every enemy resists
 by RESISTED_BY_ALL or more, while another attack is in hand; a second heal while health is safe. Kept always: the
 best castable attack, a heal when health could fall below KEEP_A_HEAL_BELOW within two enemy turns, traps, item
 cards (a wand comes back each round) and treasure cards (used up once played). At most MAX_DISCARDS_PER_ROUND a
@@ -82,6 +83,9 @@ def cards_to_discard(view: RoundView, *, deck_left: int | None, treasure: frozen
         keep.add(heals[0])
     attacks = [index for index, card in enumerate(view.cards) if is_attack(card)]
     deck_attacks = [index for index in attacks if not from_an_item(view.cards[index])]
+    stuns = [index for index, card in enumerate(view.cards) if is_stun(card)]
+    if sum(1 for enemy in view.enemies if enemy.stunnable) >= 2 and stuns:
+        keep.add(stuns[0])
     found = []
     for index, card in enumerate(view.cards):
         if index in keep or index in treasure or from_an_item(card) or is_trap(card):

@@ -24,6 +24,11 @@ class DiscardTest(unittest.TestCase):
         self.assertEqual([discard.card for discard in found], [1])
         self.assertIn("the need is damage", found[0].reason)
 
+    def test_one_stun_stays_against_two_enemies_and_the_spare_goes(self):
+        pair = (GUARD, Combatant("Riverclaw Guard", 345, pips=1))
+        found = cards_to_discard(view([SNOWMAN, FREEZE, FREEZE, PIXIE, TRAP, WAND], enemies=pair), deck_left=9)
+        self.assertEqual([discard.card for discard in found], [2])
+
     def test_a_stun_stays_when_health_is_at_risk(self):
         strong = Combatant("Royal Guard", 250, pips=5)
         self.assertEqual(cards_to_discard(view([SERPENT, FREEZE, PIXIE], health=500, enemies=(strong,)),
