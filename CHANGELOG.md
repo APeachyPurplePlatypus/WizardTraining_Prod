@@ -41,6 +41,12 @@ Entries up to 0.3.0, when this repository also held an implementation, are in [C
 - **A page of symptoms and their likely causes** (`docs/symptoms.md`).
   - **What:** what a run going wrong looks like (keys that change nothing, creeping toward a target, turns that repeat at once, a use that "did nothing", numbers that jump, doors that aren't there), with the causes found in play for each, and what to check first.
   - **Why:** the same few causes came back again and again in two days of play, and each took a stop and a read of the logs to find. An agent starting from nothing gets there faster from the symptom.
+- **Dungeon lessons from Sunken City**, in the lessons' Dungeons section and the symptoms page:
+  - side rooms are the same dungeon;
+  - walking back in through the door can start a new instance;
+  - a flee's move to the hub comes after the battle ends;
+  - a walk-up that crosses a door.
+  - **Why:** in one afternoon, Sunken City's progress was lost twice: after a defeat in a side room, and after a flee. Both times the run walked in through the door instead of using the return button.
 - **Lessons from level 16 in Wizard City**, written as advice:
   - a stats read can be another player's, and tools that hook the game share its hooks;
   - walk data is flat, so compare heights before closing in on a target;

@@ -34,6 +34,7 @@ Check the cheap things first: whether a battle is showing, whether a window or g
   - The game counts the goal several seconds late.
   - One step closed and the next opened, so the number of open goals stayed the same. Check which goal closed.
 - **A use fails at a door.** The object is behind the door. Go through it.
+- **A walk-up to a target ends far away, or in another zone.** The last steps toward a target carried the character through a door. Check the zone at every step. If it changed, the target is beyond the door: look for it again in the new zone instead of counting a failed talk or use.
 - **A goal names a tag that matches no object.** The tag is in the objects' template files, not their names.
 - **A quest left the journal after a defeat in a dungeon.** Quests given inside an instance exist only inside it. Remember which quest led in, and go back through that one.
 
@@ -50,6 +51,7 @@ Check the cheap things first: whether a battle is showing, whether a window or g
 - **The bot keeps walking to a door that isn't there.** It learned the door from a flee or a Go Home that moved the character, not from a walk. Forget learned doors that fail twice.
 - **Recall lands in a fight.** The mark was set where a fight happened or near a patrol path.
 - **Recall doesn't get back into a dungeon.** Use the dungeon's own return button, within its timer.
+- **After a flee or a defeat in a dungeon, the run walked back in and found everything respawned.** It used the door rather than the return button, so it got a new instance. Either the exit wasn't recorded, because the zone was read before the move to the hub, or the side room it left didn't match the dungeon's zone name.
 - **A zone load takes over a minute.** The connection probably dropped. Read the client's log, and leave logging back in to the operator.
 
 ## Health
