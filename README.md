@@ -112,6 +112,17 @@ Work on a branch and open a pull request into `main`. CI runs the offline tests 
 3. Run a short, bounded `play` and read its report.
 4. Add the change to [CHANGELOG.md](CHANGELOG.md) with its rationale: why it was needed, and what was and was not verified in the game. The next person needs to know why the framework is the way it is.
 
+### Releasing
+
+A release closes a stretch of play, usually a level milestone.
+
+1. **Write the findings.** Add a retro to [docs/retros/](docs/retros/) covering what worked, what failed and why, and what is still unverified. Move the general rules into [docs/lessons-learned.md](docs/lessons-learned.md).
+2. **Close the CHANGELOG.** Turn `Unreleased` into the new version and date. Bump the version in `pyproject.toml`, `wizardtraining/__init__.py` and the README's Status.
+3. **Open a release pull request** into `main` and wait for the maintainer to approve and merge it.
+4. **Tag the merge on `main`** with the version (`vX.Y.Z`) and push the tag.
+5. **Create the GitHub release for the tag.** Base its notes on the retro, and link the retro and the CHANGELOG at the tag, not on `main`.
+6. **Then turn the retro's findings into framework changes**, each on its own branch.
+
 ## Credits and licence
 
 - Built on [Deimos-Wizard101](https://github.com/Deimos-Wizard101/Deimos-Wizard101) (GPL-3.0) and its vendored [WizWalker](https://github.com/Deimos-Wizard101/Deimos-Wizard101/tree/main/libs/wizwalker) (GPL-3.0-or-later). The enemy test, dialog window paths and spell-type card reading follow Deimos; the walk grid is Deimos's, used at run time from your checkout, not copied here.

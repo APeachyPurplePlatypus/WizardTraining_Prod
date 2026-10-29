@@ -6,6 +6,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Added
 
+- **A release checklist** (README, "Releasing").
+  - **What:** the steps from a finished stretch of play to a release: the retro, the CHANGELOG and version, a release pull request for the maintainer's approval, the tag on `main` after the merge, the GitHub release with notes from the retro (linking the retro and CHANGELOG at the tag), then the framework changes the retro calls for.
+  - **Why:** v0.3.0 was tagged without a GitHub release until the operator noticed (2026-10-29 02:26 UTC: "i noticed while I merged the changes, you did not create a release"); the steps were nowhere in the repo.
+  - **Verified:** the v0.3.0 release was made this way.
+
 - **Discarding cards in battle to dig for better ones** (`discards.py`, `combat.discard_useless_cards`, `combat.note_used_from_the_deck`, `SpellTypePolicy.deck_size`, `docs/safety.md`, `docs/lessons-learned.md`).
   - **What:** before choosing a card each round, cards in hand that will not help over the next round or two are right-clicked away, each logged with its reason: a stun when no enemy can be stunned, or when health is safe and the hand holds fewer than two attacks besides wands; an attack every enemy resists by 25% or more while another is in hand; a second heal while health is safe. The best castable attack, a heal the next two enemy turns may call for, traps, item and treasure cards are kept; at most two a round, and never below three cards left in the deck, counted from the deck's size (read with the deck, kept in knowledge.json as `RunRecord.deck_size` so a run that starts with a refill, before its deck check, knows it too) less the cards in hand and those cast or discarded this battle. The first live run discarded nothing: it had begun with a refill and never read its deck, so a Freeze it could not use stayed in hand (22:13). The first live discards (22:20) chose both Freezes together and right-clicked them by their places in hand; the hand closes up after a discard, so the second click took the Evil Snowman in the first one's place. Cards are now discarded one at a time, the hand read again and the choice made again after each.
   - **Why:** the operator, 2026-10-29 02:01 UTC: "u can discard cards to find cards you really need to use. like for example, discard a stun card for the chance to draw a 3 pip attack spell, add this function to the framework as a generic thing". Rounds were passed with a stun and heals in hand and no attack the pips could pay for (2026-10-28, 19:33 and 19:34).
@@ -55,6 +60,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
   - **Verified:** offline (`tests/test_screen.py`, `tests/test_training.py`, `tests/test_progress.py`); in the game: Sunken City's door.
 
 ### Fixed
+
+- **The spellbook is closed before the first walk, and one ignored turn key is retried** (`deckpage.close_book`, `QuestLoop.checked_turn`).
+  - **What:** closing the spellbook waits until it is gone (at most 3 s); a turn key the game ignores while the wizard is free to move is tried again after 1 s, and only a second one within 30 s stops the run for the operator.
+  - **Why:** the run stopped twice, at 22:09 and 22:28 on 2026-10-28, on "the game ignored a turn key while free to move", 4 s after the start-up deck check closed the spellbook, with no box on the screen.
+  - **Verified:** offline (the test suites, the import boundary); in the game: the restart at 22:32 walked from the Commons with no stop.
 
 - **A mark that Recalls land in fights at is retired, and the travel plan weighs the risk** (`progress.landing_cell`, `progress.retired_mark`, `progress.recall_risk_seconds`, `QuestLoop.count_the_landing`, `travelplan.choose_travel` `recall_risk`, `RunRecord.mark_landings`, `progress.MARK_AT_DOOR_REACH`).
   - **What:** each Recall's landing is counted under its spot (a 300-unit square, kept in knowledge.json) with whether a fight began within 15 s; a mark that has drawn two such fights is forgotten and the way back is walked; the travel plan adds the share of fights on landing, times 180 s (the fight and the trip home), to a Recall's estimate; and the refill mark goes on the goal's door from up to 4,000 away, not 1,500, when no enemy is near the walk.
