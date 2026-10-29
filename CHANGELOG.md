@@ -38,6 +38,22 @@ Entries up to 0.3.0, when this repository also held an implementation, are in [C
   - mounts;
   - spotting opportunities, and the Quest Friend Finder.
   - **Why:** each came from a real failure or measurement in play. The fight-length and mark lessons followed seabed fights of 11 to 12 rounds costing 43 to 53% of health, and two Recalls that landed in fights.
+- **A page of symptoms and their likely causes** (`docs/symptoms.md`).
+  - **What:** what a run going wrong looks like (keys that change nothing, creeping toward a target, turns that repeat at once, a use that "did nothing", numbers that jump, doors that aren't there), with the causes found in play for each, and what to check first.
+  - **Why:** the same few causes came back again and again in two days of play, and each took a stop and a read of the logs to find. An agent starting from nothing gets there faster from the symptom.
+- **Lessons from level 16 in Wizard City**, written as advice:
+  - a stats read can be another player's, and tools that hook the game share its hooks;
+  - walk data is flat, so compare heights before closing in on a target;
+  - other players' fights are obstacles that move on: back off and wait;
+  - the game counts goals late and step by step, so judge a use by which goal closed;
+  - an arrow at a door means the target is behind it;
+  - retry set-aside quests before leaving a world;
+  - a goal's tag can be in an object's template rather than its name;
+  - a flee can move the character, so learn doors only from walks;
+  - read the turn order, count damage over time, know when a fight is lost on heals, and when a shield beats an attack;
+  - heals left in hand at a fight's end are wasted.
+  - **Why:** each came from a stall, a loss or a measurement in play on 2026-10-29: a four-minute creep under a balcony NPC, eleven refused approaches in a second beside another player's duel, shells and a book pedestal that worked but were logged as misses, a door learned from a flee, three losses to stronger groups in Sunken City, and a heal left unused in 32 of 38 wins.
+  - **Verified:** in play, except the shield ordering, which is not yet seen in play.
 - **What patrol and spawn data say about safe ground** (game data, lessons learned).
   - **What:** spawn data tells enemy paths from wisp, reagent and chest paths better than path names do; a path's nodes come from its own list, in any order; sidewalks are safer than streets but not safe; wisp paths are where to look for wisps.
   - **Why:** a proposal to treat sidewalks and wisp paths as safe was checked against the game files of 19 zones. The spawn data part held and cut the ground priced as near enemies by 33 to 59% in the five streets measured; the safe-sidewalk part didn't, since in four busy streets a quarter to half of the sidewalk lay within 600 units of an enemy path.

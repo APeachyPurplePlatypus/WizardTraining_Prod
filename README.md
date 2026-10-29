@@ -9,6 +9,7 @@ It is not an implementation or a configuration guide. An agent should read it, t
 ## What's here
 
 - **[docs/lessons-learned.md](docs/lessons-learned.md):** the core. Lessons by topic, each as what happened, what it taught and what to try: reading the game, moving and pathfinding, quests and dialogs, fighting, health and refills, travel, doors and dungeons, popups, and spotting opportunities.
+- **[docs/symptoms.md](docs/symptoms.md):** what a run going wrong looks like, the causes found in play for each symptom, and what to check first.
 - **[docs/safety.md](docs/safety.md):** principles for a bot that plays on a real account among real players, under an operator's supervision.
 - **[docs/game-data.md](docs/game-data.md):** what the game exposes, in memory, in its zone files and in its own log, and where to look for it.
 - **[docs/architecture.md](docs/architecture.md):** design advice that held up: keep decisions apart from game access, steer in a closed loop, log why, measure every rule.
@@ -20,7 +21,8 @@ It is not an implementation or a configuration guide. An agent should read it, t
 1. **Read [safety.md](docs/safety.md) first,** and agree its limits with your operator before the bot touches the game.
 2. **Read [lessons-learned.md](docs/lessons-learned.md) before designing anything.** Most of what goes wrong in a first unattended run is already in it.
 3. **Use [game-data.md](docs/game-data.md) as a map,** not as values. The game updates often, and memory layouts and window paths change with it, so check everything against the client in front of you.
-4. **Build your own way, and measure it.** Then add what you learn back here, as advice someone else can use without your code.
+4. **When a run goes wrong, start at [symptoms.md](docs/symptoms.md).** The same few causes come back.
+5. **Build your own way, and measure it.** Then add what you learn back here, as advice someone else can use without your code.
 
 ## Status
 
