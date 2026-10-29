@@ -90,6 +90,8 @@ From walks with a mount, with crowds of patrols, and with the operator's own wor
 - **A miss is not immunity.** A spell that left its target's health unchanged once most likely fizzled: an 80% accurate spell fizzles one cast in five. One fizzle barred Snow Serpent for the rest of a fight, and the wizard chipped with one-pip spells for four rounds with three pips held. The fight took 12 rounds and 43% of its health. Set a card aside only after it fails again on the same target.
 - **Pips held beyond what a card needs are worth nothing until spent.** With a trap of its school waiting, or with three or more pips unspent, play the bigger hit over a one-pip spell that only roughly ties it. A fight that drags on costs more health than the pips saved.
 - **Discard cards that won't help soon.** Right-clicking a card in hand during your own planning discards it, and the hand refills from the deck next round. A stun when nothing needs stunning, an attack every enemy resists, or a second heal while health is safe, is a slot for a better draw. Keep the best castable attack, a heal the next two enemy turns may call for, traps, and anything used up when cast. Discard one card at a time and read the hand again after each, because the hand closes up: a second click by position took the wrong card. Keep enough in the deck to finish the fight, and log each discard's reason.
+- **Keep two decks: one to end mob fights fast, one for long boss fights.** A street fight is won by ending it before it costs much, and a boss fight by surviving long enough. One deck can't do both, and a bigger deck filled to its size draws its heals and shields less often. A mob deck wants area attacks first, then the biggest hits, a couple of heals, traps and a stun. A boss deck wants heals, shields, stuns and traps to their copy limits, then the bigger hits and no one-pip hits, and is left short of its size so those cards come up often. With two decks, the bigger one suits bosses. Wear the boss deck inside dungeons and on the way into them, and the mob deck elsewhere. Switch out of battle and away from enemies, since the spellbook stays open for a few seconds. Anything that counts the cards left in the deck, such as a discard rule, has to be updated at each switch. Losses to a dungeon boss with an all-round deck went five rounds without drawing a heal or a shield.
+- **Value an area attack by what it does to every enemy.** It hits each enemy for less than a single hit of the same pips, so it is worth its share summed over the living enemies, each capped at that enemy's health. Against two or more enemies it can beat the biggest single hit; against one, it rarely does. Check the share against the first area attack's real damage. (Not yet seen in play: the wizard had no area attack by level 17.)
 
 ## After a battle
 
@@ -124,6 +126,16 @@ From walks with a mount, with crowds of patrols, and with the operator's own wor
 - **Towers lose their progress when left partway.** Refill in place in a tower.
 - **Count loops from the last travel button,** not from the goal's start, so a long walk with refill trips isn't taken for a door loop.
 
+## Teams
+
+- **A dungeon's matchmaking search may open no window.** Pressed at the entrance, it showed only as a button on the HUD whose text waited, then counted down once a team formed. At zero the game teleported the character into the team's fresh instance from wherever it stood. Watch the HUD for the search, not a window, and treat arriving inside that dungeon as the teleport.
+- **Quest while the search runs.** Waiting at the entrance wastes the time. Going in alone while searching starts a solo run that the teleport then throws away. Set the dungeon's quests aside while the search runs, do other quests, and cancel the search after a while if no team forms. The operator: "you can spend that time better on quests."
+- **A team search starts a fresh instance.** Never search while a run of the same dungeon is still open: "if you join a team up while already in the dungeon, you reset your progress."
+- **Being in the team's instance isn't playing with the team.** Dungeon credit needs presence in the fights, so join a teammate's fight by walking into its duel circle. The team may already be far ahead, through parts of the dungeon the character never walked. The operator noticed: "the team up successed, but the player is not playing with the others."
+- **When every route fails, test your own keep-outs first.** On the walk to a team, every route failed for minutes in a zone the team had just walked. Neither the gates nor the enemies were the cause: the circles the bot kept clear of around trigger zones had closed the only corridor. If dropping a self-imposed keep-out opens a route, walk that route and log it.
+- **Never flee with teammates in the fight.** A flee leaves them to it. Enemies also spend hits on teammates, and teammates' heals hide damage, so don't learn enemies' biggest hits from team fights.
+- **Count teammates, don't name them.** Other players' names and chat stay out of logs and reports, and nothing is typed in chat.
+
 ## Stopping
 
 - **A stopped character among enemies can be pulled into a fight it can't play.** Stopped in Triton's underwater street with an enemy about 400 units away, the wizard was in a battle within minutes, passed every round with no one at the keys, and was defeated. Stop where no enemy walks.
@@ -142,6 +154,7 @@ From walks with a mount, with crowds of patrols, and with the operator's own wor
 
 - **Wear a mount when there is one.** A rented mount can be worn as soon as it arrives if none is worn. Mounts drop off indoors and come back outside, and the game asks before starting a rental's timer.
 - **Gear can be compared by its stats** (health, mana, resistances, then the school's damage and accuracy) once the item data is read. Only equip in a zone without enemies, because the spellbook stays open a few seconds per item.
+- **A full backpack refuses purchases and loot.** A shop refused a new deck at a full bag, and drops can't be picked up either. Before a shop trip, free some room. Agree an order with the operator: here it was housing decor first (except items for hobbies the operator keeps, such as gardening and fishing), then gear for other schools. Never sell what's worn, quest items or treasure cards. A sale can't be undone, so the operator's permission settings may stop it until they allow it.
 
 ## Opportunities
 

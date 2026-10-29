@@ -26,6 +26,15 @@ Entries up to 0.3.0, when this repository also held an implementation, are in [C
 
 ### Added
 
+- **Lessons on teams, two decks and a full backpack** (lessons learned: Fighting, Teams, Gear and mounts).
+  - **What:**
+    - keep a mob deck that ends fights fast and a boss deck for long fights, switched out of battle, and value an area attack by its share over every enemy;
+    - a dungeon's matchmaking search may show only on the HUD; quest while it runs; never search with a run of that dungeon open; join the team's fights, since credit needs presence; never flee with teammates; count teammates without naming them;
+    - when every route fails, test the bot's own keep-outs first;
+    - a full backpack refuses purchases and loot, so agree a selling order with the operator.
+  - **Why:** on 2026-10-29 a dungeon boss beat the wizard with every combat strategy at levels 16 and 17. The operator approved matchmaking and a bigger deck, and asked for two decks: "Mobs would focus on AOE attacks, basically trying to fight as fast as possible. you don't have AOE but you can add this to the framework for later. Boss would focus on strats and longer battles". The first matchmaking try formed a team, but the wizard went in alone while searching, then stood at the entrance unable to route to its team.
+  - **Seen in the game:** the HUD search, the countdown and the teleport; the refused purchase at a full bag; every route failing until the keep-outs were dropped (offline, against the zone's data). Not yet seen in play: the deck switch, an area attack, and joining a teammate's fight.
+
 - **Lessons from 2026-10-28 and 29**, written as advice:
   - closed-loop steering at 100 Hz (look-ahead cornering, braking by measured speed, the turning circle, live pursuit of moving targets, a nearer horizon in crowded streets);
   - discarding to dig for better cards;
