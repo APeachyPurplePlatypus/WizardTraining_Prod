@@ -339,6 +339,15 @@ def short_for_a_heavy_zone(health: float | None, heavy_fights_there: int) -> boo
     return health is not None and heavy_fights_there >= HEAVY_ZONE_FIGHTS and health < RECHARGE_HEALTH_FRACTION
 
 
+def short_for_an_instance_goal(goal_zone: str | None, mana: float | None, dungeons: list[str] = ()) -> bool:
+    """The goal is in an instance (`is_an_instance`, or a zone behind a dungeon-entry box) and mana is under
+    RECHARGE_MANA_FRACTION, which its door asks for (`short_before_entering`): top up where it is safe before setting
+    off, not at the door. From the Commons at 67, then 52, then 47 of 98 mana, the wizard Recalled to Curfew!'s
+    instance door, where the door sent it home for mana, 10 mana a round trip in Mark and Recall (20:54 to 21:01)."""
+    return ((is_an_instance(goal_zone) or goal_zone in dungeons) and mana is not None
+            and mana < RECHARGE_MANA_FRACTION)
+
+
 def heavy_zone_on_the_way(here: str | None, ways: list[str | None], heavy_fights: dict[str, int],
                           zones_with_enemies: list[str]) -> str | None:
     """The first of `ways` (the goal's zone, the zone the goal was last entered from, the zone a Recall lands in)

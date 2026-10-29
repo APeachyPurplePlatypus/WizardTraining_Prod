@@ -52,7 +52,7 @@ from .movement import LOADING, KeysIgnored, Reroute, face, travel
 from .navigation import load_planner
 from .policy import LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, SpellTypePolicy, biggest_hits
 from .progress import (DUEL_BLOCKS_THE_WAY, DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY, ENEMY_NEAR_PATH, LimitReached, Limits, PATH_THREATS,
-                       PlannedRoute, RunRecord, StopRun, check_limits, leaves_world, health_to_travel, mana_for_a_fight, mana_to_travel, heavy_zone_on_the_way, short_for_a_heavy_zone, still_to_recharge, trapped_by, worth_marking, worth_recalling, dungeon_held, resume_in_time, RESUME_TRIP_SECONDS, on_a_refill_trip,
+                       PlannedRoute, RunRecord, StopRun, check_limits, leaves_world, health_to_travel, mana_for_a_fight, mana_to_travel, heavy_zone_on_the_way, short_for_a_heavy_zone, short_for_an_instance_goal, still_to_recharge, trapped_by, worth_marking, worth_recalling, dungeon_held, resume_in_time, RESUME_TRIP_SECONDS, on_a_refill_trip,
                        PARK_AFTER_STRATEGIES, HEAVY_ZONE_FIGHTS, RECALL_MANA_NEEDED, RECHARGE_HEALTH_FRACTION, heavy_fight, parked, worth_pushing_on, short_before_entering, made_headway, GOAL_HEADWAY, STALLED_TRIPS_TO_PARK, forget_obstacles_near, OBSTACLE_FORGET_RADIUS,
                        nav_did_better, progressed, ready_to_recall, remember_obstacles, safe_to_stand, short_for_a_fight,
                        should_drink_potion, stalled, topped_up, travel_outcome, wanted_wisp,
@@ -347,6 +347,14 @@ class QuestLoop:
         the case, or once the recharge is asked for."""
         zone = state["zone"]
         goal_zone = (self.record.quest or {}).get("goal_zone")
+        safe_here = (zone not in self.record.zones_with_enemies
+                     and not in_dungeon(zone, self.record.entered_with_x, self.record.dungeon_zones))
+        if (safe_here and not self.record.recharging and goal_zone != zone
+                and short_for_an_instance_goal(goal_zone, mana_fraction(state), self.record.dungeon_zones)):
+            self.record.recharging = True
+            self.events.emit("mana", f"{state['mana']} of {state['max_mana']} mana in {zone}, and the goal is behind an "
+                                     f"instance door ({goal_zone}), which asks for 80%: topping up here before going")
+            return None
         ways = [goal_zone, self.record.arrivals.get(goal_zone or "", {}).get("from"), self.record.marked_in]
         heavy = heavy_zone_on_the_way(zone, ways, self.record.heavy_fights, self.record.zones_with_enemies)
         if heavy is None or not short_for_a_heavy_zone(fraction, self.record.heavy_fights.get(heavy, 0)):

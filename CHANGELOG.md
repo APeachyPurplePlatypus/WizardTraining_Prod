@@ -45,6 +45,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **Mana is topped up where it is safe before setting off for a goal behind an instance door** (`progress.short_for_an_instance_goal`, `QuestLoop.out_into_a_heavy_zone_turn`).
+  - **What:** in a zone without enemies, with the goal in an instance (named so, or behind a dungeon-entry box) and mana under 80%, which the door asks for, the wizard recharges there first.
+  - **Why:** from the Commons at 67, then 52, then 47 of 98 mana, the wizard Recalled to Curfew!'s instance door, where the door rule sent it home for mana: about 10 mana a round trip in Mark and Recall (20:54 to 21:01).
+  - **Verified:** offline (`tests/test_progress.py`).
+
 - **A load soon after a travel button is the button's, not a door** (`gametravel.note_press`, `gametravel.pressed_lately`, `QuestLoop.note_hidden_door`).
   - **What:** each press of Go to The Commons, Recall or the dungeon's return button is kept; a load that begins during a walk within 90 s of one is not taken for a door the zone's data does not list.
   - **Why:** a Recall from the Commons showed no zone change for the 25 s it was given, then its load began as the wizard walked; the run kept a door at (9310, -670) in the Commons for routes to keep out of (19:58), removed by hand from knowledge.json. The load then lasted over 60 s and the run stopped for the operator.

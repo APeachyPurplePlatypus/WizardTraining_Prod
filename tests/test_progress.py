@@ -387,6 +387,17 @@ class HeavyZoneTest(unittest.TestCase):
         self.assertFalse(short_for_a_heavy_zone(None, 3))
 
 
+class InstanceGoalManaTest(unittest.TestCase):
+    def test_mana_is_topped_up_before_setting_off_for_an_instance_goal(self):
+        from wizardtraining.progress import short_for_an_instance_goal
+        instance = "WizardCity/WC_Streets/WC_Triton_Underwater/Interiors/WC_Triton_Underwater_T1"
+        self.assertTrue(short_for_an_instance_goal(instance, 47 / 98))
+        self.assertFalse(short_for_an_instance_goal(instance, 90 / 98))
+        self.assertFalse(short_for_an_instance_goal("WizardCity/WC_Streets/WC_Triton", 47 / 98))
+        sunken = "WizardCity/WC_Streets/WC_Sunken_City"
+        self.assertTrue(short_for_an_instance_goal(sunken, 0.5, [sunken]))
+
+
 class HeavyZoneOnTheWayTest(unittest.TestCase):
     def test_the_zone_outside_an_instance_goal_counts(self):
         from wizardtraining.progress import heavy_zone_on_the_way
