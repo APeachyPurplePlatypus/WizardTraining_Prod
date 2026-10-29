@@ -52,7 +52,7 @@ from .movement import LOADING, KeysIgnored, Reroute, face, travel
 from .navigation import load_planner
 from .policy import LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, SpellTypePolicy, biggest_hits
 from .progress import (DUEL_BLOCKS_THE_WAY, DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY, ENEMY_NEAR_PATH, LimitReached, Limits, PATH_THREATS,
-                       PlannedRoute, RunRecord, StopRun, check_limits, leaves_world, health_to_travel, mana_for_a_fight, mana_to_travel, MARK_AT_DOOR_RADIUS, acted_after_battle, walk_to_mark_at_the_door, worth_going_in_first, heavy_zone_on_the_way, short_for_a_heavy_zone, short_for_an_instance_goal, still_to_recharge, trapped_by, worth_marking, worth_recalling, dungeon_held, resume_in_time, RESUME_TRIP_SECONDS, on_a_refill_trip,
+                       PlannedRoute, RunRecord, StopRun, check_limits, leaves_world, health_to_travel, mana_for_a_fight, mana_to_travel, MARK_AT_DOOR_RADIUS, acted_after_battle, landing_cell, recall_risk_seconds, retired_mark, walk_to_mark_at_the_door, worth_going_in_first, heavy_zone_on_the_way, short_for_a_heavy_zone, short_for_an_instance_goal, still_to_recharge, trapped_by, worth_marking, worth_recalling, dungeon_held, resume_in_time, RESUME_TRIP_SECONDS, on_a_refill_trip,
                        PARK_AFTER_STRATEGIES, HEAVY_ZONE_FIGHTS, RECALL_MANA_NEEDED, RECHARGE_HEALTH_FRACTION, heavy_fight, parked, worth_pushing_on, short_before_entering, made_headway, GOAL_HEADWAY, STALLED_TRIPS_TO_PARK, forget_obstacles_near, OBSTACLE_FORGET_RADIUS,
                        nav_did_better, progressed, ready_to_recall, remember_obstacles, safe_to_stand, short_for_a_fight,
                        should_drink_potion, stalled, topped_up, travel_outcome, wanted_wisp,
@@ -631,6 +631,8 @@ class QuestLoop:
                                                    "position": (state["position"]["x"], state["position"]["y"])}
         if arrived and isinstance(state["zone"], str):
             self.learn_the_way(self._last_state["zone"], state["zone"])
+            if self._recalled_at is not None and isinstance(state["position"], dict):
+                self.record.mark_cell = landing_cell(state["zone"], state["position"]["x"], state["position"]["y"])
             self.learn_the_door(self._last_state["zone"], state)
         self._last_state, self._last_quest = state, dict(self.record.quest or {})
 
@@ -846,6 +848,22 @@ class QuestLoop:
         if fought or not within:
             self._recalled_at = None
             self.measure("recall_fights", fought and within)
+            self.count_the_landing(fought and within)
+
+    def count_the_landing(self, fought: bool) -> None:
+        """Count a Recall's landing at its mark (`RunRecord.mark_landings`, kept across runs); a mark that has drawn
+        a fight on landing twice is retired (`progress.retired_mark`): forgotten, so the way back is walked."""
+        cell = self.record.mark_cell
+        if cell is None:
+            return
+        counts = self.record.mark_landings.setdefault(cell, [0, 0])
+        counts[0] += int(fought)
+        counts[1] += 1
+        if fought and retired_mark(counts) and self.record.marked_in is not None:
+            self.events.emit("travel", f"the mark in {self.record.marked_in} drew a fight on landing {counts[0]} times "
+                                       f"in {counts[1]} Recalls: no longer recalled to; the way back is walked")
+            self.record.marked_in = self.record.mark_tip = None
+            self._marked_in = None
 
     def note_a_tip(self) -> None:
         """A game box just closed with OK: its title and text may announce a feature (`opportunities.from_tip`)."""
@@ -2222,6 +2240,7 @@ class QuestLoop:
         self._marked_in = zone if problem is None else None
         if problem is None:
             self.record.marked_in, self.record.mark_tip = zone, await recall_tip(self.client)
+            self.record.mark_cell = None
             self._mark_position = await self.client.body.position()
             self.record.mark_purpose, self.record.mark_quest = FOR_A_REFILL, None
             self.record.mark_door_for = None
@@ -2311,6 +2330,7 @@ class QuestLoop:
             self.events.emit("travel", f"could not mark the way back in {here}: {problem}")
             return
         self.record.marked_in, self.record.mark_tip = here, await recall_tip(self.client)
+        self.record.mark_cell = None
         self._mark_position = await self.client.body.position()
         self.record.mark_purpose, self.record.mark_quest = WAY_BACK, quest_name
         self.record.mark_door_for = None
@@ -2337,7 +2357,8 @@ class QuestLoop:
                                hub=self.record.hubs.get(world_of(here)) or HUBS.get(world_of(here)), marked_in=marked,
                                mana=state["mana"], costs=self.travel_costs,
                                go_home_ready=await go_home_ready(self.client),
-                               recall_ready=marked is not None and await recall_ready(self.client))
+                               recall_ready=marked is not None and await recall_ready(self.client),
+                               recall_risk=recall_risk_seconds(self.record.mark_landings.get(self.record.mark_cell or "")))
         line = f"plan {choice.describe(here, goal_zone)}"
         if choice.way == WALK:
             if self._travel_planned_for != (here, *key):
@@ -2375,6 +2396,7 @@ class QuestLoop:
             self.events.emit("travel", f"could not mark the spot in {zone}: {problem}")
             return
         self.record.marked_in, self.record.mark_tip = zone, await recall_tip(self.client)
+        self.record.mark_cell = None
         self._mark_position = await self.client.body.position()
         self.record.mark_purpose, self.record.mark_quest = AFTER_A_DEFEAT, None
         self.record.mark_door_for = None
@@ -3184,6 +3206,7 @@ class QuestLoop:
             self.events.emit("travel", f"could not mark the door in {zone}: {problem}")
             return
         self.record.marked_in, self.record.mark_tip = zone, await recall_tip(self.client)
+        self.record.mark_cell = None
         self._mark_position = await self.client.body.position()
         self.record.mark_purpose, self.record.mark_quest = AFTER_A_DEFEAT, None
         self.record.mark_door_for = goal_zone

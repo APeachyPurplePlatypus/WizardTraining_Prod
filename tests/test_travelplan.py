@@ -50,6 +50,21 @@ class InteriorNeverEnteredTest(unittest.TestCase):
         self.assertEqual(choice.way, RECALL)
 
 
+class RecallRiskTest(unittest.TestCase):
+    def test_a_recall_that_lands_in_fights_loses_to_the_walk(self):
+        street = "WizardCity/WC_Streets/WC_Triton_Underwater/WC_Triton_Underwater"
+        hub, triton = "WizardCity/WC_Hub", "WizardCity/WC_Streets/WC_Triton"
+        links = {}
+        link_zones(links, hub, triton)
+        link_zones(links, triton, street)
+        def plan(risk):
+            return choose_travel(here=hub, goal_zone=street, door_distance=3000.0, links=links, hub=hub,
+                                 marked_in=street, mana=98, costs=TravelCosts(), go_home_ready=True, recall_ready=True,
+                                 recall_risk=risk)
+        self.assertEqual(plan(0.0).way, RECALL)
+        self.assertEqual(plan(150.0).way, WALK)
+
+
 class TravelPlanTest(unittest.TestCase):
     def test_zones_are_linked_both_ways_and_counted_in_doors(self):
         links = pyramid()

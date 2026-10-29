@@ -26,14 +26,16 @@ from wizwalker import Wad
 from .config import DEIMOS_VARIABLE
 from .routes import NavGraph, RoutePlanner, parse_nav_file
 from .patrols import PatrolMap, parse_nodes, parse_paths
-from .placed import parse_placed_objects
+from .placed import PlacedObject, parse_placed_objects
 from .training import DOWN_VOLUMES
 from .untracked import WALK_IN_RADIUS, parse_trigger_volumes, walk_in_teleports
 from .teleports import TeleportVolume, parse_teleport_volumes
 
 WALL_CLEARANCE = 45.0
-BODY_HEIGHT = 180.0
+BODY_HEIGHT = 135.0
 FLOOR_TOLERANCE = 8.0
+Z_EMBED_TOL = 75.0
+Z_BOX_TOL = 20.0
 EXPLORE_SPACING = 2500.0
 MAX_CELLS_SEARCHED_FOR_A_FREE_ONE = 2000
 PIECE_REACH = 150.0
@@ -49,7 +51,7 @@ async def load_planner(zone: str, deimos_root: Path | None) -> RoutePlanner:
     walk_grid, free, collision_status = await _collision_grid(wad, zone, deimos_root)
     nav_graph, nav_status = await _nav_graph(wad)
     volumes, teleport_status = await _teleport_volumes(wad)
-    placed, zone_data, placed_status = await _placed_objects(wad)
+    placed, zone_data, placed_status = await _placed_objects(wad, zone, deimos_root)
     patrols, patrol_status = await _patrols(wad)
     planner = RoutePlanner(zone, walk_grid=walk_grid, grid_line_walkable=free.contains_line if free else None,
                            nav_graph=nav_graph,
@@ -203,18 +205,21 @@ class _DeimosCollision:
 
     def walls_at_body_height(self, world, zone: str):
         """Where the collision file's boxes, cylinders and spheres stand in the wizard's way: each collider's
-        footprint, over the walkable floor whose height puts the collider's bottom less than BODY_HEIGHT above
-        it and its top above it. Deimos's own walls (`zone_bcd_walls`) count only colliders starting within 50
-        units of the floor, which suits teleporting. Cyclops Lane's tents are cylinders starting 59 and 109
-        units up, and the wizard walked into them."""
+        footprint, over the walkable floor where either:
+        - overhead / floating-base (`bottom > floor_z`): `bottom - floor_z <= BODY_HEIGHT` (135u catches Cyclops
+          Lane's tent cylinders at 59u and 109u up while clearing the Commons bridge archways at 160-170u up);
+        - embedded (`bottom <= floor_z`): rises at least `Z_BOX_TOL` (20u) for structural boxes or `Z_EMBED_TOL`
+          (75u) for cylinders/spheres above the floor, ignoring shallow terrain volumes the navmesh sits inside."""
         from shapely.ops import unary_union
         tree, triangles, heights = self.walkable_tris(world, zone)
         if tree is None:
             return unary_union([])
         blocked = []
-        for footprint, bottom, top, _ in self.collider_solids(world):
+        for footprint, bottom, top, is_box in self.collider_solids(world):
+            embed_tol = Z_BOX_TOL if is_box else Z_EMBED_TOL
             floor = [triangles[index] for index in tree.query(footprint)
-                     if bottom - BODY_HEIGHT <= heights[index] <= top + FLOOR_TOLERANCE
+                     if ((bottom > heights[index] and bottom - heights[index] <= BODY_HEIGHT)
+                         or (bottom <= heights[index] and top - heights[index] >= embed_tol))
                      and triangles[index].intersects(footprint)]
             if floor:
                 region = footprint.intersection(unary_union(floor))
@@ -230,6 +235,36 @@ class _DeimosCollision:
         try:
             from src.entity_collision import build_zone_static_shapes
             return build_zone_static_shapes(zone, None)
+        except Exception:
+            return []
+
+    @staticmethod
+    def katsuba_placed_objects(zone: str) -> list[PlacedObject]:
+        """Placed objects deserialized directly from `gamedata.bin` via Deimos's `katsuba` + `TemplateManifest.xml`
+        resolver, catching templates that do not carry an inline ASCII `<template> instance` string."""
+        try:
+            from src.entity_collision import _resolver
+            if not _resolver._initialize():
+                return []
+            with _resolver._lock:
+                _resolver._load_manifest()
+                archive = _resolver._open_wad(zone.replace("/", "-") + ".wad")
+                if archive is None or not _resolver._id2name:
+                    return []
+                zone_data = archive.deserialize("gamedata.bin", _resolver._world_serializer)
+                found = []
+                for inst in zone_data["m_objectList"]:
+                    if inst is None:
+                        continue
+                    try:
+                        tid = inst["m_templateID.m_full"]
+                        loc = inst["m_location"]
+                        name = _resolver._id2name.get(tid)
+                        if name:
+                            found.append(PlacedObject(name, float(loc.x), float(loc.y), float(loc.z)))
+                    except Exception:
+                        continue
+                return found
         except Exception:
             return []
 
@@ -249,12 +284,24 @@ async def _patrols(wad):
     return (patrols, f"{len(patrols.segments)} enemy patrol segments") if patrols else (None, NO_PATROLS)
 
 
-async def _placed_objects(wad):
+async def _placed_objects(wad, zone: str | None = None, deimos_root: Path | None = None):
     try:
         data = await wad.get_file("gamedata.bin")
         placed = parse_placed_objects(data)
     except Exception as exc:
         return [], None, f"unavailable: {type(exc).__name__}"
+    if zone and deimos_root is not None:
+        try:
+            deimos = _deimos_collision(deimos_root)
+            extra = await asyncio.to_thread(deimos.katsuba_placed_objects, zone)
+            seen = {(obj.template, round(obj.x / 5), round(obj.y / 5)) for obj in placed}
+            for obj in extra:
+                key = (obj.template, round(obj.x / 5), round(obj.y / 5))
+                if key not in seen:
+                    seen.add(key)
+                    placed.append(obj)
+        except Exception:
+            pass
     return placed, data, f"{len(placed)} placed objects"
 
 

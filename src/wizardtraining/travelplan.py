@@ -118,7 +118,7 @@ def from_landing(hops: int, costs: TravelCosts) -> float:
 
 def choose_travel(*, here: str, goal_zone: str, door_distance: float, links: dict[str, list[str]], hub: str | None,
                   marked_in: str | None, mana, costs: TravelCosts, go_home_ready: bool,
-                  recall_ready: bool) -> TravelChoice:
+                  recall_ready: bool, recall_risk: float = 0.0) -> TravelChoice:
     """Walk, Go Home or Recall, whichever is expected to reach the goal's zone first. A teleport has to land fewer
     zones from the goal than the wizard is, and save at least WORTH_IT_SECONDS and WORTH_IT_SHARE of the walk, as the
     estimates are rough; when the way on foot is not known, only a teleport that lands in the goal's zone is taken.
@@ -139,7 +139,8 @@ def choose_travel(*, here: str, goal_zone: str, door_distance: float, links: dic
             landings[RECALL] = hops
     estimates = {WALK: walk,
                  GO_HOME: (costs.go_home_seconds + from_landing(landings[GO_HOME], costs)) if GO_HOME in landings else None,
-                 RECALL: (costs.recall_seconds + from_landing(landings[RECALL], costs)) if RECALL in landings else None}
+                 RECALL: (costs.recall_seconds + recall_risk + from_landing(landings[RECALL], costs))
+                 if RECALL in landings else None}
     teleports = sorted((estimates[way], way) for way in landings)
     if not teleports:
         return TravelChoice(WALK, estimates, "no travel button lands nearer")

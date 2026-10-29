@@ -400,7 +400,7 @@ class MarkAtTheDoorTest(unittest.TestCase):
         self.assertTrue(walk_to_mark_at_the_door(here, door, [(500, 900), (-800, 0)]))
         self.assertFalse(walk_to_mark_at_the_door(here, door, [(500, 200)]))
         self.assertFalse(walk_to_mark_at_the_door(here, (100, 0), []))
-        self.assertFalse(walk_to_mark_at_the_door(here, (3000, 0), []))
+        self.assertFalse(walk_to_mark_at_the_door(here, (5000, 0), []))
 
 
 class GoInFirstTest(unittest.TestCase):
@@ -419,6 +419,25 @@ class GoInFirstTest(unittest.TestCase):
         self.assertFalse(worth_going_in_first(0.9, 500, instance))
         self.assertFalse(worth_going_in_first(0.9, 500, self.house, [self.house]))
         self.assertFalse(worth_going_in_first(0.9, 500, "WizardCity/WC_Streets/WC_Triton"))
+
+
+class MarkLandingTest(unittest.TestCase):
+    def test_a_mark_that_drew_two_fights_on_landing_is_retired(self):
+        from wizardtraining.progress import retired_mark
+        self.assertFalse(retired_mark([1, 3]))
+        self.assertTrue(retired_mark([2, 3]))
+        self.assertFalse(retired_mark(None))
+
+    def test_a_recalls_risk_is_its_share_of_fights_on_landing(self):
+        from wizardtraining.progress import RECALL_FIGHT_COST_SECONDS, recall_risk_seconds
+        self.assertEqual(recall_risk_seconds([4, 5]), 0.8 * RECALL_FIGHT_COST_SECONDS)
+        self.assertEqual(recall_risk_seconds([0, 0]), 0.0)
+        self.assertEqual(recall_risk_seconds(None), 0.0)
+
+    def test_landings_nearby_count_together(self):
+        from wizardtraining.progress import landing_cell
+        self.assertEqual(landing_cell("Z", 1000, 1000), landing_cell("Z", 1100, 950))
+        self.assertNotEqual(landing_cell("Z", 1000, 1000), landing_cell("Z", 2000, 1000))
 
 
 class AfterBattleTest(unittest.TestCase):

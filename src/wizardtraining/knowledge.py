@@ -57,6 +57,8 @@ class Knowledge:
     opportunities: dict[str, dict] = field(default_factory=dict)
     measures: dict[str, list] = field(default_factory=dict)
     deck_size: int | None = None
+    mark_landings: dict[str, list[int]] = field(default_factory=dict)
+    mark_cell: str | None = None
     marked_in: str | None = None
     mark_tip: str | None = None
     zone_links: dict[str, list[str]] = field(default_factory=dict)
@@ -112,6 +114,8 @@ class Knowledge:
                    opportunities={key: dict(value) for key, value in data.get("opportunities", {}).items()},
                    measures={name: list(values) for name, values in data.get("measures", {}).items()},
                    deck_size=data.get("deck_size"),
+                   mark_landings={cell: list(counts) for cell, counts in data.get("mark_landings", {}).items()},
+                   mark_cell=data.get("mark_cell"),
                    marked_in=data.get("marked_in"), mark_tip=data.get("mark_tip"),
                    zone_links={zone: list(others) for zone, others in data.get("zone_links", {}).items()},
                    travel_costs={name: float(value) for name, value in data.get("travel_costs", {}).items()},
@@ -165,6 +169,8 @@ class Knowledge:
         record.opportunities = {key: dict(value) for key, value in self.opportunities.items()}
         record.measures = {name: list(values) for name, values in self.measures.items()}
         record.deck_size = self.deck_size
+        record.mark_landings = {cell: list(counts) for cell, counts in self.mark_landings.items()}
+        record.mark_cell = self.mark_cell
         record.marked_in, record.mark_tip = self.marked_in, self.mark_tip
         record.mark_purpose, record.mark_quest = self.mark_purpose, self.mark_quest
         record.zone_links = {zone: list(others) for zone, others in self.zone_links.items()}
@@ -207,6 +213,8 @@ class Knowledge:
         self.opportunities.update({key: dict(value) for key, value in record.opportunities.items()})
         self.measures = {name: list(values)[-MEASURES_KEPT:] for name, values in record.measures.items()}
         self.deck_size = record.deck_size
+        self.mark_landings = {cell: list(counts) for cell, counts in record.mark_landings.items()}
+        self.mark_cell = record.mark_cell
         self.marked_in, self.mark_tip = record.marked_in, record.mark_tip
         self.mark_purpose, self.mark_quest = record.mark_purpose, record.mark_quest
         for zone, others in record.zone_links.items():

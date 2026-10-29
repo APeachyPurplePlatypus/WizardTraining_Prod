@@ -19,6 +19,7 @@ RUNTIME_VARIABLE = "WIZARDTRAINING_RUNTIME"
 DEFAULT_RUNTIME_FOLDER = "runtime"
 STOP_FILE_NAME = "STOP"
 KNOWLEDGE_FILE_NAME = "knowledge.json"
+DEFAULT_DEIMOS_CHECKOUT = Path(__file__).resolve().parents[3] / "wiz101-live" / "Deimos-Wizard101"
 
 
 @dataclass(frozen=True)
@@ -28,10 +29,17 @@ class Settings:
 
     @classmethod
     def from_environment(cls, environment=None) -> "Settings":
+        use_default_deimos = environment is None
         environment = os.environ if environment is None else environment
         deimos = environment.get(DEIMOS_VARIABLE)
+        if deimos:
+            deimos_root = Path(deimos)
+        elif use_default_deimos and DEFAULT_DEIMOS_CHECKOUT.exists():
+            deimos_root = DEFAULT_DEIMOS_CHECKOUT
+        else:
+            deimos_root = None
         runtime = environment.get(RUNTIME_VARIABLE) or DEFAULT_RUNTIME_FOLDER
-        return cls(deimos_root=Path(deimos) if deimos else None, runtime_folder=Path(runtime))
+        return cls(deimos_root=deimos_root, runtime_folder=Path(runtime))
 
     @property
     def stop_file(self) -> Path:

@@ -56,6 +56,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **A mark that Recalls land in fights at is retired, and the travel plan weighs the risk** (`progress.landing_cell`, `progress.retired_mark`, `progress.recall_risk_seconds`, `QuestLoop.count_the_landing`, `travelplan.choose_travel` `recall_risk`, `RunRecord.mark_landings`, `progress.MARK_AT_DOOR_REACH`).
+  - **What:** each Recall's landing is counted under its spot (a 300-unit square, kept in knowledge.json) with whether a fight began within 15 s; a mark that has drawn two such fights is forgotten and the way back is walked; the travel plan adds the share of fights on landing, times 180 s (the fight and the trip home), to a Recall's estimate; and the refill mark goes on the goal's door from up to 4,000 away, not 1,500, when no enemy is near the walk.
+  - **Why:** in Triton's underwater zone four of five Recalls to marks set where fights ended met the next pair within 2 to 12 s (the opportunity store's own pattern, 22:24), each fight about 30 XP and a trip home, while the goal, H1, was never reached; the walk in from the zone's entry at 21:57 reached H1 with one reroute and no fight. The coordinator asked for it.
+  - **Verified:** offline (`tests/test_progress.py`, `tests/test_travelplan.py`).
+
 - **A wisp walk tries one route method, and a failed one says why** (`QuestLoop.wisp_turn`, `walk_attempt_text`, `movement.travel` `max_methods`).
   - **What:** a walk to a wisp tries only the first route method; when it fails, the wizard goes on to the next wisp. A failed walk's log gives, per method, its result and reason, its time, where it began and ended, its distance to the wisp along the way, and its sidesteps, reroutes, turns in place, settle steps, oscillations and obstacles met. Logging and the method count only; the steering is unchanged.
   - **Why:** two wisp walks in the Commons failed by every route method, 30 and 65 s each, the second ending 2,443 from its wisp, farther than it began (22:18 to 22:19); the log said only "every route method failed". The coordinator asked for the detail and to move on rather than try all three.

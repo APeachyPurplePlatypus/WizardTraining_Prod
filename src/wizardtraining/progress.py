@@ -146,6 +146,8 @@ class RunRecord:
     opportunities: dict[str, dict] = field(default_factory=dict)
     measures: dict[str, list] = field(default_factory=dict)
     deck_size: int | None = None
+    mark_landings: dict[str, list[int]] = field(default_factory=dict)
+    mark_cell: str | None = None
     school_quests_checked: dict[str, int] = field(default_factory=dict)
     walk_strategies_tried: dict[str, list[str]] = field(default_factory=dict)
     tried_wisps: dict[str, float] = field(default_factory=dict)
@@ -349,6 +351,31 @@ NOT_A_MOVE = ("battle", "settled after arriving", "waited for loading", "dialog"
               "pressed OK", "could not equip")
 
 
+LANDING_CELL = 300.0
+RETIRE_AFTER_LANDING_FIGHTS = 2
+RECALL_FIGHT_COST_SECONDS = 180.0
+
+
+def landing_cell(zone: str, x: float, y: float) -> str:
+    """The key a Recall's landing spot is counted under: its zone and a LANDING_CELL square."""
+    return f"{zone}@{int(x // LANDING_CELL)},{int(y // LANDING_CELL)}"
+
+
+def retired_mark(landings: list[int] | None) -> bool:
+    """A mark whose Recalls met a fight within 15 s RETIRE_AFTER_LANDING_FIGHTS times or more (`landings` is
+    [fights, landings]): it is no longer recalled to. In Triton's underwater zone four of five Recalls to marks set
+    where fights ended met the next pair within 2 to 12 s (2026-10-28, 20:18 to 22:24)."""
+    return bool(landings) and landings[0] >= RETIRE_AFTER_LANDING_FIGHTS
+
+
+def recall_risk_seconds(landings: list[int] | None) -> float:
+    """What a Recall to this mark is expected to cost beyond its own time: the share of its landings that met a
+    fight, times RECALL_FIGHT_COST_SECONDS (the fight and the trip home it ends with)."""
+    if not landings or not landings[1]:
+        return 0.0
+    return landings[0] / landings[1] * RECALL_FIGHT_COST_SECONDS
+
+
 def acted_after_battle(did: str | None) -> bool:
     """A turn that moved the wizard or sent it somewhere (a walk, a travel button, a door), as opposed to settling,
     reading a dialog or checking gear: what the timeline after a battle waits for."""
@@ -440,7 +467,7 @@ def worth_pushing_on(health: float | None, distance_to_goal: float | None, *, st
             and (stalled or distance_to_goal <= GOAL_PUSH_DISTANCE))
 
 
-MARK_AT_DOOR_REACH = 1500.0
+MARK_AT_DOOR_REACH = 4000.0
 MARK_AT_DOOR_RADIUS = 150.0
 
 
