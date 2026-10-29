@@ -3545,12 +3545,14 @@ class QuestLoop:
 
     def rerouter(self, planner: RoutePlanner, hazards: Hazards, destination):
         """Plans the way ahead again around where enemies are going, from where the wizard is, while it walks."""
-        def reroute(path_ahead, threats: list[dict], now: float):
+        async def reroute(path_ahead, threats: list[dict], now: float):
             around = enemies_to_route_around(threats, me=path_ahead[0], destination=destination)
             live = replace(hazards, enemies=tuple(xy(enemy["position"]) for enemy in threats),
                            tracks=tuple(self.motion.track(enemy, now) for enemy in around),
                            start=xy(path_ahead[0]))
-            return planner.reroute(path_ahead, live)
+            # The tracks are read here, on the event loop's thread: the watcher adds samples to the same deques,
+            # and reading them on the worker thread could meet a deque changed mid-iteration. Only A* goes there.
+            return await asyncio.to_thread(planner.reroute, path_ahead, live)
         return reroute
 
     def watcher(self, *, also=None, ignore=(), reroute=None):
@@ -3597,7 +3599,7 @@ class QuestLoop:
                    for enemy in threats):
                 if reroute is not None and now - last_reroute[0] >= MIN_SECONDS_BETWEEN_REROUTES:
                     last_reroute[0] = now
-                    if legs := await asyncio.to_thread(reroute, path_ahead, threats, now):
+                    if legs := await reroute(path_ahead, threats, now):
                         return Reroute(legs)
                 return ENEMY_NEAR_PATH
             return None

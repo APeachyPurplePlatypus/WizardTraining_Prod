@@ -6,6 +6,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Added
 
+- **Closed-loop steering at 100 Hz** (the operator's own work, 2026-10-29: `movement.follow_route`, `movement.turn_toward`, `keys.KeyChord`, `geometry.lookahead_point`, `geometry.bearing`, `motion.pd_steer_command`, `motion.reactive_bearing`, `motion.should_release_forward`, `motion.lookahead_distance`, `MotionTracker.track`, `docs/update_pathfinding.md`).
+  - **What:** a 100 Hz reflex loop holds W with A or D at once through a key chord, aims at a pure-pursuit point sliding ahead along the route (its distance scaled to the speed), turns with a PD yaw controller that leads the key release, deflects around enemy tracks behind their motion, and releases W ahead of the target from the measured speed. Enemy velocities follow a turn at once instead of smearing it over 1.5 s. Perception runs beside the steering, and reroutes plan on a worker thread.
+  - **Why:** the operator: "just updated path finding with argon from google". Timed taps, dead stops at bends, late waypoint snaps, lagging enemy velocities and perception inline in the steering loop left the wizard aiming at where things had been (`docs/update_pathfinding.md`).
+  - **Verified:** offline (507 tests, with and without WizWalker); in the game: the Commons and Shopping District walks, 21:51.
+
 - **A mount is worn whenever none is** (`gear.mount_to_wear`, `gear.rental_hours`, `QuestLoop.gear_turn`, `docs/safety.md`).
   - **What:** with `--wear-gear`, when no mount is worn, a rented (timed) mount the wizard owns is worn, the shortest rental by its name first ("Enchanted Broom (1 Day)" before "One-Day Dromedary", by name when equal); with no rented one, a permanent one by name. Checked at the run's start and whenever the item count changes, which a rental running out or new loot does. A worn mount is never swapped off; none is bought or rented. The mount's speed is not read yet.
   - **Why:** the wizard owned two rented mounts and wore neither (read 20:53); a mount speeds every walk. The operator, 2026-10-29 00:55 UTC: "you can equip rented mounts as soon as you get them, provided you don't already have a mount equipped. If you have multiple perm mounts, then you get to choose which you fancy at any given time. you can generalize this behaviour and put it in the frame work too".
@@ -44,6 +49,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
   - **Verified:** offline (`tests/test_screen.py`, `tests/test_training.py`, `tests/test_progress.py`); in the game: Sunken City's door.
 
 ### Fixed
+
+- **The reroute's enemy tracks are read on the event loop's thread** (`QuestLoop.rerouter`).
+  - **What:** the hazards for a reroute, with each enemy's track, are built before the A* search goes to the worker thread; only `planner.reroute` runs there.
+  - **Why:** the worker thread read `MotionTracker`'s sample deques while the walking watcher added to them on the event loop, which can raise "deque mutated during iteration" (found reviewing the 100 Hz steering before its first run).
+  - **Verified:** offline (the suite, with and without WizWalker).
 
 - **No more going back and forth around a small target** (`motion.slow_down_distance`, `motion.step_seconds`, `motion.settle_radius`, `motion.smoothed_speed`, `motion.OscillationGuard`, `movement.settle_on`, `movement.walk_speed`, `WISP_ARRIVE_RADIUS`, `docs/lessons-learned.md`).
   - **What:** the walker measures its speed while W is held, and on the last leg, nearer the target than 0.35 s of walking, it releases W and steps for the time the distance takes at that speed, until inside the target circle. If the target turns up behind it three times, it counts as arrived within what the shortest steps can miss by, else the walk fails at once. Wisp walks aim within 30.
