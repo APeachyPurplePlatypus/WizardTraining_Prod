@@ -48,7 +48,8 @@ Each zone's data is in the game's archives:
 - **Placed objects:** the zone's objects (gates, quest objects, signs, props), with names and tags that match quest goals. Their models give the props' footprints.
 - **The nav graph:** waypoints over walkable ground, which link levels the collision data leaves apart.
 - **Volumes:** trigger and teleport volumes. Shop and house doors are among them, and some quest visits count when the character walks into one named after the quest.
-- **Patrol paths and spawn data:** named after their enemies, and present for friendly NPCs too.
+- **Patrol paths:** each lists its node ids in its own order, which isn't always increasing, and a guard standing still has a path of one node. Friendly NPCs have patrol paths too.
+- **Spawn data:** each spawner names the path it uses and the templates it puts there, and the root archive's template manifest names the templates (enemies, health and mana wisps, reagents, chests). This tells what walks a path better than the path's name, which can be just a number or a misspelling.
 - **Locale files:** turn title, goal and enemy keys into display text.
 
 The zone files don't say where street doors lead. Learn those links by walking.
