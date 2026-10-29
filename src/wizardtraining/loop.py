@@ -1205,9 +1205,11 @@ class QuestLoop:
             self.record.tried_wisps[str(wisp["id"])] = time.time()
         self.measure("wisp_walks", bool(gained))
         ended = flat_distance(await self.client.body.position(), wisp["position"])
+        methods = ("" if trip["result"] != "failed" else "; " + ", ".join(
+            f"{tried['method']}: {tried.get('result')}{failure_text(tried)}" for tried in trip.get("attempts", [])))
         self.events.emit("wisp", f"{kind} {flat_distance(start, wisp['position']):.0f} away: {trip['result']}"
                                  f"{' (' + trip['reason'] + ')' if trip['reason'] else ''}, ended {ended:.0f} from it; "
-                                 f"{stat} {state[stat]} -> {after[stat]}", ended=round(ended), gained=gained)
+                                 f"{stat} {state[stat]} -> {after[stat]}{methods}", ended=round(ended), gained=gained)
         if gained:
             return progressed(f"picked up a {kind}", before=state[stat], after=after[stat])
         moved = flat_distance(start, await self.client.body.position())
