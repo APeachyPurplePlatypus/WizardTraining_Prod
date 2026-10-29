@@ -95,5 +95,32 @@ class UpgradeTest(unittest.TestCase):
         self.assertEqual(worth(STORM_HOOD, Wizard("Ice", 10, 801, 30)), 0.0)
 
 
+class MountTest(unittest.TestCase):
+    def mount(self, name, equipped=False, item_id=1):
+        from wizardtraining.gear import Item
+        return Item(id=item_id, name=name, slot="Mount", effects=(), equipped=equipped)
+
+    def test_a_rented_mount_is_worn_when_none_is(self):
+        from wizardtraining.gear import mount_to_wear
+        chosen, why = mount_to_wear([self.mount("One-Day Dromedary"), self.mount("Enchanted Broom (1 Day)", item_id=2)])
+        self.assertEqual(chosen.name, "Enchanted Broom (1 Day)")
+        self.assertIn("rented", why)
+
+    def test_the_shortest_rental_goes_first_and_rentals_before_permanent_mounts(self):
+        from wizardtraining.gear import mount_to_wear, rental_hours
+        week, day, own = (self.mount("Magic Carpet (7 Days)"), self.mount("Broom (1 Day)", item_id=2),
+                          self.mount("Armored Warhorse", item_id=3))
+        self.assertEqual(rental_hours(week), 168)
+        self.assertIsNone(rental_hours(own))
+        self.assertEqual(mount_to_wear([week, own, day])[0].name, "Broom (1 Day)")
+        self.assertEqual(mount_to_wear([own])[0].name, "Armored Warhorse")
+
+    def test_a_worn_mount_is_never_swapped_and_none_owned_is_none(self):
+        from wizardtraining.gear import mount_to_wear
+        self.assertIsNone(mount_to_wear([self.mount("Armored Warhorse", equipped=True),
+                                         self.mount("Broom (1 Day)", item_id=2)]))
+        self.assertIsNone(mount_to_wear([]))
+
+
 if __name__ == "__main__":
     unittest.main()

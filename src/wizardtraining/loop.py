@@ -41,7 +41,7 @@ from .equipment import count_items, equip, read_experience, read_items, read_wiz
 from .experience import progress_text, xp_gained, xp_to_reach
 from .events import (EventLog, describe_battle, describe_changes, describe_round, dialog_text, enemies_at_once,
                      enemy_names, health_text, threat_text)
-from .gear import describe_stats, upgrades
+from .gear import describe_stats, mount_to_wear, upgrades
 from .gametravel import (RECALL_NOT_REACHED, go_home_ready, go_to_the_commons, has_mark, mark_here, recall, recall_ready,
                          pressed_lately, recall_tip, resume_instance, resume_tip)
 from .geometry import Point, distance_to_path, flat_distance, path_within, xy
@@ -886,6 +886,9 @@ class QuestLoop:
         self._gear_checked = (wizard.level, count)
         items = await read_items(self.client)
         chosen = upgrades(items, wizard)
+        if (mount := mount_to_wear(items)) is not None:
+            chosen.append(mount[0])
+            self.events.emit("gear", f"mount: {mount[1]}")
         if not chosen:
             self.events.emit("gear", f"level {wizard.level}, {len(items)} items: the best wearable gear is on")
             return None

@@ -150,6 +150,40 @@ def upgrades(items: list[Item], wizard: Wizard) -> list[Item]:
     return chosen
 
 
+MOUNT = "Mount"
+RENTAL_TIME = re.compile(r"\b(?P<count>\d+|one)[\s-]*(?P<unit>day|hour)s?\b", re.IGNORECASE)
+HOURS_IN = {"day": 24, "hour": 1}
+
+
+def rental_hours(item: Item) -> int | None:
+    """How long a rented (timed) mount lasts, in hours, from its name ("Enchanted Broom (1 Day)", "One-Day
+    Dromedary"); None for a permanent one, whose name gives no time."""
+    match = RENTAL_TIME.search(item.name or "")
+    if match is None:
+        return None
+    count = 1 if match.group("count").lower() == "one" else int(match.group("count"))
+    return count * HOURS_IN[match.group("unit").lower()]
+
+
+def mount_to_wear(items: list[Item]) -> tuple[Item, str] | None:
+    """The mount to wear and why, when none is worn: a rented one first, the one with the least time (by its name),
+    then by name; else a permanent one, by name. None when a mount is worn or none is owned: a worn mount is never
+    swapped off, and none is ever bought or rented. The operator, 2026-10-29 00:55 UTC: "you can equip rented mounts
+    as soon as you get them, provided you don't already have a mount equipped. If you have multiple perm mounts, then
+    you get to choose which you fancy at any given time". The speed of a mount is not read yet."""
+    if any(item.equipped and item.slot == MOUNT for item in items):
+        return None
+    owned = [item for item in items if item.slot == MOUNT and not item.equipped and item.name]
+    rented = [item for item in owned if rental_hours(item) is not None]
+    if rented:
+        chosen = min(rented, key=lambda item: (rental_hours(item), item.name))
+        return chosen, f"no mount worn, and {chosen.name} is rented: worn while it lasts, the shortest rental first"
+    if owned:
+        chosen = min(owned, key=lambda item: item.name)
+        return chosen, f"no mount worn and no rented one: {chosen.name}, the first permanent mount by name"
+    return None
+
+
 def describe_stats(item: Item) -> str:
     """"+59 max health, +1% resistance (every school)"."""
     names = {"MaxHealth": "max health", "MaxMana": "max mana", "ReduceDamage": "resistance", "Damage": "damage",
