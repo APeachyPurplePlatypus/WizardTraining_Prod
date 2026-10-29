@@ -15,6 +15,9 @@ class TipTest(unittest.TestCase):
         self.assertEqual(found.status, NEEDS_OPERATOR)
         self.assertIn("Group", found.evidence)
 
+    def test_a_refusal_is_no_feature(self):
+        self.assertIsNone(from_tip("Inventory", "You cannot equip a mount in this area!", WHEN))
+
     def test_a_plain_notice_is_none(self):
         self.assertIsNone(from_tip("INFO", "You cannot teleport to that location. The dungeon timer has ended.", WHEN))
         self.assertIsNone(from_tip("INFO", "The dungeon has been reset.", WHEN))

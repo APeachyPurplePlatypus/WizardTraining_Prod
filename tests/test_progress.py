@@ -257,6 +257,12 @@ class WispTest(unittest.TestCase):
         self.assertIsNone(trapped_by("battle"))
         self.assertIsNone(trapped_by(None))
 
+    def test_no_recall_when_the_goals_zone_is_next_door(self):
+        triton, underwater = "WizardCity/WC_Streets/WC_Triton", "WizardCity/WC_Streets/WC_Triton_Underwater/WC_Triton_Underwater"
+        house = "WizardCity/WC_Streets/WC_Triton_Underwater/Interiors/WC_Triton_Underwater_H1"
+        self.assertFalse(worth_recalling(house, underwater, underwater, 93, next_door=True))
+        self.assertTrue(worth_recalling(house, underwater, underwater, 93))
+
     def test_no_recall_back_to_the_door_just_walked_through(self):
         triton, underwater = "WizardCity/WC_Streets/WC_Triton", "WizardCity/WC_Streets/WC_Triton_Underwater/WC_Triton_Underwater"
         instance = "WizardCity/WC_Streets/WC_Triton_Underwater/Interiors/WC_Triton_Underwater_T1"

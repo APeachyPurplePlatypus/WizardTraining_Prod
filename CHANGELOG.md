@@ -51,6 +51,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **No Recall when the goal is next door, no mount indoors, no refusal taken for a feature** (`progress.worth_recalling`, `QuestLoop.next_door`, `QuestLoop.gear_turn`, `opportunities.from_tip`).
+  - **What:** a Recall toward the goal is skipped when the goal's zone is one door from here, by the zone links or the way the wizard came in; a mount is not worn in an interior or a dungeon, and the gear check comes again once the wizard is out; a tip box that refuses something ("You cannot ...") is not kept as an opportunity.
+  - **Why:** in H1 under Triton Avenue, after "Way To His Heart" was handed in, the gear check tried to wear the broom, the mount being off indoors, and the game refused ("You cannot equip a mount in this area!"), which the opportunity store kept as a feature; then the wizard recalled to its mark in Triton Avenue and walked back through the door to the underwater zone, which H1's own door opened on (21:56 to 21:57).
+  - **Verified:** offline (`tests/test_progress.py`, `tests/test_opportunities.py`).
+
 - **An interior never entered counts as a door from the street of its place** (`travelplan.with_its_street`, `QuestLoop.travel_plan_turn`).
   - **What:** for the travel plan, a goal in an interior the zone links do not know yet ("<place>/Interiors/<room>") is linked to the one known street of the same place, so a Recall to a mark in that street, or Go Home, can be weighed against the walk.
   - **Why:** "Way To His Heart"'s goal was a house under Triton Avenue's underwater zone that the wizard had never entered; with no link to it, the plan read "walk ?, recall ?" and the wizard walked from the Commons through three zones instead of Recalling to its mark in the underwater zone (21:51, 21:54). The coordinator asked why.

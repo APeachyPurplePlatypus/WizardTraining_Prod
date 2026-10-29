@@ -27,6 +27,7 @@ TIP_WORDS = re.compile(r"\b(button|click|group|mount|pet|reward|faster|free|bonu
                        re.IGNORECASE)
 DIALOG_WORDS = re.compile(r"\b(button|click|press|mount|crowns?|membership|finder|spellbook|training points?|"
                           r"teleport\w*)\b", re.IGNORECASE)
+REFUSAL_WORDS = re.compile(r"\b(cannot|can't|can not|unable)\b", re.IGNORECASE)
 OPERATOR_WORDS = re.compile(r"\b(players?|friends?|group|crowns?|gold|buy|purchase|membership|trade)\b",
                             re.IGNORECASE)
 
@@ -72,7 +73,7 @@ def key_of(kind: str, name: str) -> str:
 def from_tip(title: str, text: str, when: str) -> Opportunity | None:
     """A game box closed with OK whose title or text names a feature (TIP_WORDS): the "Quest Friend Finder" tip told
     of a HUD button that groups friendly players and teleports them to you (20:38)."""
-    if not TIP_WORDS.search(f"{title} {text}"):
+    if not TIP_WORDS.search(f"{title} {text}") or REFUSAL_WORDS.search(text):
         return None
     return Opportunity(key_of(FEATURE, title or text[:40]), FEATURE, "a game tip box", text[:EVIDENCE_LENGTH], when,
                        status=status_for(f"{title} {text}"))

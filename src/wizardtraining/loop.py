@@ -906,6 +906,8 @@ class QuestLoop:
     async def gear_turn(self) -> dict | None:
         """Wear the best gear the wizard has (`gear.upgrades`). Checked again after a level-up or new loot, and only
         where it is safe, with no enemy loaded (`safe_here`), since the spellbook stays open a few seconds per item.
+        A mount is not worn indoors or in a dungeon, where the game refuses ("You cannot equip a mount in this area!",
+        in H1 under Triton Avenue, 21:56): the check comes again once the wizard is out.
         None when there is nothing to do here, so the turn goes on."""
         if not await self.safe_here():
             return None
@@ -916,11 +918,17 @@ class QuestLoop:
         self._gear_checked = (wizard.level, count)
         items = await read_items(self.client)
         chosen = upgrades(items, wizard)
-        if (mount := mount_to_wear(items)) is not None:
+        zone = await self.client.zone_name() or ""
+        indoors = INTERIOR_WORD in zone or in_dungeon(zone, self.record.entered_with_x, self.record.dungeon_zones)
+        mount = mount_to_wear(items)
+        if mount is not None and indoors:
+            self._gear_checked = None
+        elif mount is not None:
             chosen.append(mount[0])
             self.events.emit("gear", f"mount: {mount[1]}")
         if not chosen:
-            self.events.emit("gear", f"level {wizard.level}, {len(items)} items: the best wearable gear is on")
+            if mount is None:
+                self.events.emit("gear", f"level {wizard.level}, {len(items)} items: the best wearable gear is on")
             return None
         before = await snapshot(self.client)
         worn = []
@@ -2332,6 +2340,11 @@ class QuestLoop:
         self.events.emit("travel", f"marked the spot in {zone}, the goal's zone, to recall to after a defeat "
                                    f"({state['mana']} mana before)")
 
+    def next_door(self, here: str, zone: str | None) -> bool:
+        """`zone` is one door from here, by the zone links learned or the way the wizard came in."""
+        return isinstance(zone, str) and (zone in self.record.zone_links.get(here, [])
+                                          or self.record.arrivals.get(here, {}).get("from") == zone)
+
     async def recall_toward_the_goal_turn(self, state: dict, goal: dict) -> dict | None:
         """The Recall button holds a mark in the zone the goal is in and the wizard is elsewhere
         (`progress.worth_recalling`), say in the hub it woke in after a defeat and recharged in: Recall Location
@@ -2341,7 +2354,8 @@ class QuestLoop:
         if (time.monotonic() < self._no_recall_until or marked_in is None or not self.travel_allowed_in(marked_in)
                 or not worth_recalling(state["zone"], goal.get("destination_zone"), marked_in, state["mana"],
                                        self.record.mark_door_for,
-                                       came_from=self.record.arrivals.get(state["zone"], {}).get("from"))):
+                                       came_from=self.record.arrivals.get(state["zone"], {}).get("from"),
+                                       next_door=self.next_door(state["zone"], goal.get("destination_zone")))):
             return None
         if await recall_tip(self.client) != self.record.mark_tip:
             self.events.emit("travel", f"the Recall button no longer names the mark in {marked_in}; forgetting it")
