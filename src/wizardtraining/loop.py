@@ -280,6 +280,8 @@ class QuestLoop:
         self.record = record
         self.limits = record.limits
         self.combat_policy = combat_policy
+        if hasattr(combat_policy, "deck_size"):
+            combat_policy.deck_size = record.deck_size
         self.offer_policy = offer_policy
         self._planners: dict[str, RoutePlanner] = {}
 
@@ -2900,6 +2902,7 @@ class QuestLoop:
         finally:
             await close_book(self.client)
         _, names = await self.deck_spells_of(view)
+        self.record.deck_size = view.size
         if hasattr(self.combat_policy, "deck_size"):
             self.combat_policy.deck_size = view.size
         if view.cards == before.cards:

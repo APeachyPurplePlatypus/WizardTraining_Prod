@@ -176,6 +176,7 @@ class TripOutOfADungeonKnowledgeTest(unittest.TestCase):
         run = RunRecord(limits=Limits())
         run.left_dungeon = {"zone": sunken, "at": 1000.0, "x": 1.0, "y": 2.0, "enemies": 3, "why": "after a defeat"}
         run.dungeon_zones.append(sunken)
+        run.deck_size = 14
         knowledge = Knowledge()
         knowledge.learn_from(run)
         with tempfile.TemporaryDirectory() as folder:
@@ -184,6 +185,7 @@ class TripOutOfADungeonKnowledgeTest(unittest.TestCase):
             fresh = RunRecord(limits=Limits())
             Knowledge.load(path).give_to(fresh)
         self.assertEqual(fresh.left_dungeon, run.left_dungeon)
+        self.assertEqual(fresh.deck_size, 14)
         self.assertEqual(fresh.dungeon_zones, [sunken])
 
 
