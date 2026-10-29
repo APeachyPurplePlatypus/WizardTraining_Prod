@@ -118,6 +118,9 @@ From walks with a mount, with crowds of patrols, and with the operator's own wor
 
 - **What is a dungeon isn't always in its name.** Interiors named with "_T" and a number are instances, but Sunken City is named like a street, and Triton Avenue's underwater zone opens like a door yet is a street. A zone behind the game's dungeon-entry box is a dungeon, and so are the zones under it.
 - **A dungeon keeps its progress for 30 minutes after leaving.** Its entry box says so. Leave by Go Home, refill, and come back with the dungeon's return button on the HUD within the timer, with a margin. Recall doesn't take the character back in. Check on landing that the enemies killed stayed down.
+- **A dungeon's side rooms are the same dungeon.** A side room can have its own zone name, filed apart from the dungeon's main zone. Compare zones as "same dungeon or not", not as equal names. Otherwise a defeat or a flee in a side room doesn't match the goal's zone, the way back is dropped, and the run walks into a fresh instance.
+- **Walking back in through the door can start a new instance.** All its progress is gone. After any exit from a dungeon (defeat, flee or a refill trip), use the return button while its timer runs, and keep the record of the exit across restarts.
+- **A flee's move to the hub comes after the battle ends.** A zone read right at the end still shows the dungeon. Record a flee from a dungeon as leaving it whatever the zone reads, and drop the record if the character turns out to be still inside.
 - **Towers lose their progress when left partway.** Refill in place in a tower.
 - **Count loops from the last travel button,** not from the goal's start, so a long walk with refill trips isn't taken for a door loop.
 
