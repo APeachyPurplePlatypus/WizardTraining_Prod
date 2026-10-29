@@ -93,8 +93,15 @@ def unused_buttons(names: list[str], used: set[str], when: str) -> list[Opportun
     """HUD buttons the framework has never pressed: a new kind of click, so NEEDS_OPERATOR."""
     return [Opportunity(key_of(BUTTON, name), BUTTON, "the HUD", f"a HUD button never pressed: {name}", when,
                         status=NEEDS_OPERATOR)
-            for name in dict.fromkeys(names)
-            if name not in used and any(word in name.lower() for word in BUTTON_WORDS)]
+            for name in dict.fromkeys(names) if name not in used and is_a_button(name)]
+
+
+def is_a_button(name: str) -> bool:
+    """A HUD window named as one button ("btnFriends", "OpenFishingButton"), not a window holding several
+    ("compassAndTeleporterButtons", "windowForBtns", "CrownShopButtonsWindow"), which the first read listed too."""
+    lowered = name.lower()
+    return (any(word in lowered for word in BUTTON_WORDS) and "window" not in lowered
+            and not lowered.endswith(("buttons", "btns")))
 
 
 def measured_patterns(xp_by_activity: dict[str, list[int]], fight_costs: list[float], wisp_walks: list[bool],

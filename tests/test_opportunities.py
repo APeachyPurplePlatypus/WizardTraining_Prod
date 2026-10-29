@@ -32,7 +32,8 @@ class DialogTest(unittest.TestCase):
 
 class ButtonTest(unittest.TestCase):
     def test_only_buttons_never_pressed(self):
-        names = ["GoHomeButton", "MarkButton", "btnFriends", "ClassEventButton", "XPBar", "btnFriends"]
+        names = ["GoHomeButton", "MarkButton", "btnFriends", "ClassEventButton", "XPBar", "btnFriends",
+                 "compassAndTeleporterButtons", "windowForBtns", "CrownShopButtonsWindow"]
         found = unused_buttons(names, USED_HUD_BUTTONS, WHEN)
         self.assertEqual([item.evidence.rsplit(": ", 1)[1] for item in found], ["btnFriends", "ClassEventButton"])
         self.assertTrue(all(item.kind == BUTTON and item.status == NEEDS_OPERATOR for item in found))
