@@ -6,6 +6,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Added
 
+- **The framework finds and keeps opportunities as it plays** (`opportunities.py`, `QuestLoop.note_opportunity`, `QuestLoop.measure`, `QuestLoop.note_a_tip`, `QuestLoop.note_hud_buttons`, `RunRecord.opportunities`, `RunRecord.measures`, `docs/lessons-learned.md`).
+  - **What:** game features, tips and patterns that could speed progress are found with no click of their own: tip boxes closed with OK and dialog pages that name a feature, never-pressed HUD buttons (read once a run where it is safe), and patterns from the run's numbers (quest hand-ins against fights, what fights cost, wisp walks that gave nothing), once over enough samples. Each is kept in knowledge.json by key, counted when seen again, and logged as an "opportunity" event for the reports and retros. What brings in other players, spends gold or crowns, or needs a new kind of click is marked as needing the operator: reported, never acted on. The last 100 of each measure are kept across runs.
+  - **Why:** the operator, 2026-10-29 00:45 UTC: "there is a lot going on in mmorpgs, you are going to need to decide when to add something to your memory bank ... See if you can reconize these patterns", then (00:47) "ensure this behavior is added to the framework", after the "Quest Friend Finder" tip was closed without its feature being noted.
+  - **Verified:** offline (`tests/test_opportunities.py`, `tests/test_knowledge.py`, the import boundary); in the game: the next run's events.
+
 - **Any game box whose only button is OK is closed with it** (`screen.is_game_notice`, `ui.close_game_notice`, `docs/safety.md`).
   - **What:** a message box with OK (`rightButton`) as its only button is pressed OK, its title and text logged, whatever its title, but for titles of other players' requests (Friend, Trade, Duel, Group, Teleport). Before, only boxes titled "INFO".
   - **Why:** the game's "Quest Friend Finder" tip opened over a battle in Triton's underwater zone and took every click, so the run stopped and the wizard could play no card for three minutes (20:38 to 20:41). The operator, 2026-10-29 00:41 UTC: "there is only one answer, so hit okay".

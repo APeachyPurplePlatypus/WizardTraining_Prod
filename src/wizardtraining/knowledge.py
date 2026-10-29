@@ -32,6 +32,7 @@ import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from .opportunities import MEASURES_KEPT
 from .teleports import NO_EFFECT
 from .routes import add_hidden_door
 from .travelplan import link_zones
@@ -53,6 +54,8 @@ class Knowledge:
     refill_after_heavy_fight: bool = False
     left_dungeon: dict | None = None
     dungeon_zones: list[str] = field(default_factory=list)
+    opportunities: dict[str, dict] = field(default_factory=dict)
+    measures: dict[str, list] = field(default_factory=dict)
     marked_in: str | None = None
     mark_tip: str | None = None
     zone_links: dict[str, list[str]] = field(default_factory=dict)
@@ -105,6 +108,8 @@ class Knowledge:
                    refill_after_heavy_fight=bool(data.get("refill_after_heavy_fight", False)),
                    left_dungeon=data.get("left_dungeon"),
                    dungeon_zones=list(data.get("dungeon_zones", [])),
+                   opportunities={key: dict(value) for key, value in data.get("opportunities", {}).items()},
+                   measures={name: list(values) for name, values in data.get("measures", {}).items()},
                    marked_in=data.get("marked_in"), mark_tip=data.get("mark_tip"),
                    zone_links={zone: list(others) for zone, others in data.get("zone_links", {}).items()},
                    travel_costs={name: float(value) for name, value in data.get("travel_costs", {}).items()},
@@ -155,6 +160,8 @@ class Knowledge:
         record.refill_after_heavy_fight = self.refill_after_heavy_fight
         record.left_dungeon = self.left_dungeon
         record.dungeon_zones = list(self.dungeon_zones)
+        record.opportunities = {key: dict(value) for key, value in self.opportunities.items()}
+        record.measures = {name: list(values) for name, values in self.measures.items()}
         record.marked_in, record.mark_tip = self.marked_in, self.mark_tip
         record.mark_purpose, record.mark_quest = self.mark_purpose, self.mark_quest
         record.zone_links = {zone: list(others) for zone, others in self.zone_links.items()}
@@ -194,6 +201,8 @@ class Knowledge:
         self.refill_after_heavy_fight = record.refill_after_heavy_fight
         self.left_dungeon = record.left_dungeon
         self.dungeon_zones = list(dict.fromkeys([*self.dungeon_zones, *record.dungeon_zones]))
+        self.opportunities.update({key: dict(value) for key, value in record.opportunities.items()})
+        self.measures = {name: list(values)[-MEASURES_KEPT:] for name, values in record.measures.items()}
         self.marked_in, self.mark_tip = record.marked_in, record.mark_tip
         self.mark_purpose, self.mark_quest = record.mark_purpose, record.mark_quest
         for zone, others in record.zone_links.items():

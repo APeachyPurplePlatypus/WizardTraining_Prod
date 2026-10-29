@@ -71,7 +71,9 @@ from .travelplan import (GO_HOME, HUBS, RECALL, TRAVEL_MANA_RESERVE, WALK, Trave
                          zone_hops, next_zone_on_the_way,
                          spare_mana,
                          worth_a_way_back_mark, worth_going_home_for_wisps)
-from .screen import or_default, prompt_action, prompt_is_not_a_doors, prompt_offers_talk
+from .screen import or_default, prompt_action, prompt_is_not_a_doors, prompt_offers_talk, visible_names_under
+from .opportunities import (MEASURES_KEPT, USED_HUD_BUTTONS, describe, from_dialog, from_tip, measured_patterns, note,
+                            now_text, unused_buttons)
 from .spellbook import SpellCatalog, deck_spells, learned_spell_ids, load_level_table
 from .spells import KNOWN_AT_FIRST_CHECK, LEARNED, SpellLog, learned_text, newly_learned, spell_entry
 from .session import NoClient, attached, hooks_ready
@@ -89,6 +91,7 @@ from .training import (COMMONS, GATE, SCHOOLS, TRAINER, School, in_dungeon, in_t
                        zone_for_area)
 from .worldgate import go_to_world, leave_the_map, spiral_map_open
 from .ui import (POTION_BUTTON, answer_dungeon_entry, answer_known_popup, click, dungeon_entry_box, interact_prompt_text,
+                 window_at,
                  message_box, visible_children)
 
 TARGET_REACH = 1200.0
@@ -119,6 +122,7 @@ SPELL_CHECK_SECONDS = 60.0
 BARELY_MOVED_DISTANCE = 100.0
 ENEMY_PASS_WAIT_SECONDS = 1.5
 ARRIVAL_SETTLE_SECONDS = 1.5
+HUD = ["WorldView", "windowHUD"]
 RESUME = "the dungeon's return button"
 ENTERED_THE_DUNGEON = "pressed Yes on the dungeon-entry box"
 SETTLE_LOOK_SECONDS = 0.25
@@ -227,6 +231,7 @@ class QuestLoop:
         self._left_dungeon: tuple[str, int] | None = None
         self._declined_dungeons: set[str | None] = set()
         self._went_home_for_wisps: set[str] = set()
+        self._hud_read = False
         self._journal_zones: tuple[frozenset, dict] | None = None
         self._finder_givers: dict[tuple, int] = {}
         self._finder_just_activated = False
@@ -448,6 +453,9 @@ class QuestLoop:
                                        f"({', '.join(sorted(self.record.heavy_fights))})")
             self.record.heavy_fights.clear()
         gained = xp_gained(before, now, self._level_table)
+        activity = {"battle": "battle", "talk": "talk", "dialog": "talk"}.get(str(turn.get("did")))
+        if activity is not None and isinstance(gained, int) and gained > 0:
+            self.measure(f"xp_{activity}", gained)
         hours = (time.monotonic() - self._run_started_at) / 3600
         so_far = xp_gained(self._run_start_experience, now, self._level_table) if self._run_start_experience else None
         rate = f"; {so_far / hours:,.0f} XP an hour this run" if so_far and hours > 0.05 else ""
@@ -586,6 +594,7 @@ class QuestLoop:
         an unanswered friend request kept every card the wizard played out of its battles for over half an hour."""
         if answered := await answer_known_popup(self.client):
             self.events.emit("popup", answered)
+            self.note_a_tip()
             return progressed(answered)
         if (answered := await self.dungeon_entry_turn(state["zone"], (self.record.quest or {}).get("goal_zone"))):
             return answered
@@ -751,6 +760,42 @@ class QuestLoop:
         volume = next((volume for volume, _ in planner.teleports if volume.name == way.name), None)
         return None if volume is None else (XYZ(volume.x, volume.y, volume.z), volume.radius)
 
+    def note_opportunity(self, found) -> None:
+        """Keep an opportunity (`opportunities.note`); a new one goes to the event log, and from there to the reports
+        and the level retro."""
+        if note(self.record.opportunities, found):
+            self.events.emit("opportunity", describe(found), key=found.key, status=found.status)
+
+    def measure(self, name: str, value) -> None:
+        """Add a number the opportunity patterns are measured from (`opportunities.measured_patterns`), the last
+        MEASURES_KEPT kept, and note any pattern that has become clear."""
+        values = self.record.measures.setdefault(name, [])
+        values.append(value)
+        del values[:-MEASURES_KEPT]
+        measures = self.record.measures
+        for found in measured_patterns({"talk": measures.get("xp_talk", []), "battle": measures.get("xp_battle", [])},
+                                       measures.get("fight_costs", []), measures.get("wisp_walks", []), now_text()):
+            if found.key not in self.record.opportunities:
+                self.note_opportunity(found)
+
+    def note_a_tip(self) -> None:
+        """A game box just closed with OK: its title and text may announce a feature (`opportunities.from_tip`)."""
+        title, caption = getattr(self.client, "last_notice", None) or ("", "")
+        self.client.last_notice = None
+        if (found := from_tip(title, caption, now_text())) is not None:
+            self.note_opportunity(found)
+
+    async def note_hud_buttons(self) -> None:
+        """Once a run, where it is safe: the HUD's visible buttons the framework has never pressed
+        (`opportunities.unused_buttons`). Names only, no clicks."""
+        self._hud_read = True
+        hud = await or_default(window_at(self.client.root_window, HUD), None)
+        if hud is None:
+            return
+        names = [path.rsplit("/", 1)[-1] for path in await or_default(visible_names_under(hud, depth=3), [])]
+        for found in unused_buttons(names, USED_HUD_BUTTONS, now_text()):
+            self.note_opportunity(found)
+
     def say_once(self, kind: str, text: str) -> None:
         """Emit `text` unless it was the last thing said this way, so a turn repeated while walking says it once."""
         if self._said_last.get(kind) != text:
@@ -908,6 +953,9 @@ class QuestLoop:
         if "stopped" in battle:
             raise StopRun(battle["stopped"])
         battle["after"] = {key: after[key] for key in ("zone", "level", "health", "max_health", "mana", "gold")}
+        if not defeated and not fled and all(isinstance(after[key], int) for key in ("health", "max_health")) \
+                and isinstance(before["health"], int) and after["max_health"] > 0:
+            self.measure("fight_costs", round(max(0, before["health"] - after["health"]) / after["max_health"], 3))
         if not defeated and not fled and heavy_fight(before["health"], after["health"], after["max_health"]):
             self.record.heavy_fights[before["zone"]] = self.record.heavy_fights.get(before["zone"], 0) + 1
             self.record.refill_after_heavy_fight = True
@@ -1005,9 +1053,12 @@ class QuestLoop:
     def note_dialog(self, record: dict, result: str) -> None:
         """Log a conversation with its text. The text goes to the event log only: the report keeps page lengths."""
         offers = [page["offer"] for page in record.get("pages", []) if "offer" in page]
+        texts = record.pop("texts", [])
         self.events.emit("dialog", f"{len(record.get('pages', []))} pages, {record.get('follow_ups', 0)} follow-ups"
                                    f"{', offers: ' + ', '.join(offers) if offers else ''}; {result}",
-                         text=dialog_text(record.pop("texts", [])))
+                         text=dialog_text(texts))
+        for found in from_dialog(None, [str(text) for text in texts], now_text()):
+            self.note_opportunity(found)
 
     async def services_turn(self) -> dict:
         """Pick an option of an NPC's services menu, as the offer policy decides."""
@@ -1085,6 +1136,7 @@ class QuestLoop:
         gained = isinstance(after[stat], int) and isinstance(state[stat], int) and after[stat] > state[stat]
         if not gained:
             self.record.tried_wisps[str(wisp["id"])] = time.time()
+        self.measure("wisp_walks", bool(gained))
         ended = flat_distance(await self.client.body.position(), wisp["position"])
         self.events.emit("wisp", f"{kind} {flat_distance(start, wisp['position']):.0f} away: {trip['result']}"
                                  f"{' (' + trip['reason'] + ')' if trip['reason'] else ''}, ended {ended:.0f} from it; "
@@ -1112,6 +1164,8 @@ class QuestLoop:
         return stalled("clicked the potion button, but health did not rise")
 
     async def quest_turn(self, state: dict) -> dict:
+        if not self._hud_read and await self.safe_here():
+            await self.note_hud_buttons()
         fraction = health_fraction(state)
         if self.use_potions and not self._potion_failed:
             if should_drink_potion(fraction, await attempt(self.client.stats.potion_charge())):

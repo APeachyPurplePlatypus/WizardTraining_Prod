@@ -145,6 +145,7 @@ async def close_game_notice(client) -> str | None:
         return None
     await click_window(client, await window_at(box.window, BOX_NO))
     await asyncio.sleep(BOX_SETTLE_SECONDS)
+    client.last_notice = (box.title, box.caption)
     return f"pressed OK on a game notice titled {box.title!r}: {box.caption}"
 
 

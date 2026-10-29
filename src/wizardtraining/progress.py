@@ -142,6 +142,8 @@ class RunRecord:
     zone_doors: dict[str, dict] = field(default_factory=dict)
     left_dungeon: dict | None = None
     dungeon_zones: list[str] = field(default_factory=list)
+    opportunities: dict[str, dict] = field(default_factory=dict)
+    measures: dict[str, list] = field(default_factory=dict)
     school_quests_checked: dict[str, int] = field(default_factory=dict)
     walk_strategies_tried: dict[str, list[str]] = field(default_factory=dict)
     tried_wisps: dict[str, float] = field(default_factory=dict)

@@ -187,5 +187,22 @@ class TripOutOfADungeonKnowledgeTest(unittest.TestCase):
         self.assertEqual(fresh.dungeon_zones, [sunken])
 
 
+class OpportunitiesKnowledgeTest(unittest.TestCase):
+    def test_keeps_opportunities_and_the_last_measures_across_runs(self):
+        from wizardtraining.opportunities import MEASURES_KEPT
+        run = RunRecord(limits=Limits())
+        run.opportunities["feature:quest friend finder"] = {"key": "feature:quest friend finder", "times_seen": 1}
+        run.measures["wisp_walks"] = [True, False] * MEASURES_KEPT
+        knowledge = Knowledge()
+        knowledge.learn_from(run)
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "knowledge.json"
+            knowledge.save(path)
+            fresh = RunRecord(limits=Limits())
+            Knowledge.load(path).give_to(fresh)
+        self.assertIn("feature:quest friend finder", fresh.opportunities)
+        self.assertEqual(len(fresh.measures["wisp_walks"]), MEASURES_KEPT)
+
+
 if __name__ == "__main__":
     unittest.main()
