@@ -23,6 +23,61 @@ APPROACH_SAMPLE_SPACING = 60.0
 APPROACH_MEMORY_SECONDS = 6.0
 
 
+SLOW_DOWN_SECONDS = 0.35
+MIN_STEP_SECONDS = 0.05
+MAX_STEP_SECONDS = 0.6
+SETTLE_SPEED_SECONDS = 0.08
+REVERSAL_RADIANS = math.radians(120)
+MAX_REVERSALS = 3
+SPEED_SMOOTHING = 0.3
+SLOWEST_WALK, FASTEST_WALK = 150.0, 2500.0
+
+
+def slow_down_distance(speed: float) -> float:
+    """How near a final target holding W gives way to measured steps (`step_seconds`): SLOW_DOWN_SECONDS of walking.
+    Held W is checked every 0.05 s, and at a mount's speed that carries the wizard past a small target circle: with
+    the Enchanted Broom on, a wisp walk aiming within 10 went back and forth around the wisp for the route's whole
+    180 s (2026-10-28 21:14 to 21:17)."""
+    return speed * SLOW_DOWN_SECONDS
+
+
+def step_seconds(distance: float, radius: float, speed: float) -> float:
+    """How long to hold W for a step that ends about halfway into the target circle, within the shortest and
+    longest steps."""
+    wanted = (distance - radius / 2) / max(speed, SLOWEST_WALK)
+    return min(max(wanted, MIN_STEP_SECONDS), MAX_STEP_SECONDS)
+
+
+def settle_radius(radius: float, speed: float) -> float:
+    """How near counts as there once steps start going back and forth: the target circle, or the distance the
+    shortest steps can still miss by at this speed, whichever is larger."""
+    return max(radius, speed * SETTLE_SPEED_SECONDS)
+
+
+def smoothed_speed(previous: float | None, measured: float) -> float | None:
+    """The walking speed with a new measure folded in (position change per second, W held), kept within
+    SLOWEST_WALK and FASTEST_WALK; a measure outside them (a stop, a load) is left out."""
+    if not SLOWEST_WALK <= measured <= FASTEST_WALK:
+        return previous
+    return measured if previous is None else previous + SPEED_SMOOTHING * (measured - previous)
+
+
+class OscillationGuard:
+    """Counts the times the target turns up behind the wizard (off course by REVERSAL_RADIANS or more) on the way
+    in, the sign of overshooting it; MAX_REVERSALS of them is oscillating."""
+
+    def __init__(self):
+        self.reversals = 0
+
+    def note(self, off_course: float) -> None:
+        if abs(off_course) >= REVERSAL_RADIANS:
+            self.reversals += 1
+
+    @property
+    def oscillating(self) -> bool:
+        return self.reversals >= MAX_REVERSALS
+
+
 @dataclass(frozen=True)
 class Track:
     """An enemy's position now and its velocity in units per second."""

@@ -23,6 +23,8 @@ from wizwalker.utils import calculate_perfect_yaw
 
 from .geometry import angle_between, flat_distance, point_toward, xy
 from .keys import HeldKey, tap
+from .motion import (WALK_UNITS_PER_SECOND, OscillationGuard, settle_radius, slow_down_distance, smoothed_speed,
+                     step_seconds)
 from .reports import plain
 from .routes import OBSTACLE_RADIUS, Hazards, RoutePlanner
 
@@ -49,6 +51,7 @@ SIDESTEP_SECONDS = 0.4
 TRAIL_SECONDS = 2.0
 MAX_TRAIL_POINTS = 90
 OBSTACLE_AHEAD_DISTANCE = 200.0
+MAX_SETTLE_STEPS = 8
 
 
 logger = logging.getLogger(__name__)
@@ -164,6 +167,43 @@ async def sidestep(client, bearing: float, *, to_the_left: bool) -> None:
         await asyncio.sleep(SETTLE_SECONDS)
 
 
+def walk_speed(client) -> float:
+    """The walking speed measured on this client (`motion.smoothed_speed`), else WALK_UNITS_PER_SECOND."""
+    return getattr(client, "walk_speed", None) or WALK_UNITS_PER_SECOND
+
+
+def note_walk_speed(client, moved: float, seconds: float) -> None:
+    if seconds > 0:
+        client.walk_speed = smoothed_speed(getattr(client, "walk_speed", None), moved / seconds)
+
+
+async def settle_on(client, target, radius: float, log: dict) -> dict:
+    """The last stretch to a final target nearer than held W can stop at (`motion.slow_down_distance`): face it and
+    step for the time the distance takes at the measured speed (`motion.step_seconds`), until inside `radius`. If
+    the target keeps turning up behind (`motion.OscillationGuard`), the wizard is as near as steps get: arrived
+    within `motion.settle_radius`, else failed, in seconds rather than the route's minutes."""
+    guard = OscillationGuard()
+    speed = walk_speed(client)
+    for _ in range(MAX_SETTLE_STEPS):
+        me = await client.body.position()
+        distance = flat_distance(me, target)
+        if distance <= radius:
+            return arrived(log)
+        guard.note(angle_between(calculate_perfect_yaw(me, target), await client.body.yaw()))
+        if guard.oscillating:
+            log["oscillations"] = log.get("oscillations", 0) + 1
+            return (arrived(dict(log, settled=round(distance))) if distance <= settle_radius(radius, speed)
+                    else failed(log, "oscillating around the target"))
+        turn = await face_and_step(client, target, step_seconds(distance, radius, speed))
+        log["settle_steps"] = log.get("settle_steps", 0) + 1
+        if not turn["ok"]:
+            return (interrupted(log, turn["reason"]) if turn["reason"] in (BATTLE, LOADING)
+                    else failed(log, f"turn failed: {turn['reason']}"))
+    distance = flat_distance(await client.body.position(), target)
+    return (arrived(dict(log, settled=round(distance))) if distance <= settle_radius(radius, speed)
+            else failed(log, "could not settle on the target"))
+
+
 def arrived(log: dict) -> dict:
     return dict(log, result="arrived")
 
@@ -222,6 +262,15 @@ async def follow_route(client, legs, *, final_radius: float, watch=None) -> dict
                 if flat_distance(me, target) <= radius:
                     remaining.pop(0)
                     break
+                slow_down = slow_down_distance(walk_speed(client))
+                if len(remaining) == 1 and radius < slow_down and flat_distance(me, target) <= slow_down:
+                    await forward.release()
+                    settled = await settle_on(client, target, radius, log)
+                    if settled["result"] != "arrived":
+                        settled["seconds"] = round(time.monotonic() - started, 1)
+                        return settled
+                    remaining.pop(0)
+                    break
                 bearing = calculate_perfect_yaw(me, target)
                 off_course = angle_between(bearing, await client.body.yaw())
                 if must_turn_in_place(off_course, calibration.learned):
@@ -243,6 +292,8 @@ async def follow_route(client, legs, *, final_radius: float, watch=None) -> dict
                 if time.monotonic() - checked_at < BLOCKED_CHECK_SECONDS:
                     continue
                 here = await client.body.position()
+                if flat_distance(checked_from, here) >= BLOCKED_DISTANCE_PER_CHECK:
+                    note_walk_speed(client, flat_distance(checked_from, here), time.monotonic() - checked_at)
                 if flat_distance(checked_from, here) < BLOCKED_DISTANCE_PER_CHECK:
                     await forward.release()
                     log["blocked_at"].append(point_toward(here, target, OBSTACLE_AHEAD_DISTANCE))

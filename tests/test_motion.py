@@ -100,5 +100,41 @@ class PredictiveRouteTest(unittest.TestCase):
         self.assertTrue(hazards.forbids((900, 0), seconds=3))
 
 
+class SettleTest(unittest.TestCase):
+    def test_held_walk_gives_way_to_steps_sooner_the_faster_the_wizard(self):
+        from wizardtraining.motion import slow_down_distance
+        self.assertLess(slow_down_distance(400.0), slow_down_distance(800.0))
+
+    def test_a_step_ends_inside_the_target_circle_within_the_shortest_and_longest_steps(self):
+        from wizardtraining.motion import MAX_STEP_SECONDS, MIN_STEP_SECONDS, step_seconds
+        self.assertAlmostEqual(step_seconds(215.0, 30.0, 800.0), 0.25)
+        self.assertEqual(step_seconds(31.0, 30.0, 800.0), MIN_STEP_SECONDS)
+        self.assertEqual(step_seconds(5000.0, 30.0, 800.0), MAX_STEP_SECONDS)
+
+    def test_settling_counts_what_the_shortest_steps_can_miss_by(self):
+        from wizardtraining.motion import settle_radius
+        self.assertEqual(settle_radius(30.0, 300.0), 30.0)
+        self.assertEqual(settle_radius(10.0, 800.0), 64.0)
+
+    def test_three_reversals_are_oscillating(self):
+        import math
+        from wizardtraining.motion import OscillationGuard
+        guard = OscillationGuard()
+        for off_course in (0.1, math.pi, -0.2, -math.pi * 0.9, math.pi * 0.8):
+            guard.note(off_course)
+        self.assertTrue(guard.oscillating)
+        calm = OscillationGuard()
+        for off_course in (0.1, 0.3, -0.2, 0.5):
+            calm.note(off_course)
+        self.assertFalse(calm.oscillating)
+
+    def test_the_measured_speed_is_smoothed_and_stops_and_loads_are_left_out(self):
+        from wizardtraining.motion import smoothed_speed
+        self.assertEqual(smoothed_speed(None, 600.0), 600.0)
+        self.assertAlmostEqual(smoothed_speed(600.0, 900.0), 690.0)
+        self.assertEqual(smoothed_speed(600.0, 20.0), 600.0)
+        self.assertEqual(smoothed_speed(600.0, 9000.0), 600.0)
+
+
 if __name__ == "__main__":
     unittest.main()
