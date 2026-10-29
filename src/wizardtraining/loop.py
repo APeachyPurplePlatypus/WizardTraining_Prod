@@ -236,6 +236,7 @@ class QuestLoop:
         self._went_home_for_wisps: set[str] = set()
         self._hud_read = False
         self._after_battle: list | None = None
+        self._turn_parts: dict[str, float] = {}
         self._recalled_at: float | None = None
         self._journal_zones: tuple[frozenset, dict] | None = None
         self._finder_givers: dict[tuple, int] = {}
@@ -329,6 +330,7 @@ class QuestLoop:
             except LimitReached as reached:
                 await self.finish_safely(reached, state)
             started = time.monotonic()
+            self._turn_parts = {}
             turn = await self.checked_turn(state)
             turn_seconds = time.monotonic() - started
             hooks_started = time.monotonic()
@@ -347,6 +349,14 @@ class QuestLoop:
                      quest.get("goal_zone") or "")
             self.note_changes(state)
 
+    async def timed(self, name: str, awaitable):
+        """Await `awaitable`, adding the time it took to this turn's parts, for the timeline after a battle."""
+        started = time.monotonic()
+        try:
+            return await awaitable
+        finally:
+            self._turn_parts[name] = self._turn_parts.get(name, 0.0) + time.monotonic() - started
+
     def note_the_way_out_of_a_battle(self, turn: dict, started: float, seconds: float, hooks: float) -> None:
         """After a won battle, time each turn until the first that moves the wizard (`progress.acted_after_battle`)
         and log the timeline from the battle's end: the operator, 2026-10-29: "it waits too long after a battle is
@@ -356,14 +366,16 @@ class QuestLoop:
             return
         if self._after_battle is None or self._battle_ended_at is None:
             return
+        parts = ", ".join(f"{name} {spent:.1f} s" for name, spent in sorted(self._turn_parts.items(),
+                                                                         key=lambda item: -item[1]) if spent >= 0.1)
         self._after_battle.append((round(started - self._battle_ended_at, 1), turn.get("did"), round(seconds, 1),
-                                   round(hooks, 1)))
+                                   round(hooks, 1), parts))
         if acted_after_battle(turn.get("did")) or len(self._after_battle) >= AFTER_BATTLE_TURNS_TIMED:
-            steps = "; ".join(f"+{at:.1f} s {did} ({took:.1f} s, then {checks:.1f} s of checks)"
-                              for at, did, took, checks in self._after_battle)
-            first = self._after_battle[-1]
-            self.events.emit("timing", f"after the battle: {steps}; the first move came {first[0] + first[2]:.1f} s "
-                                       f"after the battle ended", gap=first[0] + first[2])
+            steps = "; ".join(f"+{at:.1f} s {did} ({took:.1f} s{': ' + parts if parts else ''}; then {checks:.1f} s "
+                              f"of checks)" for at, did, took, checks, parts in self._after_battle)
+            last = self._after_battle[-1]
+            self.events.emit("timing", f"after the battle: {steps}; the first move came {last[0] + last[2]:.1f} s "
+                                       f"after the battle ended", gap=last[0] + last[2])
             self._after_battle = None
 
     async def out_into_a_heavy_zone_turn(self, state: dict, fraction: float | None) -> dict | None:
@@ -637,13 +649,14 @@ class QuestLoop:
         """A turn, after answering known popups. An open message box the framework does not answer takes every
         click, so the run stops for the operator with the box's title (never its text, which can name a player):
         an unanswered friend request kept every card the wizard played out of its battles for over half an hour."""
-        if answered := await answer_known_popup(self.client):
+        if answered := await self.timed("popups", answer_known_popup(self.client)):
             self.events.emit("popup", answered)
             self.note_a_tip()
             return progressed(answered)
-        if (answered := await self.dungeon_entry_turn(state["zone"], (self.record.quest or {}).get("goal_zone"))):
+        if (answered := await self.timed("entry box", self.dungeon_entry_turn(
+                state["zone"], (self.record.quest or {}).get("goal_zone")))):
             return answered
-        if (box := await message_box(self.client)) is not None:
+        if (box := await self.timed("message box", message_box(self.client))) is not None:
             if await self.box_closes_by_itself():
                 self.events.emit("popup", f"a message box titled {box.title!r} closed by itself")
                 return stalled("waited for a message box to close by itself", title=box.title)
@@ -1248,7 +1261,7 @@ class QuestLoop:
             await self.check_the_dungeon_held(state)
         if (detour := await self.reagent_detour_turn(state)) is not None:
             return detour
-        if (refill := await self.refill_after_heavy_fight_turn(state)) is not None:
+        if (refill := await self.timed("refill decision", self.refill_after_heavy_fight_turn(state))) is not None:
             return refill
         wanted = wanted_wisp(fraction, mana_fraction(state))
         if wanted is not None:
@@ -2201,7 +2214,7 @@ class QuestLoop:
         if self.near_a_trapping_mark(zone, await self.client.body.position()):
             self.events.emit("travel", f"not marking in {zone}: a mark near here trapped the wizard this run")
             return
-        problem = await mark_here(self.client)
+        problem = await self.timed("mark", mark_here(self.client))
         since = ("" if self._battle_ended_at is None
                  else f", {time.monotonic() - self._battle_ended_at:.0f} s after the last battle ended")
         self.events.emit("travel", f"marked the spot in {zone} before leaving for {stat}{since}" if problem is None
@@ -2217,7 +2230,7 @@ class QuestLoop:
         """Go to The Commons to refill `stat`; None when the button could not be used."""
         zone = state["zone"]
         started = time.monotonic()
-        problem = await go_to_the_commons(self.client)
+        problem = await self.timed("go home", go_to_the_commons(self.client))
         if problem is not None:
             self.events.emit("travel", f"could not go to the Commons for mana: {problem}")
             return None
