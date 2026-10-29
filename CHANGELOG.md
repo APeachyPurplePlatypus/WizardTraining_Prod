@@ -4,6 +4,17 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ## Unreleased
 
+### Added
+
+- **A check that no path from someone's own machine is committed** (`.github/workflows/no-local-paths.yml`).
+  - **What:** on every push and pull request, the tracked files are searched for Windows user folders (`C:\Users\<name>`), home folders (`/home/<name>/`, `/Users/<name>/`) and cloud-synced document folders. Any match fails the check and is listed.
+  - **Why:** a path from a contributor's machine tells readers their user name and how their machine is laid out, and helps no one else. The pull request checklist asks for no personal data, but a direct push to a branch skips it. Placeholders (`<framework folder>`) and environment variables (`WIZARDTRAINING_DEIMOS`) say the same thing for everyone.
+  - **Verified:** locally, the pattern passes the current files and flags a sample Windows user folder.
+
+### Changed
+
+- **The changelog names "the operator", not the operator's name**, as the rest of it already did.
+
 ## 0.3.0 (2026-10-28)
 
 ### Added
@@ -106,7 +117,7 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 - **Scavenge goals: a reagent is gathered where it grows** (`QuestLoop.scavenge_turn`, `targets.is_reagent`, `entities.objects_named`).
   - **What:** a scavenge goal names its item ("Mist Wood"), shows no quest arrow and has no tags. The wizard walks to the nearest loaded entity named for the reagent (its name without spaces, then a number: "MistWood_..."), uses it with X as a quest object, and checks that it is gone (gathered). With none in sight it searches the zone, then walks one door at a time to the nearest open zone of the world (no interior, tower or dungeon) not yet searched for it, and stops for the operator when none is left. Nothing is ever bought. "Wizards in the Mist" is no longer passed over.
-  - **Why:** David asked to "finish the quests" in Wizard City; "Wizards in the Mist" ("Get" Mist Wood) stopped the run at 00:18. Reagents are not in the zones' data: they spawn as entities, such as "FrostedFlax_01" by the Commons' blue wisps (01:41).
+  - **Why:** the operator asked to "finish the quests" in Wizard City; "Wizards in the Mist" ("Get" Mist Wood) stopped the run at 00:18. Reagents are not in the zones' data: they spawn as entities, such as "FrostedFlax_01" by the Commons' blue wisps (01:41).
   - **Verified:** offline (`tests/test_targets.py`). In the game: the search ran in Cyclops Lane (08:43 to 08:45, no Mist Wood seen there).
   - **Later:** a reagent is also known with a prefix to its name ("WC_MistWood_03"), and the zones each reagent grows in are kept in the knowledge file (`Knowledge.reagent_zones`; `targets.zones_to_search_for`, `targets.found_in`): those are searched first, and the zone where one is found goes to the front. Players say Mist Wood grows across Wizard City, off the sidewalks by the "boss" houses of Unicorn Way, Cyclops Lane and Colossus Boulevard; Unicorn Way is kept as the first place to look for it until a find says otherwise. A search point that a players' duel or a crowd of enemies blocks counts as searched (one by a duel in Unicorn Way would have been waited on for up to ten minutes, 09:03), and the reagent-like entities seen in each zone are logged (`targets.looks_like_a_reagent`). In the game a reagent's prompt reads "Press X or to Collect", and X gathered a "FrostedFlax_01" in Unicorn Way (09:07), so gathering works; Frosted Flax is not the Mist Wood the quest wants. A zone not on a reagent's list is not searched while a listed zone is still unsearched: Cyclops Lane was searched point by point for ten minutes among its Cyclops, each fight sending the wizard back to the same point (08:43 to 08:56).
 
