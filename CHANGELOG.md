@@ -6,8 +6,9 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Added
 
-- **Each wisp trip logs where it ended** (`QuestLoop.wisp_turn`).
-  - **What:** the wisp event says how far from the wisp the walk ended, and keeps it and whether anything was gained as fields.
+- **Each wisp trip walks onto the wisp and logs where it ended** (`QuestLoop.wisp_turn`, `WISP_ARRIVE_RADIUS`).
+  - **What:** the walk to a wisp stops within 10 of it, not 40, and the wisp event says how far from it the walk ended, and keeps that and whether anything was gained as fields.
+  - **Why (the radius):** in the Commons a mana wisp the walk ended 25 from gave nothing, and one it ended 9 from gave 10 (20:14); a step closer costs next to nothing, a wisp walk that stops short costs the whole walk (the coordinator, 2026-10-29 00:16 UTC).
   - **Why:** about 55% of the mana-wisp trips and 40% of the health-wisp trips that arrived gave nothing on 2026-10-28; whether other players took them first or the wizard stopped short of touching them (it stops within 40) is to be told from these.
   - **Verified:** offline (the suite); in the game: the next refill.
 
