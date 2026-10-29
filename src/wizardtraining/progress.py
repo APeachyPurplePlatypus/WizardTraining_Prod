@@ -13,6 +13,7 @@ import re
 import datetime
 from dataclasses import asdict, dataclass, field
 
+from .geometry import distance_to_path, flat_distance
 from .routes import COLLISION, NAV
 from .travelplan import spare_mana
 
@@ -422,6 +423,23 @@ def worth_pushing_on(health: float | None, distance_to_goal: float | None, *, st
     the Gravulum Order's bounty."""
     return (health is not None and distance_to_goal is not None and health >= GOAL_PUSH_HEALTH_FRACTION
             and (stalled or distance_to_goal <= GOAL_PUSH_DISTANCE))
+
+
+MARK_AT_DOOR_REACH = 1500.0
+MARK_AT_DOOR_RADIUS = 150.0
+
+
+def walk_to_mark_at_the_door(here, door, enemies: list) -> bool:
+    """Before a refill trip from a zone where fights are heavy, with the goal behind a door (a house, an instance, a
+    dungeon): walk to that door and mark there instead of where the fight ended, when the door is farther than
+    MARK_AT_DOOR_RADIUS (else mark here: it is the door) and within MARK_AT_DOOR_REACH, and no enemy stands within
+    ENEMY_PATH_CLEARANCE of the straight walk. A fight's spot is where patrols cross: Recalls to marks set 2 to 9 s
+    after a fight in Triton's underwater zone landed in the next fight within 2 to 12 s (20:48, 21:10). At the door,
+    the Recall is followed by X before a patrol closes."""
+    distance = flat_distance(here, door)
+    if distance <= MARK_AT_DOOR_RADIUS or distance > MARK_AT_DOOR_REACH:
+        return False
+    return all(distance_to_path(enemy, [here, door]) > ENEMY_PATH_CLEARANCE for enemy in enemies)
 
 
 HOUSE_DOOR_DISTANCE = 1000.0

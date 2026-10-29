@@ -45,6 +45,11 @@ Every change, enhancement or addition is listed with its rationale, so later con
 
 ### Fixed
 
+- **A refill trip's mark goes on the goal's door, not where the fight ended** (`progress.walk_to_mark_at_the_door`, `QuestLoop.walk_to_mark_at_the_door_turn`, `QuestLoop.note_a_fight_after_a_recall`, `opportunities.measured_patterns`).
+  - **What:** in a zone where fights are heavy, with the goal behind a door there (a house, an instance, a dungeon), the wizard walks to that door before marking for a refill trip, when it is within 1,500 and no enemy stands within 500 of the walk; else it marks where it stands. Recalls that meet a fight within 15 s are measured, and when half or more of five or more do, that is kept as a pattern in the opportunity store.
+  - **Why:** a fight's spot is where patrols cross. Recalls to marks set 2 to 9 s after fights in Triton's underwater zone landed in the next fight within 2 to 12 s (20:48, 21:10), each costing 40 to 55% of the wizard's health and another trip home: about 35 XP a five-minute cycle. The coordinator suggested marking at a clear spot.
+  - **Verified:** offline (`tests/test_progress.py`, `tests/test_opportunities.py`).
+
 - **A house or shop whose door is close is gone into before refilling** (`progress.worth_going_in_first`, `QuestLoop.distance_to_the_arrow`, `QuestLoop.refill_after_heavy_fight_turn`).
   - **What:** after a heavy fight, or short in a zone where fights are heavy, with the goal in an interior that is not an instance and its door (the quest arrow) within 1,000, the wizard goes in at 60% health or more and refills after. Instances, dungeons and goals in streets keep the full refill.
   - **Why:** the push-on rule counted only goals in the zone the wizard stood in. At 830 of 1195 by H1's door under Triton Avenue, for a talk inside, the wizard went home for health first: a Mark and a Recall (about 10 mana, with mana the bottleneck) and two minutes of wisp walking (21:07). The coordinator suggested the rule.

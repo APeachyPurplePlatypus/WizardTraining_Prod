@@ -49,6 +49,11 @@ class PatternTest(unittest.TestCase):
     def test_not_before_the_numbers_are_steady(self):
         self.assertEqual(measured_patterns({"talk": [315], "battle": [33, 39]}, [0.6], [False], WHEN), [])
 
+    def test_recalls_landing_in_fights(self):
+        found = measured_patterns({}, [], [], WHEN, [True, True, False, True, True])
+        self.assertEqual([item.key for item in found], ["pattern:recalls land in fights"])
+        self.assertEqual(measured_patterns({}, [], [], WHEN, [True, False, False, False, False]), [])
+
     def test_costly_fights_and_taken_wisps(self):
         found = measured_patterns({}, [0.6, 0.55, 0.7, 0.4, 0.65], [False] * 6 + [True] * 4, WHEN)
         self.assertEqual(sorted(item.key for item in found),

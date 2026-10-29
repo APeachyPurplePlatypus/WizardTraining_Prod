@@ -387,6 +387,16 @@ class HeavyZoneTest(unittest.TestCase):
         self.assertFalse(short_for_a_heavy_zone(None, 3))
 
 
+class MarkAtTheDoorTest(unittest.TestCase):
+    def test_walk_to_a_near_door_to_mark_it_when_no_enemy_is_on_the_way(self):
+        from wizardtraining.progress import walk_to_mark_at_the_door
+        here, door = (0, 0), (1000, 0)
+        self.assertTrue(walk_to_mark_at_the_door(here, door, [(500, 900), (-800, 0)]))
+        self.assertFalse(walk_to_mark_at_the_door(here, door, [(500, 200)]))
+        self.assertFalse(walk_to_mark_at_the_door(here, (100, 0), []))
+        self.assertFalse(walk_to_mark_at_the_door(here, (3000, 0), []))
+
+
 class GoInFirstTest(unittest.TestCase):
     house = "WizardCity/WC_Streets/WC_Triton_Underwater/Interiors/WC_Triton_Underwater_H1"
 

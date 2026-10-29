@@ -37,7 +37,8 @@ BUTTON_WORDS = ("button", "btn")
 EVIDENCE_LENGTH = 300
 MEASURES_KEPT = 100
 QUEST_OVER_FIGHT_RATIO = 5.0
-FEW_QUESTS, FEW_FIGHTS, FEW_WISP_WALKS = 3, 5, 10
+FEW_QUESTS, FEW_FIGHTS, FEW_WISP_WALKS, FEW_RECALLS = 3, 5, 10, 5
+RECALL_FIGHT_SHARE = 0.5
 TAKEN_WISP_SHARE = 0.4
 COSTLY_FIGHT_SHARE = 0.35
 
@@ -105,7 +106,7 @@ def is_a_button(name: str) -> bool:
 
 
 def measured_patterns(xp_by_activity: dict[str, list[int]], fight_costs: list[float], wisp_walks: list[bool],
-                      when: str) -> list[Opportunity]:
+                      when: str, recall_fights: list[bool] = ()) -> list[Opportunity]:
     """Patterns from the run's numbers, once they are clear and steady: quest hand-ins paying QUEST_OVER_FIGHT_RATIO
     times a fight or more (over FEW_QUESTS hand-ins and FEW_FIGHTS fights), fights costing COSTLY_FIGHT_SHARE of the
     wizard's health or more on average, and TAKEN_WISP_SHARE or more of FEW_WISP_WALKS wisp walks giving nothing.
@@ -128,6 +129,12 @@ def measured_patterns(xp_by_activity: dict[str, list[int]], fight_costs: list[fl
             found.append(Opportunity(key_of(PATTERN, "wisps are often taken"), PATTERN, "the run's wisp walks",
                                      f"{empty:.0%} of {len(wisp_walks)} wisp walks gave nothing: wisps near other "
                                      "players are usually taken", when))
+    if len(recall_fights) >= FEW_RECALLS:
+        share = sum(1 for fought in recall_fights if fought) / len(recall_fights)
+        if share >= RECALL_FIGHT_SHARE:
+            found.append(Opportunity(key_of(PATTERN, "recalls land in fights"), PATTERN, "the run's Recalls",
+                                     f"{share:.0%} of {len(recall_fights)} Recalls met a fight within 15 s: mark where "
+                                     "patrols do not cross, such as the goal's door", when))
     return found
 
 

@@ -52,7 +52,7 @@ from .movement import LOADING, KeysIgnored, Reroute, face, travel
 from .navigation import load_planner
 from .policy import LEAVE_MENU, CombatPolicy, MainQuestsOnly, OfferPolicy, SpellTypePolicy, biggest_hits
 from .progress import (DUEL_BLOCKS_THE_WAY, DUEL_NEAR_PATH, ENEMIES_IN_THE_WAY, ENEMY_NEAR_PATH, LimitReached, Limits, PATH_THREATS,
-                       PlannedRoute, RunRecord, StopRun, check_limits, leaves_world, health_to_travel, mana_for_a_fight, mana_to_travel, worth_going_in_first, heavy_zone_on_the_way, short_for_a_heavy_zone, short_for_an_instance_goal, still_to_recharge, trapped_by, worth_marking, worth_recalling, dungeon_held, resume_in_time, RESUME_TRIP_SECONDS, on_a_refill_trip,
+                       PlannedRoute, RunRecord, StopRun, check_limits, leaves_world, health_to_travel, mana_for_a_fight, mana_to_travel, MARK_AT_DOOR_RADIUS, walk_to_mark_at_the_door, worth_going_in_first, heavy_zone_on_the_way, short_for_a_heavy_zone, short_for_an_instance_goal, still_to_recharge, trapped_by, worth_marking, worth_recalling, dungeon_held, resume_in_time, RESUME_TRIP_SECONDS, on_a_refill_trip,
                        PARK_AFTER_STRATEGIES, HEAVY_ZONE_FIGHTS, RECALL_MANA_NEEDED, RECHARGE_HEALTH_FRACTION, heavy_fight, parked, worth_pushing_on, short_before_entering, made_headway, GOAL_HEADWAY, STALLED_TRIPS_TO_PARK, forget_obstacles_near, OBSTACLE_FORGET_RADIUS,
                        nav_did_better, progressed, ready_to_recall, remember_obstacles, safe_to_stand, short_for_a_fight,
                        should_drink_potion, stalled, topped_up, travel_outcome, wanted_wisp,
@@ -108,6 +108,7 @@ NOT_A_DOOR_RADIUS = 600.0
 ENTRANCE_ARRIVE_RADIUS = 80.0
 ENTRANCE_AT_ARROW_RADIUS = 300.0
 LATE_TRAVEL_LOAD_SECONDS = 90.0
+RECALL_FIGHT_SECONDS = 15.0
 INTERACT_PROMPT = "interact prompt"
 LOADING_WAIT_SECONDS = 3.0
 DOOR_WAIT_SECONDS = 15.0
@@ -232,6 +233,7 @@ class QuestLoop:
         self._declined_dungeons: set[str | None] = set()
         self._went_home_for_wisps: set[str] = set()
         self._hud_read = False
+        self._recalled_at: float | None = None
         self._journal_zones: tuple[frozenset, dict] | None = None
         self._finder_givers: dict[tuple, int] = {}
         self._finder_just_activated = False
@@ -790,9 +792,20 @@ class QuestLoop:
         del values[:-MEASURES_KEPT]
         measures = self.record.measures
         for found in measured_patterns({"talk": measures.get("xp_talk", []), "battle": measures.get("xp_battle", [])},
-                                       measures.get("fight_costs", []), measures.get("wisp_walks", []), now_text()):
+                                       measures.get("fight_costs", []), measures.get("wisp_walks", []), now_text(),
+                                       measures.get("recall_fights", [])):
             if found.key not in self.record.opportunities:
                 self.note_opportunity(found)
+
+    def note_a_fight_after_a_recall(self, *, fought: bool) -> None:
+        """Measure whether a Recall landed in a fight within RECALL_FIGHT_SECONDS (`opportunities.measured_patterns`):
+        a battle in that time counts as one, a turn after it without one as none."""
+        if self._recalled_at is None:
+            return
+        within = time.monotonic() - self._recalled_at <= RECALL_FIGHT_SECONDS
+        if fought or not within:
+            self._recalled_at = None
+            self.measure("recall_fights", fought and within)
 
     def note_a_tip(self) -> None:
         """A game box just closed with OK: its title and text may announce a feature (`opportunities.from_tip`)."""
@@ -947,6 +960,7 @@ class QuestLoop:
 
     async def battle_turn(self) -> dict:
         self.record.battles += 1
+        self.note_a_fight_after_a_recall(fought=True)
         before = await snapshot(self.client)
         self.saw_enemies(before["zone"])
         started = time.monotonic()
@@ -1183,6 +1197,7 @@ class QuestLoop:
         return stalled("clicked the potion button, but health did not rise")
 
     async def quest_turn(self, state: dict) -> dict:
+        self.note_a_fight_after_a_recall(fought=False)
         if not self._hud_read and await self.safe_here():
             await self.note_hud_buttons()
         fraction = health_fraction(state)
@@ -1984,6 +1999,8 @@ class QuestLoop:
                 self.events.emit("travel", f"keeping the mark already set in {zone}, nearer the goal than here, for "
                                            f"the way back")
             else:
+                if (walk := await self.walk_to_mark_at_the_door_turn(zone)) is not None:
+                    return walk
                 await self.mark_before_the_trip(zone, stat)
         if must_come_back and self._marked_in != zone:
             return None
@@ -2125,6 +2142,24 @@ class QuestLoop:
             return False
         return await has_mark(self.client) and await recall_tip(self.client) == self.record.mark_tip
 
+    async def walk_to_mark_at_the_door_turn(self, zone: str) -> dict | None:
+        """In a zone where fights are heavy, with the goal behind a door in it (`progress.walk_to_mark_at_the_door`):
+        walk to the door first, so the refill trip's mark, and its Recall, are there and not where the fight ended.
+        None to mark here."""
+        quest = self.record.quest or {}
+        goal_zone, arrow = quest.get("goal_zone"), quest.get("arrow")
+        if (not arrow or goal_zone in (None, "", zone) or self.record.heavy_fights.get(zone, 0) < HEAVY_ZONE_FIGHTS
+                or not (INTERIOR_WORD in goal_zone or goal_zone in self.record.dungeon_zones)):
+            return None
+        here, door = await self.client.body.position(), XYZ(arrow["x"], arrow["y"], 0.0)
+        enemies = await nearby_enemies(self.client)
+        if not walk_to_mark_at_the_door(here, door, [enemy["position"] for enemy in enemies]):
+            return None
+        self.say_once("travel", f"walking to the door of {goal_zone}, {flat_distance(here, door):.0f} away, to mark it "
+                                "for the refill trip's Recall rather than where the fight ended")
+        return await self.travel_turn("walk to the door to mark it", door, arrive_radius=MARK_AT_DOOR_RADIUS / 2,
+                                      avoid=enemies)
+
     async def mark_before_the_trip(self, zone: str, stat: str) -> None:
         if self.near_a_trapping_mark(zone, await self.client.body.position()):
             self.events.emit("travel", f"not marking in {zone}: a mark near here trapped the wizard this run")
@@ -2168,6 +2203,8 @@ class QuestLoop:
                 self.learn_cost("go_home_seconds" if way == GO_HOME else "recall_seconds", now - pressed)
             if way == GO_HOME and world_of(arrived):
                 self.record.hubs[world_of(arrived)] = arrived
+            if way == RECALL:
+                self._recalled_at = now
         walked = self._teleport_pressed is None and now - self._defeated_at > DEFEAT_ARRIVAL_SECONDS
         if walked and isinstance(left, str) and world_of(left) == world_of(arrived):
             link_zones(self.record.zone_links, left, arrived)
