@@ -271,6 +271,7 @@ class QuestLoop:
         self._battle_ended_at: float | None = None
         self._settled_in: str | None = None
         self.motion = MotionTracker()
+        self._active_tracks: list = []
         self.events = events or EventLog()
         self._last_state = self._last_quest = None
         self.settings = settings
@@ -1162,7 +1163,7 @@ class QuestLoop:
                                       avoid=enemies, duel_circles=circles)
         trip = await travel(self.client, planner, wisp["position"], arrive_radius=WISP_ARRIVE_RADIUS,
                             watch=self.watcher(reroute=self.rerouter(planner, hazards, wisp["position"])),
-                            hazards=hazards)
+                            hazards=hazards, live_tracks=lambda: self._active_tracks)
         await asyncio.sleep(WISP_SETTLE_SECONDS)
         after = await snapshot(self.client)
         stat = "health" if wanted == "health" else "mana"
@@ -3362,7 +3363,7 @@ class QuestLoop:
         trip = await travel(self.client, planner, destination, arrive_radius=arrive_radius,
                             watch=self.watcher(also=also, ignore=ignore,
                                                reroute=self.rerouter(planner, hazards, destination)),
-                            hazards=hazards)
+                            hazards=hazards, live_tracks=lambda: self._active_tracks)
         moved = flat_distance(start, await self.client.body.position())
         if trip.get("reason") == LOADING:
             self.note_hidden_door(zone, planner, destination, start)
@@ -3452,7 +3453,7 @@ class QuestLoop:
         trip = await travel(self.client, planner, volume.point, arrive_radius=volume.radius / 3,
                             watch=self.watcher(also=self.jump_check(),
                                                reroute=self.rerouter(planner, hazards, volume.point)),
-                            hazards=hazards)
+                            hazards=hazards, live_tracks=lambda: self._active_tracks)
         reached = trip["result"] == "arrived" or trip["reason"] in (TELEPORTED, "loading")
         if not reached:
             moved = flat_distance(before, await self.client.body.position())
@@ -3539,7 +3540,7 @@ class QuestLoop:
                              keep_out=planner.teleports_to_keep_out_of(start, destination, arrive_radius)
                              + hidden_doors_to_keep_out_of(self.record.hidden_doors.get(zone, []), start, destination,
                                                            arrive_radius),
-                             tracks=[self.motion.track(enemy, now) for enemy in around], start=start)
+                             tracks=self._set_active_tracks([self.motion.track(enemy, now) for enemy in around]), start=start)
         return hazards, around
 
     def rerouter(self, planner: RoutePlanner, hazards: Hazards, destination):
@@ -3579,6 +3580,7 @@ class QuestLoop:
             now = time.monotonic()
             self.motion.observe(enemies, now)
             threats = [] if self.in_grace_after_battle() else others(enemies, ignore)
+            self._active_tracks = [self.motion.track(enemy, now) for enemy in threats]
             self.approaches.record(enemies, now)
             self.note_sightings(state["zone"], enemies, path_ahead[0], now)
             if close := too_close(threats):
@@ -3595,12 +3597,16 @@ class QuestLoop:
                    for enemy in threats):
                 if reroute is not None and now - last_reroute[0] >= MIN_SECONDS_BETWEEN_REROUTES:
                     last_reroute[0] = now
-                    if legs := reroute(path_ahead, threats, now):
+                    if legs := await asyncio.to_thread(reroute, path_ahead, threats, now):
                         return Reroute(legs)
                 return ENEMY_NEAR_PATH
             return None
 
         return watch
+
+    def _set_active_tracks(self, tracks: list) -> list:
+        self._active_tracks = list(tracks)
+        return self._active_tracks
 
     def in_grace_after_battle(self) -> bool:
         return in_grace_after_battle(self._battle_ended_at, now=time.monotonic())

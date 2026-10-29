@@ -96,8 +96,9 @@ class EntityTracker:
                 tracked.append((entity, self._kinds[key], name))
         self._tracked = tracked
 
-    async def _located(self, kinds: set[str]) -> list[tuple[object, str, str, object]]:
-        await self._refresh()
+    async def _located(self, kinds: set[str], *, refresh: bool = True) -> list[tuple[object, str, str, object]]:
+        if refresh:
+            await self._refresh()
         located = []
         for entity, kind, name in self._tracked:
             if kind in kinds:
@@ -107,9 +108,9 @@ class EntityTracker:
                     continue
         return located
 
-    async def enemies_and_duel_circles(self) -> tuple[list[dict], list]:
+    async def enemies_and_duel_circles(self, *, refresh: bool = True) -> tuple[list[dict], list]:
         enemies, circles = [], []
-        for entity, kind, name, where in await self._located({ENEMY, DUEL_CIRCLE}):
+        for entity, kind, name, where in await self._located({ENEMY, DUEL_CIRCLE}, refresh=refresh):
             if kind == DUEL_CIRCLE:
                 circles.append(where)
             else:
@@ -135,10 +136,10 @@ def tracker_for(client) -> EntityTracker:
     return client.entity_tracker
 
 
-async def surroundings(client) -> tuple[list[dict], list]:
+async def surroundings(client, *, refresh: bool = True) -> tuple[list[dict], list]:
     """Enemies sorted by distance and marked if they stand in a duel circle, and the circles themselves."""
     me = await client.body.position()
-    enemies, circles = await tracker_for(client).enemies_and_duel_circles()
+    enemies, circles = await tracker_for(client).enemies_and_duel_circles(refresh=refresh)
     return measured(enemies, me, circles), circles
 
 

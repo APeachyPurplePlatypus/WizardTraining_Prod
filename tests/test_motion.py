@@ -1,7 +1,11 @@
+import math
 import unittest
 
-from wizardtraining.motion import (MAX_ENEMY_SPEED, MOTION_WINDOW_SECONDS, PREDICTION_HORIZON_SECONDS, MotionTracker,
-                                   ApproachLog, Track, closest_approach, closing_speed)
+from wizardtraining.geometry import angle_between, bearing
+from wizardtraining.motion import (MAX_ENEMY_SPEED, MOTION_WINDOW_SECONDS, PIVOT_IN_PLACE_RADIANS,
+                                   PREDICTION_HORIZON_SECONDS, ApproachLog, MotionTracker, Track, closest_approach,
+                                   closing_speed, lookahead_distance, pd_steer_command, reactive_bearing,
+                                   should_release_forward)
 from wizardtraining.routes import COLLISION, ENEMY_KEEP_OUT, Hazards, RoutePlanner
 
 from test_routes import SquareWalkGrid
@@ -38,6 +42,16 @@ class MotionTrackerTest(unittest.TestCase):
         track = Track((0, 0), (100, 0))
         self.assertEqual(track.at(2), (200, 0))
         self.assertEqual(track.at(PREDICTION_HORIZON_SECONDS + 10), (100 * PREDICTION_HORIZON_SECONDS, 0))
+
+    def test_patrol_reversal_is_detected_immediately_without_window_lag(self):
+        tracker = MotionTracker()
+        tracker.observe([ghoul(0, 0)], 10.0)
+        tracker.observe([ghoul(100, 0)], 10.5)
+        tracker.observe([ghoul(200, 0)], 11.0)
+        tracker.observe([ghoul(180, 0)], 11.1)
+        vel = tracker.track(ghoul(180, 0), 11.1).velocity
+        self.assertAlmostEqual(vel[0], -200.0)
+        self.assertAlmostEqual(vel[1], 0.0)
 
 
 class ApproachLogTest(unittest.TestCase):
@@ -100,6 +114,34 @@ class PredictiveRouteTest(unittest.TestCase):
         self.assertTrue(hazards.forbids((900, 0), seconds=3))
 
 
+class ClosedLoopReflexTest(unittest.TestCase):
+    def test_pd_steer_releases_turn_key_on_angular_velocity_lead(self):
+        # Far off course with zero angular velocity -> turns in sign of error and holds W
+        self.assertEqual(pd_steer_command(0.4, 0.0), (1, True))
+        self.assertEqual(pd_steer_command(-0.4, 0.0), (-1, True))
+        # Approaching target yaw at 4.5 rad/s with 0.14 rad left -> lead predicts coasting onto target, so release turn key
+        self.assertEqual(pd_steer_command(0.14, 4.5, lead_seconds=0.035), (0, True))
+        # Sharp hairpin beyond PIVOT_IN_PLACE_RADIANS -> releases W to pivot in place until within arc angle
+        self.assertEqual(pd_steer_command(PIVOT_IN_PLACE_RADIANS + 0.2, 0.0), (1, False))
+
+    def test_velocity_predicted_braking_and_lookahead_scale_with_speed(self):
+        self.assertTrue(should_release_forward(45.0, 30.0, 600.0, stop_lead_seconds=0.03))
+        self.assertFalse(should_release_forward(80.0, 30.0, 600.0, stop_lead_seconds=0.03))
+        self.assertLess(lookahead_distance(400.0), lookahead_distance(800.0))
+
+    def test_reactive_bearing_deflects_behind_a_moving_enemy(self):
+        # Wizard at (0, 0) aiming east at (1000, 0); enemy at (500, 0) walking north (0, +300)
+        direct = bearing((0, 0), (1000, 0))
+        steered = reactive_bearing((0, 0), (1000, 0), [Track((500, 0), (0.0, 300.0))])
+        # Deflection should bend south (toward negative y, i.e. yaw closer to 0 than 3*pi/2) to pass behind the enemy
+        self.assertNotAlmostEqual(steered, direct)
+        self.assertGreater(angle_between(steered, direct), 0.0)
+        # When a wall blocks the deflected probe, falls back to direct carrot bearing
+        blocked = reactive_bearing((0, 0), (1000, 0), [Track((500, 0), (0.0, 300.0))],
+                                   line_walkable=lambda a, b: False)
+        self.assertAlmostEqual(blocked, direct)
+
+
 class SettleTest(unittest.TestCase):
     def test_held_walk_gives_way_to_steps_sooner_the_faster_the_wizard(self):
         from wizardtraining.motion import slow_down_distance
@@ -117,7 +159,6 @@ class SettleTest(unittest.TestCase):
         self.assertEqual(settle_radius(10.0, 800.0), 64.0)
 
     def test_three_reversals_are_oscillating(self):
-        import math
         from wizardtraining.motion import OscillationGuard
         guard = OscillationGuard()
         for off_course in (0.1, math.pi, -0.2, -math.pi * 0.9, math.pi * 0.8):

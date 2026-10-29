@@ -1,4 +1,4 @@
-"""The keys the framework may send, and a key held down while walking.
+"""The keys the framework may send, a single held key, and a non-blocking multi-key chord controller.
 
 Keys go to the game window as window messages, so the window does not need focus. Only ALLOWED_KEYS
 are sent; anything else raises RefusedKey. Notable keys refused, from the game's default bindings:
@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import ctypes
+import time
 
 ALLOWED_KEYS = frozenset({"W", "A", "S", "D", "X", "SPACEBAR"})
 PHOTO_KEYS = frozenset({"Z"})
@@ -67,3 +68,50 @@ class HeldKey:
 
     async def __aexit__(self, *exc) -> None:
         await self.release()
+
+
+class KeyChord:
+    """Non-blocking closed-loop keyboard state controller for simultaneous movement/turning keys (W, A, S, D).
+    Updates held keys on every 100 Hz tick without sleeping, repeats WM_KEYDOWN at KEY_REPEAT_SECONDS so the
+    client's input handler stays engaged, and sends WM_KEYUP immediately when a key is dropped or on exit."""
+
+    def __init__(self, client):
+        self._window = client.window_handle
+        self._held: dict[int, object] = {}
+        self._last_down: dict[int, float] = {}
+
+    def set_keys(self, *keys) -> set[str]:
+        """Hold exactly `keys`, releasing any previously held keys not in `keys`.
+        Returns the names of keys newly pressed on this tick."""
+        for key in keys:
+            check_allowed(key)
+        wanted = {key.value: key for key in keys}
+        for code in list(self._held):
+            if code not in wanted:
+                ctypes.windll.user32.SendMessageW(self._window, WM_KEYUP, code, 0)
+                self._held.pop(code, None)
+                self._last_down.pop(code, None)
+        now = time.monotonic()
+        newly_pressed: set[str] = set()
+        for code, key in wanted.items():
+            if code not in self._held:
+                newly_pressed.add(key.name)
+                self._held[code] = key
+                self._last_down[code] = now
+                ctypes.windll.user32.SendMessageW(self._window, WM_KEYDOWN, code, 0)
+            elif now - self._last_down.get(code, 0.0) >= KEY_REPEAT_SECONDS:
+                self._last_down[code] = now
+                ctypes.windll.user32.SendMessageW(self._window, WM_KEYDOWN, code, 0)
+        return newly_pressed
+
+    def release_all(self) -> None:
+        for code in list(self._held):
+            ctypes.windll.user32.SendMessageW(self._window, WM_KEYUP, code, 0)
+        self._held.clear()
+        self._last_down.clear()
+
+    async def __aenter__(self) -> "KeyChord":
+        return self
+
+    async def __aexit__(self, *exc) -> None:
+        self.release_all()
