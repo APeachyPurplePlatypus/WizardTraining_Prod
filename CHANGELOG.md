@@ -26,10 +26,6 @@ Entries up to 0.3.0, when this repository also held an implementation, are in [C
 
 ### Added
 
-- **A Codex skill** (`.agents/skills/wizard101-bot/SKILL.md`).
-  - **What:** a short skill that OpenAI Codex picks up in this repository. It sets the reading order (safety first), the hard limits from `docs/safety.md`, how to work, and how to add to the framework.
-  - **Why:** the operator, 2026-10-31: "write up a short skill or chat mode for codex", so an agent on another tool starts with the same limits and lessons.
-  - **Not verified:** not yet loaded by Codex. The folder follows Codex's documented repository skill location.
 - **Lessons on teams, two decks and a full backpack** (lessons learned: Fighting, Teams, Gear and mounts).
   - **What:**
     - keep a mob deck that ends fights fast and a boss deck for long fights, switched out of battle, and value an area attack by its share over every enemy;
