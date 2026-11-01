@@ -26,6 +26,11 @@ Entries up to 0.3.0, when this repository also held an implementation, are in [C
 
 ### Added
 
+- **Lesson: rank safety over distance, and price the whole way** (lessons learned: Moving).
+  - **What:** make danger the route cost and distance the tie-breaker; price a waypoint graph's links along their length; never let smoothing a route into straight legs add time in the street; when two kinds of walk data both give a route, walk the clearly safer one.
+  - **Why:** the operator, 2026-11-01: "for path finding prioritize safety and side walks above shortest path routing". The run preferred the game's waypoint graph in most streets, and its routes ran down the street beside the enemy paths: one walk met two fights, each right after backing away from an enemy close to the route.
+  - **Seen in the game:** the two fights on one walk. Measured offline against eight streets' game files: the share of the way on paving and the extra length. Not yet seen in play with the change.
+
 - **Lessons on teams, two decks and a full backpack** (lessons learned: Fighting, Teams, Gear and mounts).
   - **What:**
     - keep a mob deck that ends fights fast and a boss deck for long fights, switched out of battle, and value an area attack by its share over every enemy;
