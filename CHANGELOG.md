@@ -26,6 +26,8 @@ Entries up to 0.3.0, when this repository also held an implementation, are in [C
 
 ### Added
 
+- **Lessons from the Olde Town sewers** (docs/lessons-learned.md). Two lessons. A quest can live in one zone only: the journal lists it only inside that zone and it starts over on each entry, so don't call a world cleared from a journal read elsewhere, and finish such a quest in one visit. And walk into an enemy standing alone, waiting a while for one where fights have been costly. Both were seen in play. Refilling inside the zone kept the quest's progress, and a wait got a lone target.
+
 - **Lessons from seven towers in one quest** (lessons learned: Moving, Health and refills, Dungeons, Stopping).
   - **What:**
     - Learned keep-outs (hidden doors, walk-in trigger volumes) are soft: walk past them when they leave no way that exists without them.
