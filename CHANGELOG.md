@@ -26,6 +26,20 @@ Entries up to 0.3.0, when this repository also held an implementation, are in [C
 
 ### Added
 
+- **Lessons from seven towers in one quest** (lessons learned: Moving, Health and refills, Dungeons, Stopping).
+  - **What:**
+    - Learned keep-outs (hidden doors, walk-in trigger volumes) are soft: walk past them when they leave no way that exists without them.
+    - Blame enemies for a missing route only when there is one without them.
+    - After a few waits for blocking enemies at good health, take the plain route and accept the fight.
+    - Set aside a teleporter that no route reaches from where the character is.
+    - A door learned at an arrival spot is pushed through along the way the walk came.
+    - Finish a goal that needs no fight before a refill trip.
+    - A dungeon's return button can go before its timer does, perhaps when another instance is entered.
+    - With several goals and no arrow, check the dungeon left before picking the nearest goal.
+    - Count actions taken toward a run limit, not checks made.
+  - **Why:** on 2026-11-01 one side quest asked for a book read in each of seven towers, with no quest arrow. Each lesson above was a stall or a lost trip on the way: twelve minutes with no route out of a street, three minutes waiting on four enemies, two minutes on an unreachable teleporter, a run ended at full health by a count of looks, and a tower done twice after a refill trip before its last step.
+  - **Seen in the game:** every stall above, and the quest finished after the fixes: the book was read straight after the boss's second defeat with no trip home, and the street was walked out of once the learned keep-out was gone. The plain-route rule fired after four waits, but that walk was still closed by the keep-out, so a walk past blocking enemies has not been seen through yet. Also not yet seen: whether entering another instance is what drops a return button.
+
 - **Lesson: a stuck point marks a whole obstacle** (lessons learned: Moving).
   - **What:** when the character gets stuck at a point inside a solid the collision data knows, keep the waypoint graph out of that whole solid, not just a small circle around the point; don't keep it out of every solid in advance.
   - **Why:** on 2026-11-01 routes by the game's waypoint graph got stuck twice in ten minutes at the same object, 1,000 units across, with four waypoints inside it: the learned stuck point kept only a small circle clear, so the next route moved over one waypoint. Across nine zones' game files, a tenth to a fifth of the waypoints lie inside some solid, and excluding them all broke one zone's graph into three pieces.
