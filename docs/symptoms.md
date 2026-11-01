@@ -14,6 +14,7 @@ Check the cheap things first: whether a battle is showing, whether a window or g
 - **The character creeps toward a target for minutes and never reaches it.**
   - The target is on another floor or a balcony. The walk data is flat, so compare heights.
   - The target stands behind a counter and can be talked to from farther away.
+  - The NPC's talk prompt is already showing. Its talk range reaches past where the walk can go, so check the prompt on every step and press interact as soon as it shows.
   - The collision data is missing a ramp or stair.
 - **The character walks straight back out of a zone it just entered.** The quest arrow still points where it pointed in the last zone. Wait for the arrow to update after a zone change before walking on it.
 - **A walk keeps "arriving" without getting anywhere.** An arrival where the character already stood was counted as progress. Count only real movement or a change in state.
