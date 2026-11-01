@@ -26,6 +26,11 @@ Entries up to 0.3.0, when this repository also held an implementation, are in [C
 
 ### Added
 
+- **Lesson: a stuck point marks a whole obstacle** (lessons learned: Moving).
+  - **What:** when the character gets stuck at a point inside a solid the collision data knows, keep the waypoint graph out of that whole solid, not just a small circle around the point; don't keep it out of every solid in advance.
+  - **Why:** on 2026-11-01 routes by the game's waypoint graph got stuck twice in ten minutes at the same object, 1,000 units across, with four waypoints inside it: the learned stuck point kept only a small circle clear, so the next route moved over one waypoint. Across nine zones' game files, a tenth to a fifth of the waypoints lie inside some solid, and excluding them all broke one zone's graph into three pieces.
+  - **Seen in the game:** the two stuck walks at the same spot. Measured offline against the zone's game files: the same walks keep out of the object at the same length. Not yet seen in play with the change.
+
 - **Lesson: a talk prompt can show far from its NPC, so answer it as soon as it shows** (lessons learned: Quests and dialogs; symptoms: Movement and keys).
   - **What:** on the way to an NPC, check the talk prompt before the walk and on every step; when it offers a talk and no other person is near the character, press interact from there, without stepping closer; look for other people by name as well as among the friendly NPCs; fall back to walking right up if the talk opens nothing or reaches someone else.
   - **Why:** the operator, 2026-11-01: "sometimes you are on a ledge for example and the entiy is floating in the air, i might walk twoards the wall on the ledge and loop because I think I am not close enough when in reality the dialog box is loaded and ready to be pressed". A quest NPC floating about 2,600 units past a ledge's edge and 1,900 below it had his prompt showing at the edge, while the bot walked on toward him.
