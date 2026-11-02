@@ -26,6 +26,20 @@ Entries up to 0.3.0, when this repository also held an implementation, are in [C
 
 ### Added
 
+- **Lessons from finishing the first world and starting the second** (lessons learned: Moving, Quests and dialogs, The zone graph, Fighting, Teams).
+  - **What:**
+    - In a world's hub, Go Home moves a stuck character to the hub's landing ground with no load; watch for the jump, not a zone change.
+    - Fill up before walking into a zone whose quest starts over on entry, and count its side rooms as part of it.
+    - Remember which worlds were cleared across restarts.
+    - Don't route between streets through a dungeon.
+    - A prism turns a resisted hit into the opposite school; price it by the shares, and give the deck planner a rule for it.
+    - Call a fight by what it paid, not by the health left; cast a likely kill rather than flee.
+    - Some enemies out-heal a lone character: set the quest aside for later levels or a team.
+    - Boss credit goes to those in the fight: walk onto the boss's combat spot from the zone data, and join at the circle's edge.
+    - Never press a chest that costs real money.
+  - **Why:** each came from play on 2026-11-01 and 02: a sewer quest lost four times to a healing boss and once to a flee, a team boss beaten twice without the character, a deck that left out a card the operator asked for ("use ice prism on ice enemies"), a won fight logged as lost, restarts that walked back to a cleared world, and two stuck walks in the second world's hub.
+  - **Seen in the game:** all of the above. After the fixes: the hub escape by itself (3 s to landing), the prism (135 against about 91 straight), the cleared world left alone on restart, the boss proof with the fifth team, and the fill-up before the sewer (20 to 107 mana in 74 s). Not yet seen: a sewer boss beaten; it is set aside for later levels.
+
 - **Lessons from the Olde Town sewers** (docs/lessons-learned.md). Two lessons. A quest can live in one zone only: the journal lists it only inside that zone and it starts over on each entry, so don't call a world cleared from a journal read elsewhere, and finish such a quest in one visit. And walk into an enemy standing alone, waiting a while for one where fights have been costly. Both were seen in play. Refilling inside the zone kept the quest's progress, and a wait got a lone target.
 
 - **Lessons from seven towers in one quest** (lessons learned: Moving, Health and refills, Dungeons, Stopping).
