@@ -1,6 +1,6 @@
 # Lessons learned
 
-These come from one character's unattended play from level 1 to 15, in Wizard City and Krokotopia, from 2026-10-26 on. An operator supervised it, and the agent that built and ran it changed it after every surprise. Each lesson says what happened, what it taught, and what to try. Each run's findings are summed up in the [retros](retros/), the latest [level 10 to 15](retros/level-10-to-15.md).
+These come from one character's unattended play from level 1 to 20, in Wizard City and Krokotopia, from 2026-10-26 on. An operator supervised it, and the agent that built and ran it changed it after every surprise. Each lesson says what happened, what it taught, and what to try. Each run's findings are summed up in the [retros](retros/), the latest [level 15 to 20](retros/level-15-to-20.md).
 
 The numbers are from one character on one game build. Use them as a scale, not as settings, and measure your own.
 
@@ -145,6 +145,10 @@ From walks with a mount, with crowds of patrols, and with the operator's own wor
 - **With several goals and no arrow, check the way back first.** A quest had seven goals in seven towers and no quest arrow. After a refill trip, the bot walked to the nearest goal's zone, not back into the tower it had left with a goal still open. Before choosing the nearest goal, check whether a dungeon left with a goal in it can still be returned to.
 - **A flee's move to the hub comes after the battle ends.** A zone read right at the end still shows the dungeon. Record a flee from a dungeon as leaving it whatever the zone reads, and drop the record if the character turns out to be still inside.
 - **Towers lose their progress when left partway.** Refill in place in a tower.
+- **The return button can land at the dungeon's start, far from where the character left.** In a large dungeon the landing was 23,000 to 33,000 units from the exit spot. A check that compared the enemies near the landing to those near the exit read the dungeon as reset, and later refills waited in place, where nothing comes back. Compare enemies only when the landing is near the exit spot. After the fix, a return 11 minutes after a defeat found the dungeon held.
+- **A gate the walk data calls open can be shut by a script.** Every route failed toward a goal across a line the collision data called walkable. The zone's trigger file showed why: a dynamic gate there opens only on a scripted event. Before trying more routes, look up what opens it: a kill, a room's enemies all beaten, or an object used.
+- **A dungeon's side quest can hold the key to its main quest.** In one dungeon, the main quest's boss sits behind a door that, by the zone's trigger file, opens only when a staff is used on four obelisks to leave a set pattern. The staff comes from the dungeon's side quest, won from its miniboss. Setting that side quest aside when its walk stuck at a shut gate left the main quest stuck at the next door. Read a dungeon's triggers before deciding a side quest is optional. (From the zone files; the puzzle itself is not yet played.)
+- **Leaving a dungeon can change the active quest.** Each exit from that dungeon, by Go Home or a defeat, made a quest active that leads to another world, and a restart set off for it. Check the active quest after every zone change. A quest set aside has to stay aside wherever the bot picks what to play next, not only in one mode.
 - **Count loops from the last travel button,** not from the goal's start, so a long walk with refill trips isn't taken for a door loop.
 
 ## Teams
