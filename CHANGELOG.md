@@ -4,7 +4,7 @@ What changed in this guidance, and why. Say what was seen in the game and what w
 
 Entries up to 0.3.0, when this repository also held an implementation, are in [CHANGELOG.md at v0.3.0](https://github.com/APeachyPurplePlatypus/WizardTraining_Prod/blob/v0.3.0/CHANGELOG.md).
 
-## Unreleased
+## 0.4.0 (2026-11-02)
 
 ### Removed
 
@@ -26,6 +26,13 @@ Entries up to 0.3.0, when this repository also held an implementation, are in [C
 
 ### Added
 
+- **The level 15 to 20 retro, and lessons from the second world's first dungeon** (docs/retros/level-15-to-20.md; lessons learned: Dungeons).
+  - **What:**
+    - A return button can land at the dungeon's start; compare enemies only near the exit spot.
+    - A gate the walk data calls open can be shut by a script; read the trigger file for its opener.
+    - A dungeon's side quest can hold the key to its main quest.
+    - Leaving a dungeon can change the active quest; a quest set aside must stay aside everywhere.
+  - **Why:** each came from play on 2026-11-02 in Krokotopia. A refill waited in place after a misread reset, then lost a fight. The run stopped three times at a scripted gate. A parked quest was played again from the hub. A dungeon exit sent a restart toward another world. The return-button fix was seen working in the game. The obelisk door comes from the zone files and is not yet played.
 - **Lessons from finishing the first world and starting the second** (lessons learned: Moving, Quests and dialogs, The zone graph, Fighting, Teams).
   - **What:**
     - In a world's hub, Go Home moves a stuck character to the hub's landing ground with no load; watch for the jump, not a zone change.
