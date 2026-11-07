@@ -4,6 +4,26 @@ What changed in this guidance, and why. Say what was seen in the game and what w
 
 Entries up to 0.3.0, when this repository also held an implementation, are in [CHANGELOG.md at v0.3.0](https://github.com/APeachyPurplePlatypus/WizardTraining_Prod/blob/v0.3.0/CHANGELOG.md).
 
+## 0.5.0 (2026-11-07)
+
+### Added
+
+- **The level 20 to 25 retro** (docs/retros/level-20-to-25.md).
+  - **What:** two dungeons cleared alone by their door puzzles, planning with an outside game database, a per-zone log of stuck walks, and the quests set aside for doors and props.
+  - **Why:** each five-level step ends with its findings.
+- **Lessons from the second world's dungeons and hub** (lessons learned: Moving, Quests and dialogs, Fighting, Health and refills, Travel and marks, Dungeons, Gear and mounts).
+  - **What:**
+    - Doors that open on objects are puzzles with state: read each object's state, press until it shows the one wanted, and wait out a turn in progress. A door's openers can be fights, and a refill trip must not start them over.
+    - If you can't leave a room, look for a lever or switch. A goal behind a door waits for the door.
+    - A nav link that keeps failing at the same spot runs through something solid: set it aside for the zone. Reach a goal across a gap from the gap's edge, and a door on another level by the nav graph's heights. A quest arrow on a teleport volume is a door. Rides take the keyboard; wait them out.
+    - Keep a log of every stuck walk per zone, and read it before a fix.
+    - A Quest Finder giver may only run a shop. A quest set aside must not lead out of the world or back into a dungeon. A prop can shut a goal off.
+    - Read absorbs and damage over time on enemies; don't stun the stun-immune; stack a second trap rather than pass; never pass with a shield of every school in hand; leave out hits a cheaper one outdoes; a small deck makes long fights.
+    - Use a dungeon's own wisps, mana ones too; go into a walk-in side room refilled; mark only at the goal zone's own door; train from another world by its world door.
+    - Extra starting pips come early only from paid packs; an outside database helps plan but may not cover drops or shops.
+  - **Why:** each came from play on 2026-11-02 to 07 in Krokotopia, several from the operator's own words (stuck walks, levers, stuns, shields, wisps).
+  - **Seen in the game:** the door puzzles in both dungeons, the set-aside nav link (the goal reached at the first try), the lever's floor below (the next room loaded) and the dungeon wisps. Not checked one by one in play: the fight rules and the ride wait. Not yet built: the goal that waits for its door, and the retry of a quest switch after an offer box.
+
 ## 0.4.0 (2026-11-02)
 
 ### Removed
