@@ -1,6 +1,6 @@
 # Lessons learned
 
-These come from one character's unattended play from level 1 to 20, in Wizard City and Krokotopia, from 2026-10-26 on. An operator supervised it, and the agent that built and ran it changed it after every surprise. Each lesson says what happened, what it taught, and what to try. Each run's findings are summed up in the [retros](retros/), the latest [level 15 to 20](retros/level-15-to-20.md).
+These come from one character's unattended play from level 1 to 25, in Wizard City and Krokotopia, from 2026-10-26 on. An operator supervised it, and the agent that built and ran it changed it after every surprise. Each lesson says what happened, what it taught, and what to try. Each run's findings are summed up in the [retros](retros/), the latest [level 20 to 25](retros/level-20-to-25.md).
 
 The numbers are from one character on one game build. Use them as a scale, not as settings, and measure your own.
 
@@ -42,6 +42,12 @@ The numbers are from one character on one game build. Use them as a scale, not a
 - **A teleporter can stand in the character's walkable area and still be out of reach.** The walk data put a house's teleporter in the same walkable piece as the character, but no route reached it, even with no enemy about. It was the untried teleporter nearest the goal, so it was chosen again every turn for two minutes. When no route reaches a teleporter from where the character is, set it aside from there.
 - **A door learned where the character arrived is a spot, not the trigger.** Standing on that spot, facing it gives whatever direction the last step left, and the walk in pushes off sideways: 500 to 1,000 units away, with the zone unchanged. Push on the way the walk there came, past the spot, or better, snap the door to the teleport volume beside it.
 - **In a world's hub, Go Home is a free way out of a stuck spot.** A wisp hunt in a hub left the character on a lower level that no route left: the waypoint graph, the collision data and a straight walk all got stuck, and the bot's ladder of walk strategies took three minutes to try its first one. Go Home pressed inside the hub moved the character to the hub's landing ground on its main level 4 s later, with no loading screen and the zone name unchanged, and the walk out took seconds. A wait for a zone change reads that press as failed: watch for a jump in position instead. Seen twice, the second time by the bot itself: 3 s from deciding to landing.
+- **A nav link that keeps failing at the same spot runs through something solid. Remember it per zone and route without it.** In the second world's hub, every walk to a well ended against the same wall, because the waypoint graph's last link crossed it. Once that link was set aside for the zone, the route took a longer loop round the north side and the goal was reached at the first try.
+- **A goal across a gap is reached from the gap's edge.** The walk data can split one room into walkable pieces a short step apart (219 units in one tower room). Walk to the edge nearest the goal and step across. Don't let that walk look for yet another crossing: a walk to a gap's edge that called itself recursively crashed the run.
+- **A door on another level is reached by the nav graph's heights.** The collision data and a straight line are flat, so they walk under or over a door that sits a floor up. When the destination is far above or below and the two levels overlap, route by the waypoint graph alone, and keep its straight shortcuts short in height so they don't skip the stairs.
+- **A quest arrow on a teleport volume is a door, not a person on another level.** A rule that waited for a quest NPC on a higher floor fired at an arrow that stood on a doorway volume, and the walk stopped short. Check for a volume at the arrow before deciding the target is a person out of reach.
+- **Rides take the keyboard. Wait them out.** A boat ride's prompt says Ride, not Enter, and the ride takes 30 to 40 seconds during which no key does anything. The boat docks in more than one place, so walk to where it stands now. Wait a ride out instead of stopping the run as stuck.
+- **Keep a log of every stuck walk, per zone, and read it first.** The operator, 2026-11-07: "Capture and record pathfinding data, when you are stuck you can reference this data." Record each stuck walk, failed route, loop and way found around one, with places and times, and read the zone's log before trying a fix. Several walks that stalled for an hour had been seen and solved once already.
 
 ## Steering
 
@@ -74,6 +80,9 @@ From walks with a mount, with crowds of patrols, and with the operator's own wor
 - **Before leaving a world, retry what was set aside.** Quests set aside until the next level can still be waiting when a world's quest givers run out. The journal's Quest Finder then answers with a notice that there are no available quests in this world, and trying it again does nothing. Try the set-aside quests once more, dungeons first, before moving on.
 - **Fill up before walking into a zone whose quest starts over on entry.** Inside such a zone, leaving to refill loses the quest, and standing there gave nothing back. A restart walked in from the hub at full health but a third of its mana, for two fights and a boss. Top up in a safe zone before setting off, and refill before that zone's door as before a dungeon's. Count the zone's side rooms, filed in the same folder, as part of it: a refill rule that took a side room for somewhere else sent the character home from the boss's room, and the quest reset.
 - **Remember a world as cleared across restarts.** A start script that always asked to clear the first world sent every restart in the next world back through the world door to clear it again, find nothing, and walk back: minutes lost on each restart. Keep which worlds were cleared, and at which level, with the rest of what runs learn, and let a world come back only when its set-aside quests' level is reached.
+- **A Quest Finder giver may only run a shop.** In the second world the journal's Quest Finder pointed at a giver whose menu offered a shop and no quest. Count that as nothing offered and move on, or the finder sends the character back to the same person forever.
+- **A quest set aside must not lead the character out of the world, or back into a dungeon.** After a hand-in the game makes another quest active by itself, and that can be one set aside, leading to another world or back into a dungeon the character left. Make another quest active instead. When none can be, stop for the operator rather than follow it. The switch can also fail while a new quest's offer box is still open; retry it after the box closes.
+- **A goal can be shut behind a prop.** A crypt's entrance and its ferry stood behind a large lizard that the character could get no closer to than about 670. Nothing in the walk data marks such a blocker as temporary. Set the quest aside for a later level rather than walk at it.
 
 ## Goals without a quest arrow
 
@@ -110,6 +119,12 @@ From walks with a mount, with crowds of patrols, and with the operator's own wor
 - **Call a fight by what it paid, not by the health left.** A fight won with 11 of 1,319 health left was logged as lost, by a rule that took any fight ending below 5% for a defeat. The run moved its combat strategy on and drank its last potion. Gold or XP from the battle means it was won.
 - **Cast a likely kill rather than flee.** A flee rule fired with the last enemy one likely hit from defeat, and the flee reset a quest that starts over on entry. When a castable attack probably finishes the fight, cast it.
 - **Some enemies out-heal a lone character.** A sewer boss healed itself five times in one fight, by about a quarter of its health and then by more than half, behind a strong shield, while fresh minions kept joining. Four tries with different strategies were lost. When a fight is lost to the enemy's own heals more than once, set its quest aside to come back several levels later, or with a team.
+- **Read absorbs and damage over time on the enemies too.** An absorb takes a fixed amount off the next hits, so take it off a hit's expected damage. An enemy that its own burn will finish before your next turn needs no card; hit another one.
+- **Some enemies can't be stunned. Read it, don't guess.** The operator, 2026-11-02: "certain enemies are stun immune, dont try to stun these mobs". The enemy's stats carry it. Remember the ones seen too.
+- **Stack a second trap rather than pass.** Traps stack and cost no pips. With nothing better to cast, a second trap of a school the enemy doesn't block beats a pass.
+- **Never pass with a shield of every school in hand.** The operator, 2026-11-03: "never pass if you have a tower shield in your hand".
+- **Leave out of the deck every hit that a cheaper hit of its school outdoes.** Four-pip spells that hit no harder than a three-pip one were drawn and never cast in a long fight.
+- **A small deck makes long fights.** The 14-card starter deck, with three heals held back, drew the same few cards: fights of 10 to 13 rounds, with passes and fizzles. Review the deck at each level step, not only the spells in it.
 
 ## After a battle
 
@@ -126,6 +141,8 @@ From walks with a mount, with crowds of patrols, and with the operator's own wor
 - **Finish a goal that needs no fight before a refill trip.** After a tower's boss, with nothing left to fight and the quest's object a few steps away, the bot went home to refill first. When it came back, the tower's return button was gone, and the object meant the tower and its boss again. With no enemy near and a goal here that needs no fight, do the goal first and refill after.
 - **Heals left in hand at a fight's end are wasted.** In 32 of 38 wins the heal stayed in hand, and nearly every costly fight was followed by a trip home. Top up before the last kill rather than waiting for a sure win, and fight on with heals in the deck above about 60% of health: a refill trip after every costly fight was slower.
 - **Go into instances refilled.** A door can open on a tower or an instance that can't be left partway, and inside, nothing comes back. Learn which doors open on instances, and refill before those. One instance entered at 45% health lost its next fight.
+- **Dungeons have their own wisps. Use them.** The operator, 2026-11-03: dungeons have health wisps. Inside one, look for them far (about 9,000 units here) before leaving to refill, and take mana wisps there once mana falls below about 60%.
+- **Go into a side room refilled even when it has no door prompt.** Some side rooms open by walking into a portal, so a check made at "to Enter" prompts never runs. Apply the same refill rule to a walk-in, but after one trip home for it, go in at three quarters of health instead of going home again.
 
 ## Travel and marks
 
@@ -134,6 +151,8 @@ From walks with a mount, with crowds of patrols, and with the operator's own wor
 - **A mark can trap the character.** One set where a boss fight ended put every Recall back on an island with no way off. If no route leaves a mark, forget it and never mark there again.
 - **Read the Recall timer.** When Recall is cooling down and is still the quickest way, wait out its timer instead of walking off.
 - **Mark Location can fail silently.** It failed four times with no message; log what the buttons showed each time.
+- **Mark only at the goal zone's own door.** Each Mark Location costs mana. A rule that marked at every door on the way, a world door and a hub's boat included, wasted mana on marks never recalled to.
+- **Train from another world by the world door.** Going to a school's trainer from another world means the world's door to the first world's hub, not a guess from volume names.
 
 ## Dungeons
 
@@ -150,6 +169,10 @@ From walks with a mount, with crowds of patrols, and with the operator's own wor
 - **A dungeon's side quest can hold the key to its main quest.** In one dungeon, the main quest's boss sits behind a door that, by the zone's trigger file, opens only when a staff is used on four obelisks to leave a set pattern. The staff comes from the dungeon's side quest, won from its miniboss. Setting that side quest aside when its walk stuck at a shut gate left the main quest stuck at the next door. Read a dungeon's triggers before deciding a side quest is optional. (From the zone files; the puzzle itself is not yet played.)
 - **Leaving a dungeon can change the active quest.** Each exit from that dungeon, by Go Home or a defeat, made a quest active that leads to another world, and a restart set off for it. Check the active quest after every zone change. A quest set aside has to stay aside wherever the bot picks what to play next, not only in one mode.
 - **Count loops from the last travel button,** not from the goal's start, so a long walk with refill trips isn't taken for a door loop.
+- **Doors that open on objects are puzzles with state. Read the state.** In one dungeon four braziers each step through three schools when pressed, and a door opens on a set pattern. In another, obelisks turn for a few seconds after each use. Read each object's state from the game, press until it shows the one wanted, and wait out a turn in progress. A watch after each press that ignores the state can miss a timed window.
+- **A door's openers can be fights,** and a trip out to refill must not start them over. A frost door opened only after three locks broke, each on a riddle shown after a fight in a corner room. Keep which openers are done across a refill trip.
+- **If you can't leave a room, look for a lever or switch.** The operator, 2026-11-07: "if u cant leave room chck for lever or switch". In a pyramid's tower room the way on was a trigger volume that never prompted, however close the walk came. The way opened from a lever one floor below, about 500 units away, whose prompt the walk had passed. List the room's loaded objects and the zone's objects for a lever, switch, button or crank, and their states, before calling the room a dead end.
+- **A goal behind a door waits for the door.** A quest asked for an object behind the frost door above. The quest's goal was taken up before the third lock broke, and the walk tried to step straight into the object's room. A goal past a door with openers should wait until they are done.
 
 ## Teams
 
@@ -183,6 +206,8 @@ From walks with a mount, with crowds of patrols, and with the operator's own wor
 - **Wear a mount when there is one.** A rented mount can be worn as soon as it arrives if none is worn. Mounts drop off indoors and come back outside, and the game asks before starting a rental's timer.
 - **Gear can be compared by its stats** (health, mana, resistances, then the school's damage and accuracy) once the item data is read. Only equip in a zone without enemies, because the spellbook stays open a few seconds per item.
 - **A full backpack refuses purchases and loot.** A shop refused a new deck at a full bag, and drops can't be picked up either. Before a shop trip, free some room. Agree an order with the operator: here it was housing decor first (except items for hobbies the operator keeps, such as gardening and fishing), then gear for other schools. Never sell what's worn, quest items or treasure cards. A sale can't be undone, so the operator's permission settings may stop it until they allow it.
+- **Starting pips come early mostly from paid packs and events.** By an outside item database, up to level 30 only weapons carry starting pips, so two pieces can't be combined. An extra starting pip shows from level 10, almost all in packs paid with real money or event items. At level 20, several any-school wands with one extra starting pip can be bought for gold from the game's shop of other players' sales. A starting power pip comes at level 20 in paid packs and at 30 otherwise.
+- **An outside game database helps plan, but check what it covers.** One listed quests, enemies, spells and items, and drove gear and quest planning. It listed which paid packs an item comes in, but no drops, vendors or shop stock, so "no source" meant unknown. Log every lookup so the plan can be checked.
 
 ## Opportunities
 
