@@ -6,13 +6,14 @@ A Wizard101 bot acts in a live online game, on a real account, among real player
 
 - **Default-deny, with an allow-list the operator grows.** Start with the smallest set of keys and clicks the bot needs. Each new kind of action (a new button, a new key, a new kind of box answered) is the operator's call, recorded with their words and the date.
 - **Approval is specific.** "Yes" to answering one kind of box isn't "yes" to every box. Keep each approval as narrow as it was given, and widen it only when the operator does.
-- **Stop instead of guessing.** When something unknown happens (an unrecognised window, a goal type never seen, a quest it can't classify) the bot should stop with a clear reason, or park that work and move on, rather than improvise.
+- **Don't improvise, and don't sit idle either.** When something unknown happens (an unrecognised window, a goal type never seen, a quest it can't classify) the bot should set that work aside with a clear reason and move on to something it knows, rather than improvise. A stopped run waits hours for the operator, so stop only when the game needs the operator's hands (a login, a lost connection) or a rule needs their approval, and log every choice made instead.
 - **Measure, then report.** The operator can't watch every minute. Log what the bot did and why, in facts (battles, walks, zone changes, XP), so a run can be followed and judged afterwards.
 
 ## The account
 
 - **No credentials, ever.** The operator logs in and picks an existing character. The bot never reads, stores or types a password, and stops at any login, CAPTCHA or access challenge.
 - **No spending or trading** without the operator's explicit approval: no Crown Shop, no trades, no buying, selling or renting. Treat gold and crowns as the operator's.
+- **When selling is allowed, sell only what the bot can name.** Agree a never-sell list with the operator, skip any row the bot can't read, and never open a whole category it hasn't read. A sale can't be undone.
 - **Consumables and gear off by default.** Drinking potions it already has, wearing better gear it already owns, editing its deck, or spending training points are each a separate permission. When they're allowed, use only the clicks they need, check each click's result, and never touch trash, recycle, quick-sell or discard-item buttons.
 - **No chat.** Don't install a chat hook, and don't type into chat.
 - **Your responsibility.** Automation may break the game's terms of service. Say so in anything you publish.

@@ -4,6 +4,34 @@ What changed in this guidance, and why. Say what was seen in the game and what w
 
 Entries up to 0.3.0, when this repository also held an implementation, are in [CHANGELOG.md at v0.3.0](https://github.com/APeachyPurplePlatypus/WizardTraining_Prod/blob/v0.3.0/CHANGELOG.md).
 
+## 0.6.0 (2026-11-11)
+
+### Added
+
+- **The level 25 to 30 retro** (docs/retros/level-25-to-30.md).
+  - **What:** the second world's last temple and final boss, the move into the third world, a level 38 boss beaten at 29, and what went wrong with decks, discards and a sell visit.
+  - **Why:** each five-level step ends with its findings.
+- **Lessons from the end of the second world and the start of the third** (lessons learned: Reading the game, Moving, Quests and dialogs, Fighting, Dungeons, Popups, Gear and mounts; symptoms: Movement and keys, a new Fighting section).
+  - **What:**
+    - Check that a deck is worn after every switch, not only which one. Don't act on a check made from blank reads. Read the hand fresh when it comes back short. Tell a boss by the game's flag, not its health.
+    - Size each enemy's keep-out from its own reach in the game data (most 350, elites 500, bosses 800 and up).
+    - Map each zone's levels from the nav graph's heights, and take a ride when no walk reaches the arrow. Rides make no doors; forget a link that opens somewhere else. Remember a world door that can't be found, and keep playing.
+    - A quest NPC at the arrow is a talk, not a door. Record which areas are gated and by what. Decide rather than stop.
+    - Read every pedestal, and a puzzle's pedestals before the puzzle. Map a dungeon's doors from its trigger files. Turn a hint into a step or an alert.
+    - A free card over a pass; prism, then trap; stack before a boss's big hit; area attacks in the boss deck for minions; a damage estimate before an area attack; looser discards; reshuffle when the deck runs dry; deck rules agreed with the operator; a quest set aside after a second flee.
+    - Close a stray shop window. Never sell what can't be identified, or a category not read.
+  - **Why:** each came from play on 2026-11-07 to 11 in Krokotopia and Marleybone, several from the operator's own words (pedestals, deciding, discards, area attacks in boss fights, deck rules).
+  - **Seen in the game:** the hours with no deck worn, the blank deck check, the boss read as a mob, the 57 cards sold, the shop window and the NPC at the arrow, the hint passed by, and the doors solved from pedestals. Seen working after the fix: the level map's ramp and the ride to the island. Measured offline: the door maps against three hand-solved dungeons. Not yet seen in play: area attacks in boss fights, the looser discards, stacking before a boss's hit, and the prism and trap order, which comes from community sources.
+
+### Changed
+
+- **Safety: set work aside rather than stop** (docs/safety.md, The operator decides).
+  - **What:** an unknown situation is still never improvised, but the bot sets that work aside and goes on with something it knows, stopping only when the game needs the operator's hands or a rule needs their approval.
+  - **Why:** the operator, 2026-11-09: "The bot stopped, but it needs to make a descion on its own, we can't just stop". A stopped run waited hours.
+- **Safety: sell only what the bot can name** (docs/safety.md, The account).
+  - **What:** a never-sell list agreed with the operator, no unread rows, no unread categories.
+  - **Why:** a sell visit sold 57 combat treasure cards it took for housing items.
+
 ## 0.5.0 (2026-11-07)
 
 ### Added

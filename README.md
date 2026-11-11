@@ -1,6 +1,6 @@
 # WizardTraining
 
-A head start for an AI agent that will build its own Wizard101 bot. It holds what one supervised character's unattended play, from level 1 to level 15 and counting, taught about the game and about automating it: the lessons, the safety rules that kept the account and other players safe, where the game keeps the data a bot needs, and what each stretch of play found.
+A head start for an AI agent that will build its own Wizard101 bot. It holds what one supervised character's unattended play, from level 1 to level 30 and counting, taught about the game and about automating it: the lessons, the safety rules that kept the account and other players safe, where the game keeps the data a bot needs, and what each stretch of play found.
 
 It is not an implementation or a configuration guide. An agent should read it, then work out its own way to the goal, in whatever language and with whatever tools suit it. Everything here was learned the hard way, so an agent starting from nothing doesn't have to.
 
@@ -26,7 +26,7 @@ It is not an implementation or a configuration guide. An agent should read it, t
 
 ## Status
 
-Version 0.5.0. Its lessons come from one character played on Windows 11 from level 1 to 25 in Wizard City and Krokotopia, 2026-10-26 to 2026-11-07, with WizWalker 1.8.2 as vendored in Deimos.
+Version 0.6.0. Its lessons come from one character played on Windows 11 from level 1 to 30 in Wizard City, Krokotopia and Marleybone, 2026-10-26 to 2026-11-11, with WizWalker 1.8.2 as vendored in Deimos.
 
 **From 0.4.0, WizardTraining is a guidance-only framework.** The implementation that played these runs (the play loop, its scripts and the zone-specific logic) has been removed from this repository and is no longer maintained here. The tags of earlier releases still hold it as it was. What remains is the framework: the rules, the guidance, and the lessons learned in play.
 
