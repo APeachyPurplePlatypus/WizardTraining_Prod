@@ -8,7 +8,7 @@ Check the cheap things first: whether a battle is showing, whether a window or g
 
 - **Keys change nothing.**
   - A battle began between two steps.
-  - A window holds the keyboard: an endorse window after a shared battle, a request from another player, or a game box.
+  - A window holds the keyboard: an endorse window after a shared battle, a request from another player, a game box, or a shop window that opened beside an NPC.
   - A zone is loading.
   - Check the battle state first, then open windows. Don't stop the run for "keys ignored" before both are ruled out.
 - **The character creeps toward a target for minutes and never reaches it.**
@@ -17,6 +17,8 @@ Check the cheap things first: whether a battle is showing, whether a window or g
   - The NPC's talk prompt is already showing. Its talk range reaches past where the walk can go, so check the prompt on every step and press interact as soon as it shows.
   - The collision data is missing a ramp or stair.
 - **The character walks straight back out of a zone it just entered.** The quest arrow still points where it pointed in the last zone. Wait for the arrow to update after a zone change before walking on it.
+- **The character walks into an NPC as if into a door.** The quest arrow stands on the NPC, and the goal names another zone. Talk to the NPC at the arrow.
+- **A walk onto a raised or lower level loops.** The walk to the ramp's foot used the character's height, not the waypoint's, or the only way is a ride. Map the zone's levels from the nav graph's heights.
 - **A walk keeps "arriving" without getting anywhere.** An arrival where the character already stood was counted as progress. Count only real movement or a change in state.
 
 ## Turns that repeat
@@ -38,6 +40,14 @@ Check the cheap things first: whether a battle is showing, whether a window or g
 - **A walk-up to a target ends far away, or in another zone.** The last steps toward a target carried the character through a door. Check the zone at every step. If it changed, the target is beyond the door: look for it again in the new zone instead of counting a failed talk or use.
 - **A goal names a tag that matches no object.** The tag is in the objects' template files, not their names.
 - **A quest left the journal after a defeat in a dungeon.** Quests given inside an instance exist only inside it. Remember which quest led in, and go back through that one.
+
+## Fighting
+
+- **The hand reads empty, and the character passes.**
+  - No deck is worn: only the item cards from gear are dealt. Read which deck is equipped.
+  - The card windows were cached for the battle and went stale after a discard. Read the hand fresh.
+- **A boss fight runs like a mob fight.** The boss was told by its health and fell under the cut-off. Read the game's boss flag.
+- **A deck never takes a card it should.** The deck check read the spells as blank and saved its result anyway, or the card's kind comes last in the deck's list and the slots filled first.
 
 ## Numbers
 
